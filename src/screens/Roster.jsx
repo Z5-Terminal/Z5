@@ -442,8 +442,34 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
       <td style={{ ...S.td, color: C.dim }}>{member.email}</td>
       {canManage && (
         <td style={{ ...S.td, textAlign: "right", whiteSpace: "nowrap" }}>
-          {!isCurrentUser && (
-            <div style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end" }}>
+          <div style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end" }}>
+            {/* Assign/Move is available for everyone including self */}
+            {onAssignSquad && assignableSquads.length > 0 && (
+              assigning ? (
+                <select
+                  autoFocus
+                  defaultValue=""
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) { onAssignSquad(member, v); setAssigning(false); }
+                  }}
+                  onBlur={() => setAssigning(false)}
+                  style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 140 }}
+                >
+                  <option value="">{t("ros.pick_squad")}</option>
+                  {assignableSquads.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <Btn small onClick={() => setAssigning(true)}>
+                  {isUnassignedBlock ? t("ros.assign") : t("ros.move")}
+                </Btn>
+              )
+            )}
+            {/* Role change, instructor toggle, remove, delete — not for self */}
+            {!isCurrentUser && (
+              <>
               <Btn small onClick={() => setEditingRole(!editingRole)}>
                 {editingRole ? t("mis.cancel") : t("ros.change_role")}
               </Btn>
@@ -451,29 +477,6 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
                    style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
                 {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
               </Btn>
-              {onAssignSquad && assignableSquads.length > 0 && (
-                assigning ? (
-                  <select
-                    autoFocus
-                    defaultValue=""
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v) { onAssignSquad(member, v); setAssigning(false); }
-                    }}
-                    onBlur={() => setAssigning(false)}
-                    style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 140 }}
-                  >
-                    <option value="">{t("ros.pick_squad")}</option>
-                    {assignableSquads.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <Btn small onClick={() => setAssigning(true)}>
-                    {isUnassignedBlock ? t("ros.assign") : t("ros.move")}
-                  </Btn>
-                )
-              )}
               {!isUnassignedBlock && (
                 !confirmRemove ? (
                   <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove")}</Btn>
@@ -503,8 +506,9 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
                   </>
                 )
               )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </td>
       )}
     </tr>
@@ -568,15 +572,9 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
       }}>
         {member.email}
       </div>
-      {canManage && !isCurrentUser && (
+      {canManage && (
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          <Btn small onClick={() => setEditingRole(!editingRole)}>
-            {editingRole ? t("mis.cancel") : t("ros.change_role")}
-          </Btn>
-          <Btn small onClick={() => onToggleInstructor && onToggleInstructor(member)}
-               style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
-            {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
-          </Btn>
+          {/* Assign/Move available for everyone including self */}
           {onAssignSquad && assignableSquads.length > 0 && (
             assigning ? (
               <select
@@ -600,34 +598,46 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
               </Btn>
             )
           )}
-          {!isUnassignedBlock && (
-            !confirmRemove ? (
-              <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove")}</Btn>
-            ) : (
-              <>
-                <Btn small style={{ color: C.error, borderColor: C.error }}
-                     onClick={() => { onRemove(member); setConfirmRemove(false); }}>
-                  {t("mis.confirm_delete")}
+          {/* Role change, instructor toggle, remove, delete — not for self */}
+          {!isCurrentUser && (
+            <>
+            <Btn small onClick={() => setEditingRole(!editingRole)}>
+              {editingRole ? t("mis.cancel") : t("ros.change_role")}
+            </Btn>
+            <Btn small onClick={() => onToggleInstructor && onToggleInstructor(member)}
+                 style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
+              {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
+            </Btn>
+            {!isUnassignedBlock && (
+              !confirmRemove ? (
+                <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove")}</Btn>
+              ) : (
+                <>
+                  <Btn small style={{ color: C.error, borderColor: C.error }}
+                       onClick={() => { onRemove(member); setConfirmRemove(false); }}>
+                    {t("mis.confirm_delete")}
+                  </Btn>
+                  <Btn small onClick={() => setConfirmRemove(false)}>{t("mis.cancel")}</Btn>
+                </>
+              )
+            )}
+            {onDelete && (
+              !confirmDelete ? (
+                <Btn small style={{ color: C.error, borderColor: "rgba(255,85,85,0.3)" }}
+                     onClick={() => setConfirmDelete(true)}>
+                  {t("ros.delete_user")}
                 </Btn>
-                <Btn small onClick={() => setConfirmRemove(false)}>{t("mis.cancel")}</Btn>
-              </>
-            )
-          )}
-          {onDelete && (
-            !confirmDelete ? (
-              <Btn small style={{ color: C.error, borderColor: "rgba(255,85,85,0.3)" }}
-                   onClick={() => setConfirmDelete(true)}>
-                {t("ros.delete_user")}
-              </Btn>
-            ) : (
-              <>
-                <Btn small style={{ color: C.error, borderColor: C.error, background: "rgba(255,85,85,0.1)" }}
-                     onClick={() => { onDelete(member); setConfirmDelete(false); }}>
-                  {t("ros.confirm_delete_user")}
-                </Btn>
-                <Btn small onClick={() => setConfirmDelete(false)}>{t("mis.cancel")}</Btn>
-              </>
-            )
+              ) : (
+                <>
+                  <Btn small style={{ color: C.error, borderColor: C.error, background: "rgba(255,85,85,0.1)" }}
+                       onClick={() => { onDelete(member); setConfirmDelete(false); }}>
+                    {t("ros.confirm_delete_user")}
+                  </Btn>
+                  <Btn small onClick={() => setConfirmDelete(false)}>{t("mis.cancel")}</Btn>
+                </>
+              )
+            )}
+            </>
           )}
         </div>
       )}
