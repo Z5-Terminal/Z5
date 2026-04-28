@@ -365,6 +365,7 @@ const EN = {
   "ros.revoke_instructor": "Revoke instr.",
   "ros.instructor_on": "INSTRUCTOR ON",
   "ros.instructor_off": "INSTRUCTOR OFF",
+  "ros.no_squad": "— No squad —",
 
   // Knowledge
   "kn.title": "Knowledge base",
@@ -774,6 +775,7 @@ const HE = {
   "ros.revoke_instructor": "בטל מדריך",
   "ros.instructor_on": "מדריך פעיל",
   "ros.instructor_off": "מדריך בוטל",
+  "ros.no_squad": "— ללא כיתה —",
 
   // Knowledge
   "kn.title": "מאגר ידע",

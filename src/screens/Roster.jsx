@@ -732,16 +732,16 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
     }
   }, [allowedSquads, squadId]);
 
-  const noSquadRole = role === "admin" || role === "officer";
+  const squadOptional = role === "admin" || role === "officer";
 
   async function create(e) {
     e.preventDefault();
     setBusy(true); setErr("");
     try {
-      if (!noSquadRole && !squadId) throw new Error(t("ros.err_select_squad"));
+      if (!squadOptional && !squadId) throw new Error(t("ros.err_select_squad"));
       const code = shortCode();
       const { error } = await supabase.from("invites").insert({
-        code, squad_id: noSquadRole ? null : squadId, role,
+        code, squad_id: squadId || null, role,
       });
       if (error) throw error;
       onChanged(t("ros.invite_generated", { code }));
@@ -775,23 +775,22 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
             flexWrap: "wrap",
             flexDirection: isMobile ? "column" : "row",
           }}>
-            {!noSquadRole && (
-              <Field inline label={t("mc.squad")}>
-                <select value={squadId}
-                        onChange={(e) => setSquadId(e.target.value)}
-                        style={{
-                          ...S.input,
-                          width: isMobile ? "100%" : 260,
-                          fontSize: isMobile ? 16 : S.input.fontSize,
-                          minHeight: isMobile ? 46 : undefined,
-                        }}>
-                  {allowedSquads.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                  {allowedSquads.length === 0 && <option value="">{t("mc.nosquads")}</option>}
-                </select>
-              </Field>
-            )}
+            <Field inline label={t("mc.squad")}>
+              <select value={squadId}
+                      onChange={(e) => setSquadId(e.target.value)}
+                      style={{
+                        ...S.input,
+                        width: isMobile ? "100%" : 260,
+                        fontSize: isMobile ? 16 : S.input.fontSize,
+                        minHeight: isMobile ? 46 : undefined,
+                      }}>
+                {squadOptional && <option value="">{t("ros.no_squad")}</option>}
+                {allowedSquads.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+                {allowedSquads.length === 0 && !squadOptional && <option value="">{t("mc.nosquads")}</option>}
+              </select>
+            </Field>
             <Field inline label={t("ros.role")}>
               <select value={role}
                       onChange={(e) => setRole(e.target.value)}
@@ -806,7 +805,7 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
                 ))}
               </select>
             </Field>
-            <Btn primary type="submit" disabled={busy || (!noSquadRole && !squadId)}>
+            <Btn primary type="submit" disabled={busy || (!squadOptional && !squadId)}>
               {busy ? t("ros.generating") : t("ros.generate")}
             </Btn>
           </form>
