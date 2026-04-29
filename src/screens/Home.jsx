@@ -151,7 +151,7 @@ function MissionCardRow({ mission, pct, checked, total, onClick, t }) {
         display: "block",
         width: "100%",
         boxSizing: "border-box",
-        padding: "12px 0",
+        padding: "14px 8px",
         borderBottom: `1px solid ${C.border}`,
         cursor: "pointer",
       }}
@@ -237,7 +237,7 @@ function MissionCardRow({ mission, pct, checked, total, onClick, t }) {
 function AnnouncementRow({ a, t }) {
   return (
     <div style={{
-      padding: "10px 0",
+      padding: "12px 8px",
       borderBottom: `1px solid ${C.border}`,
     }}>
       <div style={{
