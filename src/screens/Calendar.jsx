@@ -580,23 +580,20 @@ function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCa
 
   return (
     <div style={{
-      padding: "8px 0 12px",
+      padding: "8px 4px 12px",
       borderBottom: `1px solid ${C.border}`,
       marginBottom: 8,
       maxWidth: "100%",
-      overflow: "hidden",
       boxSizing: "border-box",
     }}>
       <Field label={t("sch.title")}>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("sch.title_ph")} />
       </Field>
       <Field label={t("sch.starts_at")}>
-        <Input type="datetime-local" value={startsAt} onChange={(e) => handleStartChange(e.target.value)}
-               style={{ maxWidth: "100%", overflow: "hidden" }} />
+        <Input type="datetime-local" value={startsAt} onChange={(e) => handleStartChange(e.target.value)} />
       </Field>
       <Field label={t("sch.ends_at")}>
-        <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)}
-               style={{ maxWidth: "100%", overflow: "hidden" }} />
+        <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
       </Field>
       <Field label={t("sch.location")}>
         <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("sch.location_ph")} />
