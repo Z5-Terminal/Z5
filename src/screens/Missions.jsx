@@ -162,7 +162,7 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
 
       <Panel connectTop>
         {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 14, borderBottom: `1px solid ${C.border}` }}>
           <Btn small active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
             {t("mis.all")}
           </Btn>
@@ -201,15 +201,19 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
             {t("mis.empty")}
           </div>
         )}
-        {filteredMissions.map((m) => (
-          <MissionRow
-            key={m.id}
-            mission={m}
-            squadName={squadName(m.squad_id)}
-            readiness={readinessMap[m.id]}
-            onOpen={() => onOpenMission(m.id)}
-          />
-        ))}
+        {filteredMissions.length > 0 && (
+          <div style={{ marginTop: 6 }}>
+            {filteredMissions.map((m) => (
+              <MissionRow
+                key={m.id}
+                mission={m}
+                squadName={squadName(m.squad_id)}
+                readiness={readinessMap[m.id]}
+                onOpen={() => onOpenMission(m.id)}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Announcements (shown in "all" or "announcements" filter) */}
         {showAnnouncements && announcements.length > 0 && (
@@ -217,17 +221,17 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
             {filteredMissions.length > 0 && (
               <div style={{
                 borderTop: `1px solid ${C.border}`,
-                marginTop: 8,
-                paddingTop: 12,
-                marginBottom: 4,
+                marginTop: 12,
+                paddingTop: 14,
+                marginBottom: 6,
               }}>
                 <div style={{
                   color: C.dim,
                   fontSize: 11,
                   textTransform: "uppercase",
-                  letterSpacing: "1px",
+                  letterSpacing: "1.2px",
                   fontWeight: 600,
-                  marginBottom: 4,
+                  marginBottom: 6,
                 }}>
                   ◈ {t("mis.ann_tab")}
                 </div>
@@ -283,7 +287,7 @@ function MissionRow({ mission, squadName, readiness, onOpen }) {
         gap: 12,
         width: "100%",
         boxSizing: "border-box",
-        padding: "12px 4px",
+        padding: "14px 8px",
         borderBottom: `1px solid ${C.border}`,
         cursor: "pointer",
       }}
@@ -438,7 +442,7 @@ function AnnouncementRow({ a, canEdit, profileId, onDeleted, onUpdated }) {
   }
 
   return (
-    <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+    <div style={{ padding: "12px 8px", borderBottom: `1px solid ${C.border}` }}>
       <div style={{
         display: "flex",
         justifyContent: "space-between",
