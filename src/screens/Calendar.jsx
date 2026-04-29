@@ -27,7 +27,7 @@ export default function Calendar() {
   const { profile } = useAuth();
   const { t, dir } = useI18n();
   const isMobile = useIsMobile();
-  const showCreate = canCreateInvites(profile?.role);
+  const showCreate = canCreateInvites(profile?.role) || !!profile?.is_instructor;
   const today = useMemo(() => startOfDay(new Date()), []);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState(null); // Date | null
@@ -491,6 +491,7 @@ function ScheduleRow({ event, canManage, onEdit, onDeleted, t }) {
 
 function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCancel }) {
   const isAdminOfficer = canCreateWholeTeamTask(profile?.role);
+  const isInstr = !!profile?.is_instructor;
 
   const [title, setTitle] = useState(initial?.title || "");
   const [startsAt, setStartsAt] = useState(() =>
@@ -533,7 +534,9 @@ function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCa
       const { data } = await supabase.from("squads").select("*").order("name");
       const allowed = isAdminOfficer
         ? (data || [])
-        : (data || []).filter((s) => s.id === profile?.squad_id);
+        : isInstr
+          ? (data || []).filter((s) => s.id === profile?.squad_id || s.is_bootcamp)
+          : (data || []).filter((s) => s.id === profile?.squad_id);
       setSquads(allowed);
     })();
   }, [isAdminOfficer, profile?.squad_id]);
@@ -577,18 +580,23 @@ function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCa
 
   return (
     <div style={{
-      padding: "8px 4px 12px",
+      padding: "8px 0 12px",
       borderBottom: `1px solid ${C.border}`,
       marginBottom: 8,
+      maxWidth: "100%",
+      overflow: "hidden",
+      boxSizing: "border-box",
     }}>
       <Field label={t("sch.title")}>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("sch.title_ph")} />
       </Field>
       <Field label={t("sch.starts_at")}>
-        <Input type="datetime-local" value={startsAt} onChange={(e) => handleStartChange(e.target.value)} />
+        <Input type="datetime-local" value={startsAt} onChange={(e) => handleStartChange(e.target.value)}
+               style={{ maxWidth: "100%", overflow: "hidden" }} />
       </Field>
       <Field label={t("sch.ends_at")}>
-        <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+        <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)}
+               style={{ maxWidth: "100%", overflow: "hidden" }} />
       </Field>
       <Field label={t("sch.location")}>
         <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("sch.location_ph")} />
@@ -634,6 +642,8 @@ function canManageScheduleEvent(profile, event) {
       && event.squad_id === profile.squad_id) {
     return true;
   }
+  // Instructors can manage schedule events they created
+  if (profile.is_instructor && event.created_by === profile.id) return true;
   return false;
 }
 
