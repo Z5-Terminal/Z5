@@ -162,7 +162,7 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
 
       <Panel connectTop>
         {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 14, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Btn small active={kindFilter === "all"} onClick={() => setKindFilter("all")}>
             {t("mis.all")}
           </Btn>
@@ -187,75 +187,69 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
 
         {/* Announcement composer */}
         {showComposer && (
-          <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
             <AnnouncementComposer onPosted={() => { setShowComposer(false); load(); }} />
           </div>
         )}
+      </Panel>
 
-        {loading && <div style={{ color: C.dim, fontSize: 13 }}>{t("mis.loading")}</div>}
-        {err && <div style={{ color: C.error, fontSize: 13 }}>{err}</div>}
+      {loading && (
+        <Panel>
+          <div style={{ color: C.dim, fontSize: 13 }}>{t("mis.loading")}</div>
+        </Panel>
+      )}
+      {err && (
+        <Panel>
+          <div style={{ color: C.error, fontSize: 13 }}>{err}</div>
+        </Panel>
+      )}
 
-        {/* Missions */}
-        {!loading && filteredMissions.length === 0 && !showAnnouncements && (
-          <div style={{ color: C.dim, fontSize: 13, padding: "4px 0" }}>
+      {/* Missions section */}
+      {!loading && filteredMissions.length > 0 && (
+        <Panel title={kindFilter === "admin" ? `◎ ${t("kind.admin")}` : kindFilter === "operational" ? `⌖ ${t("kind.operational")}` : null}>
+          {filteredMissions.map((m) => (
+            <MissionRow
+              key={m.id}
+              mission={m}
+              squadName={squadName(m.squad_id)}
+              readiness={readinessMap[m.id]}
+              onOpen={() => onOpenMission(m.id)}
+            />
+          ))}
+        </Panel>
+      )}
+
+      {!loading && filteredMissions.length === 0 && !showAnnouncements && (
+        <Panel>
+          <div style={{ color: C.dim, fontSize: 13 }}>
             {t("mis.empty")}
           </div>
-        )}
-        {filteredMissions.length > 0 && (
-          <div style={{ marginTop: 6 }}>
-            {filteredMissions.map((m) => (
-              <MissionRow
-                key={m.id}
-                mission={m}
-                squadName={squadName(m.squad_id)}
-                readiness={readinessMap[m.id]}
-                onOpen={() => onOpenMission(m.id)}
-              />
-            ))}
-          </div>
-        )}
+        </Panel>
+      )}
 
-        {/* Announcements (shown in "all" or "announcements" filter) */}
-        {showAnnouncements && announcements.length > 0 && (
-          <>
-            {filteredMissions.length > 0 && (
-              <div style={{
-                borderTop: `1px solid ${C.border}`,
-                marginTop: 12,
-                paddingTop: 14,
-                marginBottom: 6,
-              }}>
-                <div style={{
-                  color: C.dim,
-                  fontSize: 11,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.2px",
-                  fontWeight: 600,
-                  marginBottom: 6,
-                }}>
-                  ◈ {t("mis.ann_tab")}
-                </div>
-              </div>
-            )}
-            {announcements.map((a) => (
-              <AnnouncementRow
-                key={a.id}
-                a={a}
-                canEdit={canManage || (isLead && a.scope === "squad" && a.squad_id === profile?.squad_id)}
-                profileId={profile?.id}
-                onDeleted={load}
-                onUpdated={load}
-              />
-            ))}
-          </>
-        )}
+      {/* Announcements section */}
+      {showAnnouncements && announcements.length > 0 && (
+        <Panel title={`◈ ${t("mis.ann_tab")}`}>
+          {announcements.map((a) => (
+            <AnnouncementRow
+              key={a.id}
+              a={a}
+              canEdit={canManage || (isLead && a.scope === "squad" && a.squad_id === profile?.squad_id)}
+              profileId={profile?.id}
+              onDeleted={load}
+              onUpdated={load}
+            />
+          ))}
+        </Panel>
+      )}
 
-        {showAnnouncements && announcements.length === 0 && filteredMissions.length === 0 && !loading && (
-          <div style={{ color: C.dim, fontSize: 13, padding: "4px 0" }}>
+      {showAnnouncements && announcements.length === 0 && filteredMissions.length === 0 && !loading && (
+        <Panel>
+          <div style={{ color: C.dim, fontSize: 13 }}>
             {kindFilter === "announcements" ? t("mis.ann_empty") : t("mis.empty")}
           </div>
-        )}
-      </Panel>
+        </Panel>
+      )}
     </>
   );
 }
