@@ -803,7 +803,11 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
             </Field>
             <Field inline label={t("ros.role")}>
               <select value={role}
-                      onChange={(e) => setRole(e.target.value)}
+                      onChange={(e) => {
+                        const r = e.target.value;
+                        setRole(r);
+                        if (r === "admin" || r === "officer") setSquadId("");
+                      }}
                       style={{
                         ...S.input,
                         width: isMobile ? "100%" : 220,
