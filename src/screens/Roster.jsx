@@ -477,14 +477,14 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
                    style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
                 {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
               </Btn>
-              {!isUnassignedBlock && (
+              {!isUnassignedBlock && member.squad_id && (
                 !confirmRemove ? (
-                  <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove")}</Btn>
+                  <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove_member")}</Btn>
                 ) : (
                   <>
-                    <Btn small style={{ color: C.error, borderColor: C.error }}
+                    <Btn small style={{ color: C.warn, borderColor: C.warn }}
                          onClick={() => { onRemove(member); setConfirmRemove(false); }}>
-                      {t("mis.confirm_delete")}
+                      {t("ros.confirm_remove")}
                     </Btn>
                     <Btn small onClick={() => setConfirmRemove(false)}>{t("mis.cancel")}</Btn>
                   </>
@@ -608,14 +608,14 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
                  style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
               {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
             </Btn>
-            {!isUnassignedBlock && (
+            {!isUnassignedBlock && member.squad_id && (
               !confirmRemove ? (
-                <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove")}</Btn>
+                <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove_member")}</Btn>
               ) : (
                 <>
-                  <Btn small style={{ color: C.error, borderColor: C.error }}
+                  <Btn small style={{ color: C.warn, borderColor: C.warn }}
                        onClick={() => { onRemove(member); setConfirmRemove(false); }}>
-                    {t("mis.confirm_delete")}
+                    {t("ros.confirm_remove")}
                   </Btn>
                   <Btn small onClick={() => setConfirmRemove(false)}>{t("mis.cancel")}</Btn>
                 </>
