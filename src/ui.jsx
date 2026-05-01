@@ -277,6 +277,8 @@ export function Panel({ title, children, action, connectTop }) {
     : { ...S.panel };
   if (connectTop) {
     base.borderRadius = isMobile ? "0 0 6px 6px" : "0 0 4px 4px";
+  } else {
+    base.marginTop = isMobile ? 14 : 20;
   }
   return (
     <div style={base}>
