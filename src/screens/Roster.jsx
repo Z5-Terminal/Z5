@@ -424,7 +424,6 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
           <select
             value={member.role}
             onChange={(e) => { onChangeRole(member, e.target.value); setEditingRole(false); }}
-            onBlur={() => setEditingRole(false)}
             autoFocus
             style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 140 }}
           >
