@@ -73,9 +73,19 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
     setLoading(false);
 
     // Fetch readiness for each mission in parallel
-    if (data && data.length > 0) {
+    if (allMissions.length > 0) {
       const results = await Promise.all(
-        data.map(async (m) => {
+        allMissions.map(async (m) => {
+          // Admin tasks: simple done/not-done per user
+          if ((m.kind || "operational") === "admin") {
+            const { data: ops } = await supabase
+              .from("mission_operators")
+              .select("done")
+              .eq("mission_id", m.id);
+            if (!ops || ops.length === 0) return { id: m.id, checked: 0, total: 0, pct: 0 };
+            const done = ops.filter((o) => o.done).length;
+            return { id: m.id, checked: done, total: ops.length, pct: Math.round((done / ops.length) * 100) };
+          }
           const { data: rd } = await getMissionReadiness(m.id);
           if (!rd || rd.length === 0) return { id: m.id, checked: 0, total: 0, pct: 0 };
           const totalChecked = rd.reduce((s, r) => s + (r.checked_items || 0), 0);
@@ -206,7 +216,11 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
 
       {/* Missions section */}
       {!loading && filteredMissions.length > 0 && (
-        <Panel title={kindFilter === "admin" ? `◎ ${t("kind.admin")}` : kindFilter === "operational" ? `⌖ ${t("kind.operational")}` : null}>
+        <Panel title={
+          kindFilter === "admin" ? `◎ ${t("kind.admin")}`
+          : kindFilter === "operational" ? `⌖ ${t("kind.operational")}`
+          : `⌖ ${t("mis.title")}`
+        }>
           {filteredMissions.map((m) => (
             <MissionRow
               key={m.id}
