@@ -17,7 +17,7 @@ function GearMobileCard({ row, onChange, onRemove, t }) {
       border: `1px solid ${C.border}`,
       borderRadius: 5,
       marginBottom: 8,
-      background: "rgba(255,255,255,0.02)",
+      background: C.cardBg,
       overflow: "hidden",
     }}>
       <button
@@ -451,7 +451,7 @@ function MemberGearFolder({ name, role, gearCount, totalCount, expanded, onToggl
       border: `1px solid ${C.border}`,
       borderRadius: 6,
       marginBottom: isMobile ? 10 : 12,
-      background: "rgba(255,255,255,0.02)",
+      background: C.cardBg,
       overflow: "hidden",
     }}>
       <button

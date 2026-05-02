@@ -473,7 +473,7 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
                 {editingRole ? t("mis.cancel") : t("ros.change_role")}
               </Btn>
               <Btn small onClick={() => onToggleInstructor && onToggleInstructor(member)}
-                   style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
+                   style={member.is_instructor ? { color: C.warn, borderColor: C.warnBorderFaint } : {}}>
                 {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
               </Btn>
               {!isUnassignedBlock && member.squad_id && (
@@ -491,13 +491,13 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
               )}
               {onDelete && (
                 !confirmDelete ? (
-                  <Btn small style={{ color: C.error, borderColor: "rgba(255,85,85,0.3)" }}
+                  <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
                        onClick={() => setConfirmDelete(true)}>
                     {t("ros.delete_user")}
                   </Btn>
                 ) : (
                   <>
-                    <Btn small style={{ color: C.error, borderColor: C.error, background: "rgba(255,85,85,0.1)" }}
+                    <Btn small style={{ color: C.error, borderColor: C.error, background: C.badgeError }}
                          onClick={() => { onDelete(member); setConfirmDelete(false); }}>
                       {t("ros.confirm_delete_user")}
                     </Btn>
@@ -529,7 +529,7 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
       borderRadius: 6,
       padding: "12px 14px",
       marginBottom: 10,
-      background: "rgba(255,255,255,0.02)",
+      background: C.cardBg,
     }}>
       <div style={{
         display: "flex",
@@ -604,7 +604,7 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
               {editingRole ? t("mis.cancel") : t("ros.change_role")}
             </Btn>
             <Btn small onClick={() => onToggleInstructor && onToggleInstructor(member)}
-                 style={member.is_instructor ? { color: C.warn, borderColor: "rgba(255,170,0,0.3)" } : {}}>
+                 style={member.is_instructor ? { color: C.warn, borderColor: C.warnBorderFaint } : {}}>
               {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
             </Btn>
             {!isUnassignedBlock && member.squad_id && (
@@ -612,7 +612,7 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
                 <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove_member")}</Btn>
               ) : (
                 <>
-                  <Btn small style={{ color: C.warn, borderColor: C.warn }}
+                  <Btn small style={{ color: C.warn, borderColor: C.warnBorderFaint }}
                        onClick={() => { onRemove(member); setConfirmRemove(false); }}>
                     {t("ros.confirm_remove")}
                   </Btn>
@@ -622,13 +622,13 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
             )}
             {onDelete && (
               !confirmDelete ? (
-                <Btn small style={{ color: C.error, borderColor: "rgba(255,85,85,0.3)" }}
+                <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
                      onClick={() => setConfirmDelete(true)}>
                   {t("ros.delete_user")}
                 </Btn>
               ) : (
                 <>
-                  <Btn small style={{ color: C.error, borderColor: C.error, background: "rgba(255,85,85,0.1)" }}
+                  <Btn small style={{ color: C.error, borderColor: C.error, background: C.badgeError }}
                        onClick={() => { onDelete(member); setConfirmDelete(false); }}>
                     {t("ros.confirm_delete_user")}
                   </Btn>
@@ -890,7 +890,7 @@ function InviteRowDesktop({ invite, squads, canDelete, onDelete }) {
               <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
             ) : (
               <div style={{ display: "flex", gap: 4 }}>
-                <Btn small style={{ color: C.error, borderColor: C.error }}
+                <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
                      onClick={() => { onDelete(invite); setConfirmDel(false); }}>
                   {t("mis.confirm_delete")}
                 </Btn>
@@ -916,7 +916,7 @@ function InviteCardMobile({ invite, squads, canDelete, onDelete }) {
       borderRadius: 6,
       padding: "12px 14px",
       marginBottom: 10,
-      background: "rgba(255,255,255,0.02)",
+      background: C.cardBg,
     }}>
       <div style={{
         display: "flex",
@@ -944,7 +944,7 @@ function InviteCardMobile({ invite, squads, canDelete, onDelete }) {
             <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
           ) : (
             <div style={{ display: "flex", gap: 6 }}>
-              <Btn small style={{ color: C.error, borderColor: C.error }}
+              <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
                    onClick={() => { onDelete(invite); setConfirmDel(false); }}>
                 {t("mis.confirm_delete")}
               </Btn>

@@ -463,7 +463,7 @@ function PersonPickRow({ member, selected, onToggle, isMobile }) {
         height: 22,
         flexShrink: 0,
         border: `1px solid ${selected ? C.ok : C.borderBright}`,
-        background: selected ? "rgba(85,255,153,0.15)" : "transparent",
+        background: selected ? C.selectedBg : "transparent",
         color: selected ? C.ok : "transparent",
         fontSize: 16,
         fontWeight: 700,
@@ -515,7 +515,7 @@ function SectionEditor({ section, items, onItemsChange }) {
       borderRadius: 4,
       padding: "10px 12px",
       marginBottom: 10,
-      background: "rgba(255,255,255,0.015)",
+      background: C.cardBg,
     }}>
       <div style={{
         display: "flex",

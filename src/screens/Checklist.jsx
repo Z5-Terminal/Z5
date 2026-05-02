@@ -298,7 +298,7 @@ export default function Checklist({ missionId, onBack }) {
               gridTemplateColumns: isMobile ? "1fr" : "auto 1fr",
               gap: isMobile ? "4px 0" : "6px 16px",
               padding: "10px 14px",
-              background: "rgba(255,255,255,0.02)",
+              background: C.cardBg,
               border: `1px solid ${C.border}`,
               borderRadius: 3,
               marginBottom: 16,
@@ -323,7 +323,7 @@ export default function Checklist({ missionId, onBack }) {
               marginTop: 16,
               padding: "12px 16px",
               border: `1px solid ${C.ok}`,
-              background: "rgba(85,255,153,0.08)",
+              background: C.okBg,
               color: C.ok,
               borderRadius: 3,
               fontSize: 14,
@@ -366,7 +366,7 @@ export default function Checklist({ missionId, onBack }) {
                 onClick={handleDelete}
                 style={{
                   color: C.error,
-                  borderColor: confirmDelete ? C.error : "rgba(255,85,85,0.3)",
+                  borderColor: confirmDelete ? C.error : C.errBorderFaint,
                 }}
               >
                 {busyDelete ? t("cl.deleting") : confirmDelete ? t("cl.confirm_delete") : t("cl.delete")}
@@ -499,7 +499,7 @@ function CollapsibleSection({
           cursor: "pointer",
           transition: "background 100ms",
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = C.hoverBg; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
       >
         <div style={{
@@ -575,7 +575,7 @@ function ProgressBar({ checked, total }) {
       </div>
       <div style={{
         width: "100%", height: 10,
-        background: "rgba(255,255,255,0.06)",
+        background: C.progressTrack,
         border: `1px solid ${C.border}`,
         borderRadius: 3, overflow: "hidden",
       }}>
@@ -612,7 +612,7 @@ function ChecklistRow({ index, label, checked, onToggle, isMobile }) {
         cursor: "pointer",
         transition: "background 100ms",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = C.hoverBg; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
       <span style={{
@@ -624,7 +624,7 @@ function ChecklistRow({ index, label, checked, onToggle, isMobile }) {
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         width: 20, height: 20, flexShrink: 0,
         border: `1.5px solid ${checked ? C.ok : C.borderBright}`,
-        background: checked ? "rgba(85,255,153,0.15)" : "transparent",
+        background: checked ? C.selectedBg : "transparent",
         color: checked ? C.ok : "transparent",
         fontSize: 13, fontWeight: 700, borderRadius: 3,
         transition: "all 200ms",
@@ -690,7 +690,7 @@ function ReadinessRow({ row, isMobile }) {
       </div>
       <div style={{ width: isMobile ? 60 : 100, flexShrink: 0 }}>
         <div style={{
-          height: 4, background: "rgba(255,255,255,0.06)",
+          height: 4, background: C.progressTrack,
           borderRadius: 2, overflow: "hidden",
         }}>
           <div style={{
@@ -776,7 +776,7 @@ function AdminTaskView({
           <div style={{
             color: C.text, fontSize: 14, lineHeight: 1.5,
             whiteSpace: "pre-wrap", padding: "10px 12px",
-            background: "rgba(255,255,255,0.03)",
+            background: C.hoverBg,
             border: `1px solid ${C.border}`, borderRadius: 3, marginBottom: 14,
           }}>{mission.notes}</div>
         )}
@@ -792,7 +792,7 @@ function AdminTaskView({
         {canDelete && (
           <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "center" }}>
             <Btn small disabled={busyDelete} onClick={onDelete}
-              style={{ color: C.error, borderColor: confirmDelete ? C.error : "rgba(255,85,85,0.3)" }}>
+              style={{ color: C.error, borderColor: confirmDelete ? C.error : C.errBorderFaint }}>
               {busyDelete ? t("cl.deleting") : confirmDelete ? t("cl.confirm_delete") : t("cl.delete_task")}
             </Btn>
             {confirmDelete && !busyDelete && (

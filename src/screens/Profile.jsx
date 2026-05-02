@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth, roleLabelT, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
+import { useTheme } from "../ThemeContext";
 import { supabase } from "../supabase";
 import { Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge } from "../ui";
 import { useIsMobile } from "../useIsMobile";
@@ -16,7 +17,7 @@ function Section({ title, icon, defaultOpen = false, children }) {
       border: `1px solid ${C.border}`,
       borderRadius: 6,
       marginBottom: isMobile ? 10 : 14,
-      background: "rgba(255,255,255,0.02)",
+      background: C.cardBg,
       overflow: "hidden",
     }}>
       <button
@@ -67,6 +68,7 @@ function Section({ title, icon, defaultOpen = false, children }) {
 export default function Profile() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { t, lang, setLang } = useI18n();
+  const { mode, toggle: toggleTheme } = useTheme();
   const isMobile = useIsMobile();
   const [callsign, setCallsign] = useState(profile?.callsign || "");
   const [name, setName] = useState(profile?.full_name || "");
@@ -158,6 +160,18 @@ export default function Profile() {
         </div>
       </Section>
 
+      {/* Theme */}
+      <Section title={t("prof.theme")} icon={<ThemeIcon />}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn small active={mode === "dark"} onClick={() => mode !== "dark" && toggleTheme()}>
+            {t("prof.theme_dark")}
+          </Btn>
+          <Btn small active={mode === "light"} onClick={() => mode !== "light" && toggleTheme()}>
+            {t("prof.theme_light")}
+          </Btn>
+        </div>
+      </Section>
+
       {/* Language */}
       <Section title={t("prof.language")} icon={<LangIcon />}>
         <div style={{ display: "flex", gap: 10 }}>
@@ -217,6 +231,18 @@ function SoldierIcon() {
       <circle cx="8" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.2" />
       <path d="M5 3.5 Q8 1.5 11 3.5" stroke="currentColor" strokeWidth="1" fill="none" />
       <path d="M4 15 L4 10 Q4 8 8 8 Q12 8 12 10 L12 15" stroke="currentColor" strokeWidth="1.2" fill="none" />
+    </svg>
+  );
+}
+
+function ThemeIcon() {
+  return (
+    <svg
+      width="16" height="16" viewBox="0 0 16 16" fill="none"
+      style={{ verticalAlign: "middle", marginRight: 8, opacity: 0.8 }}
+    >
+      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M8 1.5 A6.5 6.5 0 0 1 8 14.5 Z" fill="currentColor" />
     </svg>
   );
 }

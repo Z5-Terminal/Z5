@@ -1,5 +1,6 @@
 import { AuthProvider, useAuth } from "./auth";
 import { I18nProvider, useI18n } from "./i18n";
+import { ThemeProvider } from "./ThemeContext";
 import { Page, CenteredColumn, Panel, Btn, ErrLine } from "./ui";
 import Auth from "./screens/Auth";
 import Shell from "./screens/Shell";
@@ -51,10 +52,12 @@ function Inner() {
 
 export default function App() {
   return (
-    <I18nProvider>
-      <AuthProvider>
-        <Inner />
-      </AuthProvider>
-    </I18nProvider>
+    <ThemeProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <Inner />
+        </AuthProvider>
+      </I18nProvider>
+    </ThemeProvider>
   );
 }

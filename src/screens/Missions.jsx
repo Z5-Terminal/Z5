@@ -151,7 +151,7 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
               else onCreateMission(v);
             }}
             style={{
-              background: C.panelBg || "#111",
+              background: C.inputBg,
               color: C.bright,
               border: `1px solid ${C.border}`,
               borderRadius: 4,

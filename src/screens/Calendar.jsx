@@ -308,9 +308,9 @@ function MonthGrid({ cursor, today, selectedDay, eventsByDay, onSelect, t }) {
 function DayCell({ date, inMonth, isToday, isSelected, events, onClick, isMobile }) {
   const hasEvents = events.length > 0;
   const bg = isSelected
-    ? "rgba(255,255,255,0.12)"
+    ? C.navActiveBg
     : isToday
-      ? "rgba(255,255,255,0.06)"
+      ? C.progressTrack
       : "transparent";
   return (
     <button

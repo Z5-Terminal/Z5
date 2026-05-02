@@ -102,7 +102,7 @@ export default function Knowledge({ isBootcamp, canSquadEditKnowledge }) {
             border: `1px solid ${C.border}`,
             borderRadius: 4,
             overflow: "hidden",
-            background: "#111",
+            background: C.inputBg,
           }}>
             {isImage ? (
               <img

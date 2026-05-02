@@ -1,9 +1,11 @@
 // Z5 :: shared UI primitives
 import { C, S, FONT } from "./theme";
 import { useIsMobile } from "./useIsMobile";
+import { useTheme } from "./ThemeContext";
 
-// Full-viewport page wrapper (replaces the old ScanlineWrap).
+// Full-viewport page wrapper.
 export function Page({ children }) {
+  const { mode } = useTheme(); // subscribe to theme changes
   return (
     <div style={{
       minHeight: "100vh",
@@ -38,23 +40,17 @@ export function CenteredColumn({ children, maxWidth = 460 }) {
   );
 }
 
-// Height of the mobile bottom tab bar; used to pad main content so the
-// last panel doesn't disappear behind the tab bar + safe-area.
+// Height of the mobile bottom tab bar.
 const BOTTOM_TAB_HEIGHT = 62;
 
 /**
  * App shell with:
  *  - Desktop: left sidebar 220px + scrollable main
  *  - Mobile:  compact top bar + main + fixed bottom tab bar
- *
- * Props:
- *   sidebar        — full sidebar node (desktop only, or opened drawer)
- *   mobileTopBar   — small node shown in the mobile top bar (logo + user chip)
- *   mobileTabBar   — tab bar node rendered at the bottom on mobile
- *   children       — main content
  */
 export function AppShell({ sidebar, mobileTopBar, mobileTabBar, children }) {
   const isMobile = useIsMobile();
+  const { mode } = useTheme();
 
   if (isMobile) {
     return (
@@ -69,7 +65,7 @@ export function AppShell({ sidebar, mobileTopBar, mobileTabBar, children }) {
             position: "sticky",
             top: 0,
             zIndex: 20,
-            background: "rgba(0,0,0,0.92)",
+            background: C.mobileHeaderBg,
             backdropFilter: "blur(8px)",
             WebkitBackdropFilter: "blur(8px)",
             borderBottom: `1px solid ${C.border}`,
@@ -95,7 +91,7 @@ export function AppShell({ sidebar, mobileTopBar, mobileTabBar, children }) {
             bottom: 0,
             height: `calc(${BOTTOM_TAB_HEIGHT}px + var(--safe-bottom))`,
             paddingBottom: "var(--safe-bottom)",
-            background: "rgba(0,0,0,0.96)",
+            background: C.mobileTabBg,
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             borderTop: `1px solid ${C.border}`,
@@ -121,7 +117,7 @@ export function AppShell({ sidebar, mobileTopBar, mobileTabBar, children }) {
         flexShrink: 0,
         borderRight: `1px solid ${C.border}`,
         padding: "28px 18px",
-        background: "rgba(255,255,255,0.015)",
+        background: C.sidebarBg,
         display: "flex",
         flexDirection: "column",
         gap: 4,
@@ -158,7 +154,7 @@ export function NavItem({ active, onClick, children }) {
     <button
       onClick={onClick}
       style={{
-        background: active ? "rgba(255,255,255,0.08)" : "transparent",
+        background: active ? C.navActiveBg : "transparent",
         color: active ? C.bright : C.dim,
         border: "none",
         borderLeft: `2px solid ${active ? C.bright : "transparent"}`,
@@ -178,7 +174,7 @@ export function NavItem({ active, onClick, children }) {
   );
 }
 
-// Bottom tab bar item (mobile). Equally-spaced, stacked icon + label.
+// Bottom tab bar item (mobile).
 export function TabItem({ active, onClick, icon, label }) {
   return (
     <button
@@ -212,7 +208,7 @@ export function TabItem({ active, onClick, icon, label }) {
   );
 }
 
-// Sidebar section label (e.g. "NAVIGATION", "ACCOUNT").
+// Sidebar section label.
 export function NavLabel({ children }) {
   return (
     <div style={{
@@ -242,7 +238,7 @@ export function PageHeader({ title, subtitle, action }) {
       border: `1px solid ${C.border}`,
       borderBottom: "none",
       borderRadius: "4px 4px 0 0",
-      background: "rgba(255,255,255,0.025)",
+      background: C.headerBg,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
@@ -349,7 +345,7 @@ export function Input({ mono, ...props }) {
   const isMobile = useIsMobile();
   const base = { ...S.input, ...(mono ? S.inputMono : {}) };
   if (isMobile) {
-    base.fontSize = 16; // prevent iOS zoom on focus
+    base.fontSize = 16;
     base.padding = "12px 14px";
     base.minHeight = 46;
   }
@@ -372,11 +368,11 @@ export function Mono({ children, style }) {
 
 export function Badge({ children, tone = "default" }) {
   const tones = {
-    default: { bg: "rgba(255,255,255,0.08)", fg: C.text, border: C.border },
-    bright:  { bg: "rgba(255,255,255,0.14)", fg: C.bright, border: C.borderBright },
-    ok:      { bg: "rgba(85,255,153,0.1)",   fg: C.ok,     border: "#2a5a3a" },
-    warn:    { bg: "rgba(255,204,85,0.1)",   fg: C.warn,   border: "#5a4a2a" },
-    error:   { bg: "rgba(255,85,85,0.1)",    fg: C.error,  border: "#5a2a2a" },
+    default: { bg: C.badgeDefault, fg: C.text, border: C.border },
+    bright:  { bg: C.badgeBright,  fg: C.bright, border: C.borderBright },
+    ok:      { bg: C.badgeOk,      fg: C.ok,     border: C.badgeOkBorder },
+    warn:    { bg: C.badgeWarn,     fg: C.warn,   border: C.badgeWarnBorder },
+    error:   { bg: C.badgeError,    fg: C.error,  border: C.badgeErrorBorder },
   };
   const t = tones[tone] || tones.default;
   return (
@@ -403,8 +399,8 @@ export function ErrLine({ children }) {
       marginTop: 14,
       fontSize: 13,
       padding: "8px 12px",
-      background: "rgba(255,85,85,0.08)",
-      border: `1px solid rgba(255,85,85,0.25)`,
+      background: C.errBg,
+      border: `1px solid ${C.errBorder}`,
       borderRadius: 2,
     }}>{children}</div>
   );
@@ -418,8 +414,8 @@ export function OkLine({ children }) {
       marginTop: 14,
       fontSize: 13,
       padding: "8px 12px",
-      background: "rgba(85,255,153,0.08)",
-      border: `1px solid rgba(85,255,153,0.25)`,
+      background: C.okBg,
+      border: `1px solid ${C.okBorder}`,
       borderRadius: 2,
     }}>{children}</div>
   );
@@ -440,10 +436,6 @@ export function Footer({ text }) {
   );
 }
 
-/**
- * Stacked-card alternative to a table row, used on mobile to avoid
- * horizontal scroll. `rows` is an array of { label, value } pairs.
- */
 export function DataCard({ title, rows, action }) {
   return (
     <div style={{
@@ -451,7 +443,7 @@ export function DataCard({ title, rows, action }) {
       borderRadius: 4,
       padding: "12px 12px 8px",
       marginBottom: 10,
-      background: "rgba(255,255,255,0.02)",
+      background: C.cardBg,
     }}>
       {(title || action) && (
         <div style={{

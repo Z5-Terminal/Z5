@@ -15,7 +15,7 @@ export default function Auth() {
         <div style={{
           border: `1px solid ${C.border}`,
           padding: isMobile ? "28px 20px" : "40px 44px",
-          background: "rgba(255,255,255,0.02)",
+          background: C.cardBg,
           borderRadius: 6,
         }}>
           <div style={{
@@ -185,7 +185,7 @@ function SignupForm() {
         <div style={{
           color: C.bright, fontSize: 13, marginBottom: 16,
           padding: "8px 12px",
-          background: "rgba(255,255,255,0.06)",
+          background: C.progressTrack,
           border: `1px solid ${C.border}`,
           borderRadius: 2,
         }}>

@@ -208,7 +208,7 @@ function MissionCardRow({ mission, pct, checked, total, onClick, t }) {
         <div style={{
           flex: 1,
           height: 6,
-          background: "rgba(255,255,255,0.06)",
+          background: C.progressTrack,
           border: `1px solid ${C.border}`,
           borderRadius: 2,
           overflow: "hidden",
