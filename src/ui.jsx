@@ -1,5 +1,6 @@
 // Z5 :: shared UI primitives
-import { C, S, FONT } from "./theme";
+import { useState } from "react";
+import { C, S, FONT, FONT_MONO } from "./theme";
 import { useIsMobile } from "./useIsMobile";
 import { useTheme } from "./ThemeContext";
 
@@ -149,13 +150,20 @@ export function AppShell({ sidebar, mobileTopBar, mobileTabBar, children }) {
 }
 
 // Sidebar nav link (desktop).
+// Inactive items render in C.text (full text color) so they read as
+// primary navigation, distinct from the dim section labels (NavLabel).
+// Hover fills with C.hoverBg to make interactivity unmistakable.
 export function NavItem({ active, onClick, children }) {
+  const [hover, setHover] = useState(false);
+  const bg = active ? C.navActiveBg : (hover ? C.hoverBg : "transparent");
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        background: active ? C.navActiveBg : "transparent",
-        color: active ? C.bright : C.dim,
+        background: bg,
+        color: active ? C.bright : C.text,
         border: "none",
         borderLeft: `2px solid ${active ? C.bright : "transparent"}`,
         padding: "10px 14px",
@@ -165,8 +173,9 @@ export function NavItem({ active, onClick, children }) {
         fontWeight: active ? 600 : 500,
         cursor: "pointer",
         letterSpacing: "0.3px",
-        transition: "all 120ms",
+        transition: "background 140ms ease-out, color 140ms ease-out",
         borderRadius: 0,
+        opacity: active ? 1 : 0.92,
       }}
     >
       {children}
@@ -209,17 +218,29 @@ export function TabItem({ active, onClick, icon, label }) {
 }
 
 // Sidebar section label.
+// Renders as a divider with a tiny mono caption on the left and a
+// hairline filling the rest of the row, so it reads unmistakably as
+// a section break — not as a clickable nav item.
 export function NavLabel({ children }) {
   return (
     <div style={{
-      color: C.dimmer,
-      fontSize: 11,
-      fontWeight: 700,
-      letterSpacing: "1.2px",
-      textTransform: "uppercase",
-      padding: "18px 14px 8px",
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "20px 14px 8px",
     }}>
-      {children}
+      <span style={{
+        color: C.dimmer,
+        fontFamily: FONT_MONO,
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: "1.6px",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}>
+        {children}
+      </span>
+      <div style={{ flex: 1, height: 1, background: C.border }} />
     </div>
   );
 }

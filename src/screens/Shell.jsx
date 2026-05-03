@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth, roleLabelT, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
 import { useConsole } from "../console";
-import { Page, AppShell, NavItem, NavLabel, TabItem, Badge, Btn } from "../ui";
+import { Page, AppShell, NavItem, NavLabel, TabItem, Badge } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, FONT_MONO } from "../theme";
 import Home from "./Home";
@@ -35,15 +35,14 @@ function defaultViewFor(mode) {
 }
 
 export default function Shell() {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const { t } = useI18n();
-  const { consoleMode, clearConsole, mySquad } = useConsole();
+  const { consoleMode, mySquad } = useConsole();
   const [view, setView] = useState(() => defaultViewFor(consoleMode));
   const [missionView, setMissionView] = useState("list");
   const [activeMissionId, setActiveMissionId] = useState(null);
   const [prefillDate, setPrefillDate] = useState(null);
   const [createKind, setCreateKind] = useState("operational");
-  const [confirmSwitch, setConfirmSwitch] = useState(false);
   const isMobile = useIsMobile();
 
   const isAdminOrOfficer = canManageSquads(profile?.role);
@@ -93,61 +92,12 @@ export default function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consoleMode, tabs]);
 
-  // Reset confirm-switch when navigating around so it doesn't linger.
-  useEffect(() => { setConfirmSwitch(false); }, [view]);
-
   function goTab(key) {
     setView(key);
     if (key === "missions") {
       setMissionView("list");
       setActiveMissionId(null);
     }
-  }
-
-  function handleSwitchConsole() {
-    if (!confirmSwitch) { setConfirmSwitch(true); return; }
-    setConfirmSwitch(false);
-    clearConsole();
-  }
-
-  // ── Switch-console control (used in both desktop sidebar + mobile bar) ──
-  function SwitchConsoleControl({ inline = false }) {
-    if (confirmSwitch) {
-      return (
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <Btn small onClick={handleSwitchConsole}>{t("console.switch_confirm")}</Btn>
-          <Btn small onClick={() => setConfirmSwitch(false)}>✕</Btn>
-        </div>
-      );
-    }
-    if (inline) {
-      // Mobile: compact button styled like the EXIT button.
-      return (
-        <button
-          onClick={handleSwitchConsole}
-          aria-label={t("console.switch")}
-          style={{
-            background: "transparent",
-            border: `1px solid ${C.border}`,
-            color: C.dim,
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: "0.8px",
-            textTransform: "uppercase",
-            borderRadius: 2,
-            padding: "8px 10px",
-            minHeight: 36,
-            cursor: "pointer",
-            flexShrink: 0,
-          }}
-        >
-          {t("console.switch_short")}
-        </button>
-      );
-    }
-    return (
-      <NavItem onClick={handleSwitchConsole}>{t("console.switch")}</NavItem>
-    );
   }
 
   // ── Desktop sidebar ───────────────────────────────────────────────
@@ -194,8 +144,6 @@ export default function Shell() {
 
       <NavLabel>{t("nav.account")}</NavLabel>
       <NavItem active={view === "profile"} onClick={() => goTab("profile")}>{t("nav.profile")}</NavItem>
-      <SwitchConsoleControl />
-      <NavItem onClick={signOut}>{t("nav.logout")}</NavItem>
 
       <div style={{ flex: 1 }} />
 

@@ -189,36 +189,32 @@ export default function Profile() {
         </div>
       </Section>
 
-      {/* Mobile-only: switch console (this control lives in the desktop
-          sidebar already, so we only surface it here on mobile where the
-          mobile top bar no longer carries the switch button). */}
-      {isMobile && (
-        <Section title={t("console.title")} icon={<ConsoleIcon />}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 13, color: C.dim }}>
-              {t("console.current")}:{" "}
-              <span style={{ color: C.bright, fontWeight: 600, letterSpacing: "0.5px" }}>
-                {t(`console.${consoleMode || "terminal"}`)}
-              </span>
-            </div>
-            {confirmSwitch ? (
-              <div style={{ display: "flex", gap: 8 }}>
-                <Btn small onClick={handleSwitchConsole}>{t("console.switch_confirm")}</Btn>
-                <Btn small onClick={() => setConfirmSwitch(false)}>✕</Btn>
-              </div>
-            ) : (
-              <Btn fullWidth onClick={handleSwitchConsole}>{t("console.switch")}</Btn>
-            )}
+      {/* Switch console — moved here from the desktop sidebar and the
+          mobile top bar; this is the single canonical place for both
+          this action and the sign-out below it. */}
+      <Section title={t("console.title")} icon={<ConsoleIcon />}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 13, color: C.dim }}>
+            {t("console.current")}:{" "}
+            <span style={{ color: C.bright, fontWeight: 600, letterSpacing: "0.5px" }}>
+              {t(`console.${consoleMode || "terminal"}`)}
+            </span>
           </div>
-        </Section>
-      )}
-
-      {/* Mobile sign out */}
-      {isMobile && (
-        <div style={{ marginTop: 24 }}>
-          <Btn fullWidth onClick={signOut}>{t("prof.logout")}</Btn>
+          {confirmSwitch ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small onClick={handleSwitchConsole}>{t("console.switch_confirm")}</Btn>
+              <Btn small onClick={() => setConfirmSwitch(false)}>✕</Btn>
+            </div>
+          ) : (
+            <Btn fullWidth={isMobile} onClick={handleSwitchConsole}>{t("console.switch")}</Btn>
+          )}
         </div>
-      )}
+      </Section>
+
+      {/* Sign out */}
+      <div style={{ marginTop: 24 }}>
+        <Btn fullWidth={isMobile} onClick={signOut}>{t("prof.logout")}</Btn>
+      </div>
     </>
   );
 }
