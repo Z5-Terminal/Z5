@@ -34,13 +34,6 @@ function defaultViewFor(mode) {
   return "home";
 }
 
-// Console-mode → accent token from theme.
-function accentFor(mode) {
-  if (mode === "bootcamp")    return C.consoleBootcamp;
-  if (mode === "recruitment") return C.consoleRecruitment;
-  return C.consoleTerminal;
-}
-
 export default function Shell() {
   const { profile, signOut } = useAuth();
   const { t } = useI18n();
@@ -55,7 +48,6 @@ export default function Shell() {
 
   const isAdminOrOfficer = canManageSquads(profile?.role);
   const isBootcamp = mySquad?.is_bootcamp === true;
-  const accent = accentFor(consoleMode);
 
   // Console wordmark shown in the sidebar header / mobile top bar.
   const consoleLabel = useMemo(() => {
@@ -176,7 +168,7 @@ export default function Shell() {
           style={{ width: "100%", maxWidth: 150, maxHeight: 90, objectFit: "contain", display: "block" }}
         />
         <div style={{
-          color: accent,
+          color: C.bright,
           fontSize: 16,
           fontWeight: 700,
           letterSpacing: "2px",
@@ -232,7 +224,7 @@ export default function Shell() {
         style={{ height: 52, width: "auto", maxWidth: 92, objectFit: "contain", flexShrink: 0 }}
       />
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-        <div style={{ color: accent, fontSize: 18, fontWeight: 800, letterSpacing: "2px", lineHeight: 1.1 }}>
+        <div style={{ color: C.bright, fontSize: 18, fontWeight: 800, letterSpacing: "2px", lineHeight: 1.1 }}>
           {consoleLabel}
         </div>
         <div style={{

@@ -45,13 +45,6 @@ const DARK = {
   warnBorderFaint:"rgba(255,170,0,0.3)",
   errBorderFaint: "rgba(255,85,85,0.3)",
   btnActiveColor: "#000",
-  // Hub console accents — one per console (Terminal / BootCamp / Recruitment)
-  consoleTerminal:        "#ffffff",
-  consoleTerminalFaint:   "rgba(255,255,255,0.06)",
-  consoleBootcamp:        "#ffb84d",
-  consoleBootcampFaint:   "rgba(255,184,77,0.08)",
-  consoleRecruitment:     "#5cc8e8",
-  consoleRecruitmentFaint:"rgba(92,200,232,0.08)",
 };
 
 const LIGHT = {
@@ -97,13 +90,6 @@ const LIGHT = {
   warnBorderFaint:"rgba(179,134,0,0.3)",
   errBorderFaint: "rgba(204,51,51,0.25)",
   btnActiveColor: "#ffffff",
-  // Hub console accents — one per console (Terminal / BootCamp / Recruitment)
-  consoleTerminal:        "#000000",
-  consoleTerminalFaint:   "rgba(0,0,0,0.05)",
-  consoleBootcamp:        "#a06800",
-  consoleBootcampFaint:   "rgba(160,104,0,0.07)",
-  consoleRecruitment:     "#0070a0",
-  consoleRecruitmentFaint:"rgba(0,112,160,0.07)",
 };
 
 // ── Mutable C and S (swapped in place by applyTheme) ────────────────

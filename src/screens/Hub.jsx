@@ -1,36 +1,23 @@
 // Z5 :: Hub — landing screen shown on every login.
-// Three banners (Terminal / BootCamp / Recruitment). Selecting one
-// sets consoleMode and routes the user into Shell. Banners the user
-// cannot access render in a disabled state with a "no access" note.
+// Three banners stacked vertically as a numbered console list. Selecting
+// one sets consoleMode and routes the user into Shell. Banners the user
+// cannot access render in a disabled state with a 'No access' tag.
+//
+// Visual direction: fully monochrome, instrument-panel style.
+//   - 3px white left bar on every banner (no chromas)
+//   - Mono [ 0N ] numbering
+//   - White title, dim tagline, dim chevron on the right
+//   - Mono status strip in the brand block
 
 import { useAuth, roleLabelT } from "../auth";
 import { useI18n } from "../i18n";
 import { useConsole } from "../console";
 import { useIsMobile } from "../useIsMobile";
-import { Page, Btn, Badge } from "../ui";
+import { Page } from "../ui";
 import { C, FONT, FONT_MONO } from "../theme";
 
-function ConsoleBanner({ mode, glyph, name, tagline, accent, accentFaint, enabled, noAccessLabel, onClick }) {
+function ConsoleRow({ num, name, tagline, enabled, noAccessLabel, onClick }) {
   const isMobile = useIsMobile();
-
-  const base = {
-    display: "flex",
-    alignItems: "stretch",
-    background: enabled ? accentFaint : C.cardBg,
-    border: `1px solid ${enabled ? accent : C.border}`,
-    borderLeftWidth: 4,
-    borderLeftColor: enabled ? accent : C.borderBright,
-    borderRadius: 4,
-    padding: 0,
-    cursor: enabled ? "pointer" : "not-allowed",
-    fontFamily: FONT,
-    color: C.text,
-    width: "100%",
-    textAlign: "left",
-    transition: "all 140ms",
-    opacity: enabled ? 1 : 0.55,
-    minHeight: isMobile ? 96 : 132,
-  };
 
   return (
     <button
@@ -38,27 +25,42 @@ function ConsoleBanner({ mode, glyph, name, tagline, accent, accentFaint, enable
       onClick={enabled ? onClick : undefined}
       disabled={!enabled}
       aria-label={name}
-      style={base}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "stretch",
+        background: "transparent",
+        color: C.text,
+        border: `1px solid ${C.border}`,
+        borderLeftWidth: 3,
+        borderLeftColor: enabled ? C.bright : C.borderBright,
+        borderRadius: 0,
+        padding: 0,
+        fontFamily: FONT,
+        cursor: enabled ? "pointer" : "not-allowed",
+        textAlign: "left",
+        transition: "all 140ms",
+        opacity: enabled ? 1 : 0.5,
+        minHeight: isMobile ? 78 : 84,
+      }}
     >
       <div style={{
+        flexShrink: 0,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: isMobile ? 56 : 72,
-        flexShrink: 0,
-        borderRight: `1px solid ${enabled ? accent : C.border}`,
-        background: enabled ? accentFaint : "transparent",
+        width: isMobile ? 70 : 96,
+        fontFamily: FONT_MONO,
+        fontSize: isMobile ? 12 : 13,
+        color: C.dim,
+        letterSpacing: "2px",
       }}>
-        <span aria-hidden style={{
-          fontFamily: FONT_MONO,
-          fontSize: isMobile ? 26 : 34,
-          color: enabled ? accent : C.dimmer,
-          lineHeight: 1,
-        }}>{glyph}</span>
+        {num}
       </div>
+
       <div style={{
         flex: 1,
-        padding: isMobile ? "12px 14px" : "16px 22px",
+        padding: isMobile ? "12px 6px" : "16px 6px",
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
@@ -66,23 +68,46 @@ function ConsoleBanner({ mode, glyph, name, tagline, accent, accentFaint, enable
         minWidth: 0,
       }}>
         <div style={{
-          fontSize: isMobile ? 14 : 17,
+          fontSize: isMobile ? 13 : 15,
           fontWeight: 700,
-          letterSpacing: "1.6px",
+          color: enabled ? C.bright : C.dim,
+          letterSpacing: "2.5px",
           textTransform: "uppercase",
-          color: enabled ? accent : C.dim,
-        }}>{name}</div>
+        }}>
+          {name}
+        </div>
         <div style={{
-          fontSize: isMobile ? 12 : 13,
+          fontSize: 12,
           color: C.dim,
-          letterSpacing: "0.3px",
-          lineHeight: 1.4,
-        }}>{tagline}</div>
+          letterSpacing: "0.2px",
+          lineHeight: 1.45,
+        }}>
+          {tagline}
+        </div>
         {!enabled && (
-          <div style={{ marginTop: 4 }}>
-            <Badge tone="warn">{noAccessLabel}</Badge>
+          <div style={{
+            fontSize: 10,
+            color: C.warn,
+            letterSpacing: "1.5px",
+            marginTop: 2,
+            textTransform: "uppercase",
+            fontWeight: 600,
+          }}>
+            {noAccessLabel}
           </div>
         )}
+      </div>
+
+      <div style={{
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: isMobile ? 44 : 56,
+        fontSize: 22,
+        color: enabled ? C.dim : C.dimmer,
+      }}>
+        {"›"}
       </div>
     </button>
   );
@@ -97,32 +122,28 @@ export default function Hub() {
   const banners = [
     {
       mode: "terminal",
-      glyph: "▣",
+      num: "[ 01 ]",
       name: t("console.terminal"),
       tagline: t("hub.tagline.terminal"),
-      accent: C.consoleTerminal,
-      accentFaint: C.consoleTerminalFaint,
       enabled: availableConsoles.terminal,
     },
     {
       mode: "bootcamp",
-      glyph: "⊞",
+      num: "[ 02 ]",
       name: t("console.bootcamp"),
       tagline: t("hub.tagline.bootcamp"),
-      accent: C.consoleBootcamp,
-      accentFaint: C.consoleBootcampFaint,
       enabled: availableConsoles.bootcamp,
     },
     {
       mode: "recruitment",
-      glyph: "⊕",
+      num: "[ 03 ]",
       name: t("console.recruitment"),
       tagline: t("hub.tagline.recruitment"),
-      accent: C.consoleRecruitment,
-      accentFaint: C.consoleRecruitmentFaint,
       enabled: availableConsoles.recruitment,
     },
   ];
+
+  const availableCount = banners.filter((b) => b.enabled).length;
 
   return (
     <Page>
@@ -130,100 +151,162 @@ export default function Hub() {
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        justifyContent: isMobile ? "flex-start" : "center",
-        padding: isMobile
-          ? "calc(28px + var(--safe-top)) 18px calc(28px + var(--safe-bottom))"
-          : "48px 24px",
         boxSizing: "border-box",
+        padding: isMobile
+          ? "calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))"
+          : "32px 24px",
       }}>
+        {/* Top strip: Z5 // HUB on left, LOG OUT on right */}
         <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
           width: "100%",
-          maxWidth: isMobile ? 520 : 980,
+          maxWidth: isMobile ? "100%" : 720,
+          margin: "0 auto",
+          paddingBottom: isMobile ? 18 : 24,
+        }}>
+          <div style={{
+            fontFamily: FONT_MONO,
+            fontSize: 11,
+            color: C.dim,
+            letterSpacing: "2px",
+          }}>
+            Z5 // HUB
+          </div>
+          <button
+            onClick={signOut}
+            aria-label={t("nav.logout")}
+            style={{
+              background: "transparent",
+              border: `1px solid ${C.border}`,
+              color: C.dim,
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "0.8px",
+              textTransform: "uppercase",
+              borderRadius: 2,
+              padding: "6px 12px",
+              minHeight: 30,
+              cursor: "pointer",
+            }}
+          >
+            {t("nav.logout")}
+          </button>
+        </div>
+
+        {/* Main content centered */}
+        <div style={{
+          flex: 1,
           display: "flex",
           flexDirection: "column",
-          gap: isMobile ? 22 : 32,
+          alignItems: "center",
+          justifyContent: isMobile ? "flex-start" : "center",
+          width: "100%",
         }}>
-          {/* Brand block — Z5 logo + wordmark + welcome */}
           <div style={{
+            width: "100%",
+            maxWidth: isMobile ? 520 : 720,
             display: "flex",
             flexDirection: "column",
-            alignItems: "center",
-            gap: 10,
-            paddingBottom: isMobile ? 16 : 24,
-            borderBottom: `1px solid ${C.border}`,
+            gap: isMobile ? 22 : 30,
           }}>
-            <img
-              src={`${import.meta.env.BASE_URL}z5-logo.png`}
-              alt="Z5"
-              style={{
-                width: "100%",
-                maxWidth: isMobile ? 130 : 170,
-                maxHeight: isMobile ? 80 : 110,
-                objectFit: "contain",
-                display: "block",
-              }}
-            />
-            <div style={{
-              color: C.bright,
-              fontSize: isMobile ? 18 : 24,
-              fontWeight: 800,
-              letterSpacing: "3px",
-            }}>
-              {t("nav.terminal")}
-            </div>
+            {/* Brand block */}
             <div style={{
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
-              gap: 8,
-              fontSize: isMobile ? 12 : 13,
-              color: C.dim,
-              letterSpacing: "0.3px",
-              flexWrap: "wrap",
+              gap: 14,
+              paddingBottom: isMobile ? 18 : 26,
+              borderBottom: `1px solid ${C.border}`,
+            }}>
+              <img
+                src={`${import.meta.env.BASE_URL}z5-logo.png`}
+                alt="Z5"
+                style={{
+                  width: "100%",
+                  maxWidth: isMobile ? 130 : 170,
+                  maxHeight: isMobile ? 80 : 110,
+                  objectFit: "contain",
+                  display: "block",
+                }}
+              />
+              <div style={{
+                color: C.bright,
+                fontSize: isMobile ? 18 : 24,
+                fontWeight: 800,
+                letterSpacing: "4px",
+              }}>
+                {t("nav.terminal")}
+              </div>
+              <div style={{
+                fontFamily: FONT_MONO,
+                fontSize: isMobile ? 10 : 11,
+                color: C.dimmer,
+                letterSpacing: "1.4px",
+                textAlign: "center",
+                lineHeight: 1.6,
+                textTransform: "uppercase",
+                maxWidth: "100%",
+              }}>
+                <span>{t("hub.status.operator")}</span>
+                {" · "}
+                <span style={{ color: C.dim, fontWeight: 600 }}>{profile?.callsign || "—"}</span>
+                {" · "}
+                <span>{t("hub.status.clearance")}: <span style={{ color: C.dim, fontWeight: 600 }}>{roleLabelT(profile?.role, t)}</span></span>
+                {" · "}
+                <span>{t("hub.status.consoles_available")}: <span style={{ color: C.dim, fontWeight: 600 }}>{availableCount}</span></span>
+              </div>
+            </div>
+
+            {/* SELECT CONSOLE marker */}
+            <div style={{
+              display: "flex",
               justifyContent: "center",
             }}>
-              <span>{t("hub.welcome")}</span>
-              <span style={{
+              <div style={{
                 fontFamily: FONT_MONO,
-                color: C.bright,
-                fontWeight: 600,
-                letterSpacing: "0.5px",
-              }}>{profile?.callsign || "—"}</span>
-              <span style={{ color: C.dimmer }}>·</span>
-              <span>{roleLabelT(profile?.role, t)}</span>
+                fontSize: 11,
+                color: C.dimmer,
+                letterSpacing: "2.5px",
+                textTransform: "uppercase",
+              }}>
+                {"› "}{t("hub.select_console")}
+              </div>
+            </div>
+
+            {/* Banner list */}
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: isMobile ? 10 : 12,
+            }}>
+              {banners.map((b) => (
+                <ConsoleRow
+                  key={b.mode}
+                  num={b.num}
+                  name={b.name}
+                  tagline={b.tagline}
+                  enabled={b.enabled}
+                  noAccessLabel={t("console.noaccess")}
+                  onClick={() => setConsoleMode(b.mode)}
+                />
+              ))}
             </div>
           </div>
+        </div>
 
-          {/* Banners */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-            gap: isMobile ? 12 : 16,
-          }}>
-            {banners.map((b) => (
-              <ConsoleBanner
-                key={b.mode}
-                mode={b.mode}
-                glyph={b.glyph}
-                name={b.name}
-                tagline={b.tagline}
-                accent={b.accent}
-                accentFaint={b.accentFaint}
-                enabled={b.enabled}
-                noAccessLabel={t("console.noaccess")}
-                onClick={() => setConsoleMode(b.mode)}
-              />
-            ))}
-          </div>
-
-          {/* Sign out */}
-          <div style={{
-            display: "flex",
-            justifyContent: "center",
-            paddingTop: isMobile ? 8 : 16,
-          }}>
-            <Btn small onClick={signOut}>{t("nav.logout")}</Btn>
-          </div>
+        {/* Footer */}
+        <div style={{
+          paddingTop: isMobile ? 18 : 24,
+          textAlign: "center",
+          fontFamily: FONT_MONO,
+          fontSize: isMobile ? 9 : 10,
+          color: C.dimmer,
+          letterSpacing: "1.4px",
+          textTransform: "uppercase",
+        }}>
+          {t("auth.footer")}
         </div>
       </div>
     </Page>
