@@ -10,17 +10,15 @@ import { C, S, FONT_MONO } from "../theme";
 import Gear from "./Gear";
 
 // ── Collapsible section used on Profile page ──────────────────────────
+// Flat row style: each section is a single horizontal divider above its
+// title. No box, no rounded corners, no background fill — the wrapper
+// in Profile() supplies a closing borderBottom so the list visually
+// terminates after the last section.
 function Section({ title, icon, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   const isMobile = useIsMobile();
   return (
-    <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
-      marginBottom: isMobile ? 10 : 14,
-      background: C.cardBg,
-      overflow: "hidden",
-    }}>
+    <div style={{ borderTop: `1px solid ${C.border}` }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -121,9 +119,18 @@ export default function Profile() {
   return (
     <>
       <PageHeader
+        standalone
         title={t("prof.title")}
         subtitle={t("prof.subtitle")}
       />
+
+      {/* Section list — each Section provides its own borderTop divider;
+          the wrapper supplies a closing borderBottom so the list
+          terminates after the last row. */}
+      <div style={{
+        marginTop: isMobile ? 18 : 24,
+        borderBottom: `1px solid ${C.border}`,
+      }}>
 
       {/* Personal gear inventory */}
       <Section title={t("gear.title")} icon={<GearIcon mode={mode} />}>
@@ -210,6 +217,9 @@ export default function Profile() {
           )}
         </div>
       </Section>
+
+      </div>
+      {/* /Section list */}
 
       {/* Sign out */}
       <div style={{ marginTop: 24 }}>

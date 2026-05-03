@@ -246,7 +246,11 @@ export function NavLabel({ children }) {
 }
 
 // Section heading used at the top of each screen.
-export function PageHeader({ title, subtitle, action }) {
+// By default the header has an open bottom (no border, top-only rounded
+// corners) so a Panel with connectTop can join it. Pass `standalone`
+// when nothing connects from below so the header closes itself with a
+// full border + full rounded corners.
+export function PageHeader({ title, subtitle, action, standalone }) {
   const isMobile = useIsMobile();
   return (
     <div style={{
@@ -257,8 +261,8 @@ export function PageHeader({ title, subtitle, action }) {
       marginBottom: 0,
       padding: isMobile ? "12px 14px" : "18px 24px",
       border: `1px solid ${C.border}`,
-      borderBottom: "none",
-      borderRadius: "4px 4px 0 0",
+      borderBottom: standalone ? `1px solid ${C.border}` : "none",
+      borderRadius: standalone ? 4 : "4px 4px 0 0",
       background: C.headerBg,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
