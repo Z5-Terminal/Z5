@@ -1,13 +1,16 @@
 import { AuthProvider, useAuth } from "./auth";
 import { I18nProvider, useI18n } from "./i18n";
 import { ThemeProvider } from "./ThemeContext";
+import { ConsoleProvider, useConsole } from "./console";
 import { Page, CenteredColumn, Panel, Btn, ErrLine } from "./ui";
 import Auth from "./screens/Auth";
 import Shell from "./screens/Shell";
+import Hub from "./screens/Hub";
 import { C } from "./theme";
 
 function Inner() {
   const { session, profile, profileError, loading, refreshProfile, signOut } = useAuth();
+  const { consoleMode } = useConsole();
   const { t } = useI18n();
 
   if (loading) {
@@ -47,6 +50,9 @@ function Inner() {
     );
   }
 
+  // Profile loaded. Show the Hub until the user picks a console.
+  if (!consoleMode) return <Hub />;
+
   return <Shell />;
 }
 
@@ -55,7 +61,9 @@ export default function App() {
     <ThemeProvider>
       <I18nProvider>
         <AuthProvider>
-          <Inner />
+          <ConsoleProvider>
+            <Inner />
+          </ConsoleProvider>
         </AuthProvider>
       </I18nProvider>
     </ThemeProvider>

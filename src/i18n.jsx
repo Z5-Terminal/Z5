@@ -63,6 +63,40 @@ const EN = {
   "nav.terminal": "Z5 TERMINAL",
   "nav.bootcamp": "BOOT CAMP",
   "nav.nosquad": "No Squad",
+  "nav.progress": "Progress",
+  "nav.candidates": "Candidates",
+  "nav.pipeline": "Pipeline",
+  "nav.evaluations": "Evaluations",
+  "nav.documents": "Documents",
+
+  // Hub & Consoles
+  "console.terminal": "TERMINAL",
+  "console.bootcamp": "BOOT CAMP",
+  "console.recruitment": "RECRUITMENT",
+  "console.switch": "Switch console",
+  "console.switch_short": "Switch",
+  "console.switch_confirm": "Confirm switch",
+  "console.noaccess": "No access",
+  "hub.welcome": "Welcome,",
+  "hub.tagline.terminal": "Operations, missions, knowledge — the active team workspace.",
+  "hub.tagline.bootcamp": "Trainee squads, course progress, weekly material.",
+  "hub.tagline.recruitment": "Candidate pipeline, evaluations, recruiting documents.",
+
+  // Course Progress (BootCamp console — placeholder for Phase B)
+  "prog.title": "Course Progress",
+  "prog.subtitle": "Per-trainee modules, attendance and instructor notes.",
+  "prog.placeholder": "Course tracking lands in the next phase. The bootcamp tab set is wired but the data layer (modules, sessions, attendance) is still pending.",
+
+  // Recruitment console (placeholders for Phase C)
+  "rec.placeholder": "This recruitment view lands in a later phase. UI and schema for candidates, evaluations, scheduling and documents are still pending.",
+  "rec.candidates.title": "Candidates",
+  "rec.candidates.subtitle": "Pipeline of applicants from intake to onboarding.",
+  "rec.pipeline.title": "Pipeline",
+  "rec.pipeline.subtitle": "Recruitment-scoped calendar of interviews and tryouts.",
+  "rec.evals.title": "Evaluations",
+  "rec.evals.subtitle": "Per-candidate scoring and instructor notes.",
+  "rec.docs.title": "Documents",
+  "rec.docs.subtitle": "Candidate document storage — CVs, IDs, medical.",
 
   // Auth
   "auth.title": "Z5 Terminal",
@@ -476,6 +510,40 @@ const HE = {
   "nav.terminal": "Z5 טרמינל",
   "nav.bootcamp": "קורס צלפים",
   "nav.nosquad": "לא משובץ",
+  "nav.progress": "התקדמות",
+  "nav.candidates": "מועמדים",
+  "nav.pipeline": "ציר זמן",
+  "nav.evaluations": "הערכות",
+  "nav.documents": "מסמכים",
+
+  // Hub & Consoles
+  "console.terminal": "טרמינל",
+  "console.bootcamp": "קורס צלפים",
+  "console.recruitment": "גיוס",
+  "console.switch": "החלף קונסולה",
+  "console.switch_short": "החלף",
+  "console.switch_confirm": "אשר החלפה",
+  "console.noaccess": "אין גישה",
+  "hub.welcome": "שלום,",
+  "hub.tagline.terminal": "מבצעים, משימות וידע — סביבת העבודה של הצוות הפעיל.",
+  "hub.tagline.bootcamp": "צוותי חניכה, התקדמות בקורס וחומר שבועי.",
+  "hub.tagline.recruitment": "ציר מועמדים, הערכות ומסמכי גיוס.",
+
+  // Course Progress (BootCamp console — placeholder for Phase B)
+  "prog.title": "התקדמות בקורס",
+  "prog.subtitle": "מודולים, נוכחות והערות מדריכים פר חניך.",
+  "prog.placeholder": "מעקב הקורס יושק בשלב הבא. הטאב בקונסולת הקורס מחובר, אך שכבת הנתונים (מודולים, מפגשים, נוכחות) עדיין בפיתוח.",
+
+  // Recruitment console (placeholders for Phase C)
+  "rec.placeholder": "מסך הגיוס הזה יושק בשלב מאוחר יותר. ממשק וסכמה למועמדים, הערכות, תזמון ומסמכים עדיין בפיתוח.",
+  "rec.candidates.title": "מועמדים",
+  "rec.candidates.subtitle": "ציר המועמדים — מקליטה ועד שיבוץ.",
+  "rec.pipeline.title": "ציר זמן",
+  "rec.pipeline.subtitle": "לוח זמנים לראיונות ולבחני קבלה.",
+  "rec.evals.title": "הערכות",
+  "rec.evals.subtitle": "ציון מועמדים והערות מדריכים.",
+  "rec.docs.title": "מסמכים",
+  "rec.docs.subtitle": "מסמכי מועמדים — קורות חיים, תעודות, רפואי.",
 
   // Auth
   "auth.title": "Z5 טרמינל",

@@ -181,3 +181,33 @@ export function canCreateInvites(role) {
 export function canCreateWholeTeamTask(role) {
   return role === "admin" || role === "officer";
 }
+
+// Check the is_recruiter flag on the profile object (mirrors isInstructor).
+export function isRecruiter(profile) {
+  return !!profile?.is_recruiter;
+}
+
+// ── Console access helpers ──────────────────────────────────────────
+// Three consoles reachable from the Hub: Terminal / BootCamp / Recruitment.
+// Each helper takes the profile (and optionally the user's squad row) and
+// returns whether the user is allowed into that console.
+
+export function canEnterTerminal(profile) {
+  // Every authenticated user with a profile can enter the main Terminal.
+  return !!profile;
+}
+
+export function canEnterBootcamp(profile, squad) {
+  if (!profile) return false;
+  if (profile.role === "admin" || profile.role === "officer") return true;
+  if (profile.is_instructor) return true;
+  if (squad?.is_bootcamp) return true;
+  return false;
+}
+
+export function canEnterRecruitment(profile) {
+  if (!profile) return false;
+  if (profile.role === "admin" || profile.role === "officer") return true;
+  if (profile.is_recruiter) return true;
+  return false;
+}
