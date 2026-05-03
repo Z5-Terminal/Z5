@@ -126,7 +126,7 @@ export default function Profile() {
       />
 
       {/* Personal gear inventory */}
-      <Section title={t("gear.title")} icon={<GearIcon />}>
+      <Section title={t("gear.title")} icon={<GearIcon mode={mode} />}>
         <Gear embedded />
       </Section>
 
@@ -225,10 +225,14 @@ export default function Profile() {
 
 // ---------- Inline SVG icons for section titles ----------------------
 
-function GearIcon() {
+function GearIcon({ mode }) {
+  // GunLogo.png is white-on-black (works on dark mode), and the
+  // GunLogo-LightMode.png variant is the same artwork in black on a
+  // transparent background for use on the light off-white surface.
+  const file = mode === "light" ? "GunLogo-LightMode.png" : "GunLogo.png";
   return (
     <img
-      src={`${import.meta.env.BASE_URL}GunLogo.png`}
+      src={`${import.meta.env.BASE_URL}${file}`}
       alt=""
       style={{
         height: 14,

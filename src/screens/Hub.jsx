@@ -21,15 +21,31 @@ function ConsoleRow({ prefix, name, tagline, enabled, noAccessLabel, onSelect })
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const [pressed, setPressed] = useState(false);
-  const lit = enabled && (hover || focus || pressed);
+
+  // Background fill is driven by hover + pressed only. Focus is
+  // intentionally NOT in the lit predicate: on desktop browsers
+  // (Chrome/Firefox) clicking a button gives it focus, which used to
+  // leave the row stuck grey after the user moved their mouse away.
+  // The keyboard focus-ring still draws via boxShadow below, so a11y
+  // is preserved.
+  const lit = enabled && (hover || pressed);
   const TRANS = "background 220ms ease-out, border-color 220ms ease-out, transform 160ms ease-out, box-shadow 220ms ease-out";
 
+  // Skip hover state on touch — iOS Safari leaves the row in a sticky
+  // :hover-equivalent after a tap because there's no corresponding
+  // pointerleave for touch, so we filter touch pointer types out.
+  const onPointerEnter = (e) => { if (e.pointerType !== "touch") setHover(true); };
+  const onPointerLeave = () => { setHover(false); setPressed(false); };
+
   // Hold the press state visible for ~120ms before navigating so the
-  // tap feedback actually paints — otherwise the screen swaps before
-  // the user sees anything change.
-  const handleClick = () => {
+  // tap feedback actually paints. Also blur the button after the
+  // click so the focus ring doesn't persist on desktop click.
+  const handleClick = (e) => {
     if (!enabled) return;
     setPressed(true);
+    if (e && e.currentTarget && typeof e.currentTarget.blur === "function") {
+      e.currentTarget.blur();
+    }
     window.setTimeout(() => { onSelect(); }, 120);
   };
 
@@ -37,8 +53,8 @@ function ConsoleRow({ prefix, name, tagline, enabled, noAccessLabel, onSelect })
     <button
       type="button"
       onClick={handleClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); setPressed(false); }}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerCancel={() => setPressed(false)}
@@ -74,12 +90,13 @@ function ConsoleRow({ prefix, name, tagline, enabled, noAccessLabel, onSelect })
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: isMobile ? 50 : 70,
+        width: isMobile ? 78 : 110,
         fontFamily: FONT_MONO,
-        fontSize: isMobile ? 16 : 20,
+        fontSize: isMobile ? 14 : 18,
         color: enabled ? C.text : C.dim,
         letterSpacing: "1px",
         fontWeight: 600,
+        whiteSpace: "nowrap",
       }}>
         {prefix}
       </div>
@@ -144,7 +161,7 @@ function ConsoleRow({ prefix, name, tagline, enabled, noAccessLabel, onSelect })
 }
 
 export default function Hub() {
-  const { profile, signOut } = useAuth();
+  const { profile } = useAuth();
   const { t } = useI18n();
   const { setConsoleMode, availableConsoles } = useConsole();
   const isMobile = useIsMobile();
@@ -152,18 +169,21 @@ export default function Hub() {
   const banners = [
     {
       mode: "terminal",
+      prefix: "// 01",
       name: t("console.terminal"),
       tagline: t("hub.tagline.terminal"),
       enabled: availableConsoles.terminal,
     },
     {
       mode: "bootcamp",
+      prefix: "// 02",
       name: t("console.bootcamp"),
       tagline: t("hub.tagline.bootcamp"),
       enabled: availableConsoles.bootcamp,
     },
     {
       mode: "recruitment",
+      prefix: "// 03",
       name: t("console.recruitment"),
       tagline: t("hub.tagline.recruitment"),
       enabled: availableConsoles.recruitment,
@@ -178,43 +198,9 @@ export default function Hub() {
         flexDirection: "column",
         boxSizing: "border-box",
         padding: isMobile
-          ? "calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))"
-          : "32px 24px",
+          ? "calc(28px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))"
+          : "48px 24px",
       }}>
-        {/* Top strip: just the LOG OUT button on the right */}
-        <div style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          width: "100%",
-          maxWidth: isMobile ? "100%" : 760,
-          margin: "0 auto",
-          paddingBottom: isMobile ? 18 : 24,
-        }}>
-          <button
-            onClick={signOut}
-            aria-label={t("nav.logout")}
-            style={{
-              background: "transparent",
-              border: `1px solid ${C.border}`,
-              color: C.text,
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.8px",
-              textTransform: "uppercase",
-              borderRadius: 2,
-              padding: "6px 14px",
-              minHeight: 30,
-              cursor: "pointer",
-              transition: "background 180ms ease-out, border-color 180ms ease-out",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = C.hoverBg; e.currentTarget.style.borderColor = C.borderBright; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = C.border; }}
-          >
-            {t("nav.logout")}
-          </button>
-        </div>
-
         {/* Main content centered */}
         <div style={{
           flex: 1,
@@ -285,7 +271,7 @@ export default function Hub() {
               {banners.map((b) => (
                 <ConsoleRow
                   key={b.mode}
-                  prefix="//"
+                  prefix={b.prefix}
                   name={b.name}
                   tagline={b.tagline}
                   enabled={b.enabled}
