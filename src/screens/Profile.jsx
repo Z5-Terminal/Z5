@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth, roleLabelT, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
 import { useTheme } from "../ThemeContext";
+import { useConsole } from "../console";
 import { supabase } from "../supabase";
 import { Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge } from "../ui";
 import { useIsMobile } from "../useIsMobile";
@@ -69,6 +70,7 @@ export default function Profile() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { t, lang, setLang } = useI18n();
   const { mode, toggle: toggleTheme } = useTheme();
+  const { consoleMode, clearConsole } = useConsole();
   const isMobile = useIsMobile();
   const [callsign, setCallsign] = useState(profile?.callsign || "");
   const [name, setName] = useState(profile?.full_name || "");
@@ -77,6 +79,13 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
+
+  function handleSwitchConsole() {
+    if (!confirmSwitch) { setConfirmSwitch(true); return; }
+    setConfirmSwitch(false);
+    clearConsole();
+  }
 
   async function saveProfile(e) {
     e.preventDefault();
@@ -180,6 +189,30 @@ export default function Profile() {
         </div>
       </Section>
 
+      {/* Mobile-only: switch console (this control lives in the desktop
+          sidebar already, so we only surface it here on mobile where the
+          mobile top bar no longer carries the switch button). */}
+      {isMobile && (
+        <Section title={t("console.title")} icon={<ConsoleIcon />}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ fontSize: 13, color: C.dim }}>
+              {t("console.current")}:{" "}
+              <span style={{ color: C.bright, fontWeight: 600, letterSpacing: "0.5px" }}>
+                {t(`console.${consoleMode || "terminal"}`)}
+              </span>
+            </div>
+            {confirmSwitch ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn small onClick={handleSwitchConsole}>{t("console.switch_confirm")}</Btn>
+                <Btn small onClick={() => setConfirmSwitch(false)}>✕</Btn>
+              </div>
+            ) : (
+              <Btn fullWidth onClick={handleSwitchConsole}>{t("console.switch")}</Btn>
+            )}
+          </div>
+        </Section>
+      )}
+
       {/* Mobile sign out */}
       {isMobile && (
         <div style={{ marginTop: 24 }}>
@@ -256,6 +289,20 @@ function LockIcon() {
       <rect x="3" y="7" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.2" />
       <path d="M5.5 7 V5 Q5.5 2 8 2 Q10.5 2 10.5 5 V7" stroke="currentColor" strokeWidth="1.2" fill="none" />
       <circle cx="8" cy="11" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ConsoleIcon() {
+  return (
+    <svg
+      width="16" height="16" viewBox="0 0 16 16" fill="none"
+      style={{ verticalAlign: "middle", marginRight: 8, opacity: 0.8 }}
+    >
+      <rect x="2" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="5" y1="14" x2="11" y2="14" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M5 6 L7 8 L5 10" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="8" y1="10" x2="11" y2="10" stroke="currentColor" strokeWidth="1.2" />
     </svg>
   );
 }

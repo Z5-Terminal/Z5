@@ -244,22 +244,6 @@ export default function Shell() {
           )}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-        <SwitchConsoleControl inline />
-        {!confirmSwitch && (
-          <button
-            onClick={signOut}
-            aria-label={t("nav.logout")}
-            style={{
-              background: "transparent", border: `1px solid ${C.border}`, color: C.dim,
-              fontSize: 11, fontWeight: 600, letterSpacing: "0.8px", textTransform: "uppercase",
-              borderRadius: 2, padding: "8px 12px", minHeight: 36, cursor: "pointer", flexShrink: 0,
-            }}
-          >
-            {t("nav.exit")}
-          </button>
-        )}
-      </div>
     </div>
   );
 
