@@ -12,11 +12,12 @@ import { useState } from "react";
 import { useAuth, roleLabelT } from "../auth";
 import { useI18n } from "../i18n";
 import { useConsole } from "../console";
+import { useTheme } from "../ThemeContext";
 import { useIsMobile } from "../useIsMobile";
 import { Page } from "../ui";
 import { C, FONT, FONT_MONO } from "../theme";
 
-function ConsoleRow({ prefix, name, tagline, enabled, noAccessLabel, onSelect }) {
+function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, isLight }) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -91,14 +92,25 @@ function ConsoleRow({ prefix, name, tagline, enabled, noAccessLabel, onSelect })
         alignItems: "center",
         justifyContent: "center",
         width: isMobile ? 78 : 110,
-        fontFamily: FONT_MONO,
-        fontSize: isMobile ? 14 : 18,
-        color: enabled ? C.text : C.dim,
-        letterSpacing: "1px",
-        fontWeight: 600,
-        whiteSpace: "nowrap",
       }}>
-        {prefix}
+        <img
+          src={`${import.meta.env.BASE_URL}${iconSrc}`}
+          alt=""
+          style={{
+            width: isMobile ? 38 : 56,
+            height: isMobile ? 38 : 56,
+            objectFit: "contain",
+            opacity: enabled ? 0.92 : 0.4,
+            // Single white-on-black PNG adapted to both themes:
+            //   dark: 'screen' drops the near-black bg, keeps the
+            //         white silhouette
+            //   light: 'invert(1)' flips the PNG to black-on-white,
+            //          then 'multiply' drops the (now-white) bg,
+            //          keeping the (now-black) silhouette
+            mixBlendMode: isLight ? "multiply" : "screen",
+            filter: isLight ? "invert(1)" : "none",
+          }}
+        />
       </div>
 
       <div style={{
@@ -164,26 +176,28 @@ export default function Hub() {
   const { profile } = useAuth();
   const { t } = useI18n();
   const { setConsoleMode, availableConsoles } = useConsole();
+  const { mode } = useTheme();
   const isMobile = useIsMobile();
+  const isLight = mode === "light";
 
   const banners = [
     {
       mode: "terminal",
-      prefix: "// 01",
+      iconSrc: "icon-terminal.png",
       name: t("console.terminal"),
       tagline: t("hub.tagline.terminal"),
       enabled: availableConsoles.terminal,
     },
     {
       mode: "bootcamp",
-      prefix: "// 02",
+      iconSrc: "icon-bootcamp.png",
       name: t("console.bootcamp"),
       tagline: t("hub.tagline.bootcamp"),
       enabled: availableConsoles.bootcamp,
     },
     {
       mode: "recruitment",
-      prefix: "// 03",
+      iconSrc: "icon-recruitment.png",
       name: t("console.recruitment"),
       tagline: t("hub.tagline.recruitment"),
       enabled: availableConsoles.recruitment,
@@ -231,8 +245,8 @@ export default function Hub() {
                 alt="Z5"
                 style={{
                   width: "100%",
-                  maxWidth: isMobile ? 130 : 220,
-                  maxHeight: isMobile ? 80 : 140,
+                  maxWidth: isMobile ? 200 : 300,
+                  maxHeight: isMobile ? 130 : 200,
                   objectFit: "contain",
                   display: "block",
                 }}
@@ -271,12 +285,13 @@ export default function Hub() {
               {banners.map((b) => (
                 <ConsoleRow
                   key={b.mode}
-                  prefix={b.prefix}
+                  iconSrc={b.iconSrc}
                   name={b.name}
                   tagline={b.tagline}
                   enabled={b.enabled}
                   noAccessLabel={t("console.noaccess")}
                   onSelect={() => setConsoleMode(b.mode)}
+                  isLight={isLight}
                 />
               ))}
             </div>
