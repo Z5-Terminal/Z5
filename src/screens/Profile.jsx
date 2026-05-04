@@ -10,15 +10,20 @@ import { C, S, FONT_MONO } from "../theme";
 import Gear from "./Gear";
 
 // ── Collapsible section used on Profile page ──────────────────────────
-// Flat row style: each section is a single horizontal divider above its
-// title. No box, no rounded corners, no background fill — the wrapper
-// in Profile() supplies a closing borderBottom so the list visually
-// terminates after the last section.
+// Each section is its own bordered box. The title span uses explicit
+// styles (no S.panelTitle spread) so no borderBottom leaks under the
+// title text — that was creating a third hairline inside each row.
 function Section({ title, icon, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   const isMobile = useIsMobile();
   return (
-    <div style={{ borderTop: `1px solid ${C.border}` }}>
+    <div style={{
+      border: `1px solid ${C.border}`,
+      borderRadius: 6,
+      marginBottom: isMobile ? 10 : 14,
+      background: C.cardBg,
+      overflow: "hidden",
+    }}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -44,10 +49,13 @@ function Section({ title, icon, defaultOpen = false, children }) {
         }}>▶</span>
         {icon}
         <span style={{
-          ...S.panelTitle,
+          color: C.bright,
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: "1.2px",
+          textTransform: "uppercase",
           margin: 0,
           padding: 0,
-          border: "none",
           flex: 1,
           minWidth: 0,
         }}>{title}</span>
@@ -124,13 +132,9 @@ export default function Profile() {
         subtitle={t("prof.subtitle")}
       />
 
-      {/* Section list — each Section provides its own borderTop divider;
-          the wrapper supplies a closing borderBottom so the list
-          terminates after the last row. */}
-      <div style={{
-        marginTop: isMobile ? 18 : 24,
-        borderBottom: `1px solid ${C.border}`,
-      }}>
+      {/* Sections — each is its own bordered box. The wrapper just
+          provides space below the page header. */}
+      <div style={{ marginTop: isMobile ? 18 : 24 }}>
 
       {/* Personal gear inventory */}
       <Section title={t("gear.title")} icon={<GearIcon mode={mode} />}>
@@ -232,10 +236,14 @@ export default function Profile() {
 // ---------- Inline SVG icons for section titles ----------------------
 
 function GearIcon({ mode }) {
-  // GunLogo.png is white-on-black (works on dark mode), and the
-  // GunLogo-LightMode.png variant is the same artwork in black on a
-  // transparent background for use on the light off-white surface.
-  const file = mode === "light" ? "GunLogo-LightMode.png" : "GunLogo.png";
+  // Both PNGs are RGB (no alpha channel) — GunLogo.png is white-on-
+  // near-black, GunLogo-LightMode.png is black-on-near-white. We use
+  // mix-blend-mode so the solid PNG background disappears into the
+  // page surface and only the gun silhouette shows through.
+  //   - dark mode: 'screen' drops the near-black bg (black + x = x)
+  //   - light mode: 'multiply' drops the near-white bg (white * x = x)
+  const isLight = mode === "light";
+  const file = isLight ? "GunLogo-LightMode.png" : "GunLogo.png";
   return (
     <img
       src={`${import.meta.env.BASE_URL}${file}`}
@@ -246,7 +254,8 @@ function GearIcon({ mode }) {
         width: "auto",
         verticalAlign: "middle",
         objectFit: "contain",
-        opacity: 0.8,
+        opacity: 0.85,
+        mixBlendMode: isLight ? "multiply" : "screen",
       }}
     />
   );

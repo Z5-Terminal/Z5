@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth, roleLabelT, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
 import { useConsole } from "../console";
+import { useTheme } from "../ThemeContext";
 import { Page, AppShell, NavItem, NavLabel, TabItem, Badge } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, FONT_MONO } from "../theme";
@@ -38,6 +39,11 @@ export default function Shell() {
   const { profile } = useAuth();
   const { t } = useI18n();
   const { consoleMode, mySquad } = useConsole();
+  // Subscribe to theme so the sidebar / mobile top bar re-render after
+  // a theme toggle. Without this, NavItem/NavLabel inline styles keep
+  // their stale C.* values (because C is a mutable module export) and
+  // the sidebar text becomes near-invisible on the new background.
+  useTheme();
   const [view, setView] = useState(() => defaultViewFor(consoleMode));
   const [missionView, setMissionView] = useState("list");
   const [activeMissionId, setActiveMissionId] = useState(null);
