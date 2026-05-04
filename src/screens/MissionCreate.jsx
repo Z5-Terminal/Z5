@@ -21,11 +21,18 @@ export default function MissionCreate({ onCreated, onCancel, prefillDate, initia
 
   const [name, setName] = useState("");
   const [squadId, setSquadId] = useState(profile?.squad_id || "");
-  const [scheduledAt, setScheduledAt] = useState(
-    prefillDate ? dateToLocalInput(prefillDate, 9) : defaultDateTime(2)
+  // Default to the current hour (rounded down) for both prefilled and
+  // ad-hoc creation. Mission scheduled-at lands at the present hour;
+  // due-at lands +1h for operational, +24h for admin.
+  const [scheduledAt, setScheduledAt] = useState(() =>
+    prefillDate
+      ? dateToLocalInput(prefillDate, new Date().getHours())
+      : defaultDateTime(0)
   );
-  const [dueAt, setDueAt] = useState(
-    prefillDate ? dateToLocalInput(prefillDate, 17) : defaultDateTime(24)
+  const [dueAt, setDueAt] = useState(() =>
+    prefillDate
+      ? dateToLocalInput(prefillDate, new Date().getHours() + 1)
+      : defaultDateTime(24)
   );
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
@@ -571,7 +578,7 @@ function SectionEditor({ section, items, onItemsChange }) {
   );
 }
 
-function defaultDateTime(offsetHours = 2) {
+function defaultDateTime(offsetHours = 0) {
   const d = new Date();
   d.setMinutes(0, 0, 0);
   d.setHours(d.getHours() + offsetHours);

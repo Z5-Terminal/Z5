@@ -374,6 +374,18 @@ export function Input({ mono, ...props }) {
     base.padding = "12px 14px";
     base.minHeight = 46;
   }
+  // datetime-local inputs on iOS render with a native widget that has
+  // an intrinsic min-width and ignores the input's CSS width, so they
+  // overflow narrow containers. Pin width and reset the native
+  // appearance so the widget conforms to its parent. The picker UI
+  // still opens on focus — only the layout is constrained.
+  if (props.type === "datetime-local" || props.type === "date" || props.type === "time") {
+    base.maxWidth = "100%";
+    base.minWidth = 0;
+    base.WebkitAppearance = "none";
+    base.MozAppearance = "none";
+    base.appearance = "none";
+  }
   return <input {...props} style={{ ...base, ...(props.style || {}) }} />;
 }
 

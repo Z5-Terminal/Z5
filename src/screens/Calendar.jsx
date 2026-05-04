@@ -497,12 +497,12 @@ function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCa
   const [startsAt, setStartsAt] = useState(() =>
     initial?.starts_at
       ? isoToLocalInput(initial.starts_at)
-      : dateToLocalInput(selectedDay || new Date(), 9)
+      : dateToLocalInput(selectedDay || new Date(), currentHour())
   );
   const [endsAt, setEndsAt] = useState(() =>
     initial?.ends_at
       ? isoToLocalInput(initial.ends_at)
-      : dateToLocalInput(selectedDay || new Date(), 10)
+      : dateToLocalInput(selectedDay || new Date(), currentHour() + 1)
   );
 
   // Auto-adjust end time when start time changes: keep end 1h after start
@@ -702,6 +702,11 @@ function dateToLocalInput(date, hour = 9) {
   d.setHours(hour, 0, 0, 0);
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+// Current local hour rounded down (so 11:40 → 11). Used as the default
+// time when creating new schedule entries / missions.
+function currentHour() {
+  return new Date().getHours();
 }
 // Convert stored ISO (timestamptz) to the local input format.
 function isoToLocalInput(iso) {
