@@ -78,7 +78,7 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
         cursor: enabled ? "pointer" : "not-allowed",
         textAlign: "left",
         opacity: enabled ? 1 : 0.5,
-        minHeight: isMobile ? 78 : 88,
+        minHeight: isMobile ? 92 : 108,
         transition: TRANS,
         transform: pressed ? "scale(0.99)" : "scale(1)",
         boxShadow: focus ? `0 0 0 1px ${C.bright}` : "none",
@@ -91,24 +91,22 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: isMobile ? 78 : 110,
+        width: isMobile ? 88 : 130,
       }}>
         <img
           src={`${import.meta.env.BASE_URL}${iconSrc}`}
           alt=""
           style={{
-            width: isMobile ? 38 : 56,
-            height: isMobile ? 38 : 56,
+            width: isMobile ? 48 : 72,
+            height: isMobile ? 48 : 72,
             objectFit: "contain",
             opacity: enabled ? 0.92 : 0.4,
-            // Single white-on-black PNG adapted to both themes:
-            //   dark: 'screen' drops the near-black bg, keeps the
-            //         white silhouette
-            //   light: 'invert(1)' flips the PNG to black-on-white,
-            //          then 'multiply' drops the (now-white) bg,
-            //          keeping the (now-black) silhouette
-            mixBlendMode: isLight ? "multiply" : "screen",
-            filter: isLight ? "invert(1)" : "none",
+            // Icons are pre-baked as white silhouettes with a real
+            // alpha channel. Dark mode shows them as-is. Light mode
+            // uses brightness(0) to recolor the white silhouette to
+            // black while preserving the alpha — no blend-mode
+            // tricks, no white rectangle leak.
+            filter: isLight ? "brightness(0)" : "none",
           }}
         />
       </div>
@@ -245,23 +243,23 @@ export default function Hub() {
                 alt="Z5"
                 style={{
                   width: "100%",
-                  maxWidth: isMobile ? 200 : 300,
-                  maxHeight: isMobile ? 130 : 200,
+                  maxWidth: isMobile ? 240 : 360,
+                  maxHeight: isMobile ? 160 : 240,
                   objectFit: "contain",
                   display: "block",
                 }}
               />
               <div style={{
                 color: C.bright,
-                fontSize: isMobile ? 18 : 32,
+                fontSize: isMobile ? 22 : 38,
                 fontWeight: 800,
-                letterSpacing: isMobile ? "4px" : "6px",
+                letterSpacing: isMobile ? "5px" : "7px",
               }}>
                 {t("nav.terminal")}
               </div>
               <div style={{
                 fontFamily: FONT_MONO,
-                fontSize: isMobile ? 11 : 13,
+                fontSize: isMobile ? 13 : 15,
                 letterSpacing: "0.4px",
                 textAlign: "center",
                 lineHeight: 1.6,
