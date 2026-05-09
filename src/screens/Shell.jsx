@@ -15,8 +15,8 @@ import MissionCreate from "./MissionCreate";
 import Checklist from "./Checklist";
 import Knowledge from "./Knowledge";
 import CourseProgress from "./CourseProgress";
+import Cycles from "./recruitment/Cycles";
 import Candidates from "./recruitment/Candidates";
-import Pipeline from "./recruitment/Pipeline";
 import Evaluations from "./recruitment/Evaluations";
 import Documents from "./recruitment/Documents";
 
@@ -31,7 +31,7 @@ const KnowledgeIcon = (
 // Default view key per console — used when entering a console or when
 // the previously-active view doesn't exist in the new console's tab set.
 function defaultViewFor(mode) {
-  if (mode === "recruitment") return "candidates";
+  if (mode === "recruitment") return "cycles";
   return "home";
 }
 
@@ -65,8 +65,8 @@ export default function Shell() {
   const tabs = useMemo(() => {
     if (consoleMode === "recruitment") {
       const recTabs = [
+        { key: "cycles",      label: t("nav.cycles"),      icon: "◇" },
         { key: "candidates",  label: t("nav.candidates"),  icon: "◍" },
-        { key: "pipeline",    label: t("nav.pipeline"),    icon: "▤" },
         { key: "evaluations", label: t("nav.evaluations"), icon: "✓" },
         { key: "documents",   label: t("nav.documents"),   icon: "▦" },
       ];
@@ -251,8 +251,8 @@ export default function Shell() {
     if (view === "profile") return <Profile />;
 
     if (consoleMode === "recruitment") {
+      if (view === "cycles")      return <Cycles />;
       if (view === "candidates")  return <Candidates />;
-      if (view === "pipeline")    return <Pipeline />;
       if (view === "evaluations") return <Evaluations />;
       if (view === "documents")   return <Documents />;
       return null;
