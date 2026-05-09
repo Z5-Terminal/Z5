@@ -86,6 +86,43 @@ export async function listSurveyQuestions(cycleId) {
     .order("ord", { ascending: true });
 }
 
+export async function createSurveyQuestion(cycleId, q) {
+  // Caller should have computed an `ord` that puts the row at the
+  // end of its section; we don't sort or dedupe here.
+  return supabase
+    .from("survey_questions")
+    .insert({
+      cycle_id: cycleId,
+      ord: q.ord,
+      section: q.section || null,
+      question_text: q.question_text,
+      question_type: q.question_type,
+      options: q.options ?? null,
+      required: q.required !== false,
+    })
+    .select()
+    .single();
+}
+
+export async function updateSurveyQuestion(id, patch) {
+  return supabase
+    .from("survey_questions")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+}
+
+export async function deleteSurveyQuestion(id) {
+  return supabase.from("survey_questions").delete().eq("id", id);
+}
+
+// Re-seed the default 37-question template into a cycle, but only if
+// it currently has no questions (the SQL function is idempotent).
+export async function seedDefaultTemplate(cycleId) {
+  return supabase.rpc("seed_default_survey_template", { p_cycle_id: cycleId });
+}
+
 // ── Candidates (admin-side) ────────────────────────────────────────
 
 export async function listCandidates(cycleId, { team, status } = {}) {

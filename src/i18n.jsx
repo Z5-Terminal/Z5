@@ -152,6 +152,35 @@ const EN = {
   "rec.cycles.status_help.interviewing": "Survey is closed to new submissions. Run interviews and unlock candidates for the exam.",
   "rec.cycles.status_help.exam": "Unlocked candidates can take the cognitive exam at their personalised URL.",
 
+  // Cycle question bank link (on the detail screen)
+  "rec.cycles.questions": "Questions",
+  "rec.cycles.questions_help": "Edit the per-cycle question bank. Each cycle gets its own copy of the default template, so changes here only apply to this cycle.",
+  "rec.cycles.edit_questions": "Edit questions",
+
+  // Question editor (Phase C2)
+  "rec.editor.title": "Question editor",
+  "rec.editor.subtitle": "Edit, add or remove survey questions for this cycle.",
+  "rec.editor.empty": "No questions defined yet. Use 'Seed default' to plant the canonical 37-question template.",
+  "rec.editor.seed": "Seed default template",
+  "rec.editor.seeded": "{n} default questions added.",
+  "rec.editor.already_seeded": "Cycle already has questions; default template not applied.",
+  "rec.editor.add": "+ Add question",
+  "rec.editor.new_question": "New question",
+  "rec.editor.deleted": "Question removed.",
+  "rec.editor.saved": "Question saved.",
+  "rec.editor.section": "Section",
+  "rec.editor.type": "Type",
+  "rec.editor.ord": "Order",
+  "rec.editor.text_label": "Question text",
+  "rec.editor.text_ph": "Hebrew question text shown to candidates",
+  "rec.editor.text_required": "Question text is required.",
+  "rec.editor.options_label": "Options (one per line)",
+  "rec.editor.options_ph": "Option 1\nOption 2",
+  "rec.editor.options_required": "Options are required for radio / dropdown questions.",
+  "rec.editor.required_label": "Required answer",
+  "rec.editor.save_btn": "Save",
+  "rec.editor.cancel_btn": "Cancel",
+
   // Auth
   "auth.title": "Z5 Terminal",
   "auth.subtitle": "Sniper Operations Environment",
@@ -652,6 +681,35 @@ const HE = {
   "rec.cycles.status_help.open": "כל עוד המחזור פתוח, הלוחמים יכולים לשלוח את השאלון.",
   "rec.cycles.status_help.interviewing": "השאלון סגור לשליחות חדשות. בצעו ראיונות ופתחו לבחינה את המועמדים שעוברים.",
   "rec.cycles.status_help.exam": "מועמדים שנפתחו יוכלו לבצע את המבחן הקוגניטיבי בכתובת אישית.",
+
+  // Cycle question bank link (on the detail screen)
+  "rec.cycles.questions": "שאלות",
+  "rec.cycles.questions_help": "ערוך את מאגר השאלות של המחזור הזה. לכל מחזור עותק משלו של תבנית ברירת המחדל — שינויים כאן חלים רק על המחזור הנוכחי.",
+  "rec.cycles.edit_questions": "ערוך שאלות",
+
+  // Question editor (Phase C2)
+  "rec.editor.title": "עורך שאלות",
+  "rec.editor.subtitle": "ערוך, הוסף או הסר שאלות שאלון עבור המחזור.",
+  "rec.editor.empty": "אין עדיין שאלות במחזור. לחץ על ״טען תבנית ברירת מחדל״ כדי לטעון את 37 השאלות הקנוניות.",
+  "rec.editor.seed": "טען תבנית ברירת מחדל",
+  "rec.editor.seeded": "{n} שאלות נוספו.",
+  "rec.editor.already_seeded": "במחזור כבר יש שאלות. תבנית ברירת מחדל לא יושמה.",
+  "rec.editor.add": "+ הוסף שאלה",
+  "rec.editor.new_question": "שאלה חדשה",
+  "rec.editor.deleted": "השאלה נמחקה.",
+  "rec.editor.saved": "השאלה נשמרה.",
+  "rec.editor.section": "סקציה",
+  "rec.editor.type": "סוג",
+  "rec.editor.ord": "סדר",
+  "rec.editor.text_label": "טקסט השאלה",
+  "rec.editor.text_ph": "טקסט השאלה בעברית כפי שיוצג למועמדים",
+  "rec.editor.text_required": "טקסט השאלה הוא שדה חובה.",
+  "rec.editor.options_label": "אפשרויות (אחת בכל שורה)",
+  "rec.editor.options_ph": "אפשרות 1\nאפשרות 2",
+  "rec.editor.options_required": "נדרשות אפשרויות עבור שאלות רדיו או רשימה נפתחת.",
+  "rec.editor.required_label": "תשובה חובה",
+  "rec.editor.save_btn": "שמור",
+  "rec.editor.cancel_btn": "ביטול",
 
   // Auth
   "auth.title": "Z5 טרמינל",

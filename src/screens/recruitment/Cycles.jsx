@@ -13,11 +13,13 @@ import {
   listCycles, getCycle, createCycle, updateCycle, deleteCycle,
   beginCycle, regenerateToken, setCycleStatus, surveyUrlForCycle,
 } from "../../data/recruitment";
+import QuestionEditor from "./QuestionEditor";
 
 export default function Cycles() {
   const { t } = useI18n();
   const [view, setView] = useState("list");
   const [activeId, setActiveId] = useState(null);
+  const [activeName, setActiveName] = useState("");
 
   if (view === "create") {
     return (
@@ -27,11 +29,21 @@ export default function Cycles() {
       />
     );
   }
+  if (view === "questions" && activeId) {
+    return (
+      <QuestionEditor
+        cycleId={activeId}
+        cycleName={activeName}
+        onBack={() => setView("detail")}
+      />
+    );
+  }
   if (view === "detail" && activeId) {
     return (
       <CycleDetail
         cycleId={activeId}
         onBack={() => setView("list")}
+        onEditQuestions={(name) => { setActiveName(name); setView("questions"); }}
       />
     );
   }
@@ -187,7 +199,7 @@ function CycleCreate({ onCreated, onCancel }) {
 
 // ── Detail ─────────────────────────────────────────────────────────
 
-function CycleDetail({ cycleId, onBack }) {
+function CycleDetail({ cycleId, onBack, onEditQuestions }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const [cycle, setCycle] = useState(null);
@@ -385,6 +397,15 @@ function CycleDetail({ cycleId, onBack }) {
           </div>
         </Panel>
       )}
+
+      <Panel title={t("rec.cycles.questions")}>
+        <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
+          {t("rec.cycles.questions_help")}
+        </div>
+        <Btn small onClick={() => onEditQuestions(cycle.name)}>
+          {t("rec.cycles.edit_questions")}
+        </Btn>
+      </Panel>
 
       <Panel title={t("rec.cycles.danger")}>
         <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
