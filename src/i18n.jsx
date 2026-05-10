@@ -157,6 +157,61 @@ const EN = {
   "rec.cycles.questions_help": "Edit the per-cycle question bank. Each cycle gets its own copy of the default template, so changes here only apply to this cycle.",
   "rec.cycles.edit_questions": "Edit questions",
 
+  // Candidates list + detail (Phase C3)
+  "rec.candidates.cycle": "Cycle",
+  "rec.candidates.search": "Search",
+  "rec.candidates.search_ph": "Name or personal ID",
+  "rec.candidates.team": "Team",
+  "rec.candidates.team_filter": "Team",
+  "rec.candidates.status_filter": "Status",
+  "rec.candidates.all_teams": "All teams",
+  "rec.candidates.all_status": "All status",
+  "rec.candidates.no_team": "No team set",
+  "rec.candidates.empty_cycle": "No candidates yet for this cycle.",
+  "rec.candidates.empty_filtered": "No candidates match the current filters.",
+
+  // Candidate status labels
+  "rec.candidate_status.survey_in_progress": "Survey in progress",
+  "rec.candidate_status.survey_done": "Survey done",
+  "rec.candidate_status.interviewed": "Interviewed",
+  "rec.candidate_status.ready_for_exam": "Ready for exam",
+  "rec.candidate_status.exam_in_progress": "Exam in progress",
+  "rec.candidate_status.exam_done": "Exam done",
+  "rec.candidate_status.accepted": "Accepted",
+  "rec.candidate_status.rejected": "Rejected",
+  "rec.final_status.accepted": "Accepted",
+  "rec.final_status.rejected": "Rejected",
+
+  // Candidate detail
+  "rec.candidate.summary": "Summary",
+  "rec.candidate.personal_id": "Personal ID",
+  "rec.candidate.team": "Team",
+  "rec.candidate.status": "Status",
+  "rec.candidate.final_status": "Final decision",
+  "rec.candidate.actions": "Actions",
+  "rec.candidate.mark_accepted": "Mark accepted",
+  "rec.candidate.mark_rejected": "Mark rejected",
+  "rec.candidate.status_updated": "Status updated.",
+
+  // Section labels for the response viewer
+  "rec.section.identity": "Identity",
+  "rec.section.self_assessment": "Motivation & self-assessment",
+  "rec.section.background": "Academic & military background",
+  "rec.section.physical": "Physical & motivation",
+
+  // Interview panel
+  "rec.interview.title": "Interview",
+  "rec.interview.subtitle": "Your interview record is private to you and other admins/recruiters. Each interviewer leaves their own.",
+  "rec.interview.your_interview": "Your interview",
+  "rec.interview.score": "Score",
+  "rec.interview.tags": "Tags (comma-separated)",
+  "rec.interview.tags_ph": "e.g. focused, communicative, concerns-discipline",
+  "rec.interview.notes": "Notes",
+  "rec.interview.notes_ph": "Free-form observations from the interview…",
+  "rec.interview.save_btn": "Save interview",
+  "rec.interview.saved": "Interview saved.",
+  "rec.interview.others": "Other interviews",
+
   // Question editor (Phase C2)
   "rec.editor.title": "Question editor",
   "rec.editor.subtitle": "Edit, add or remove survey questions for this cycle.",
@@ -686,6 +741,61 @@ const HE = {
   "rec.cycles.questions": "שאלות",
   "rec.cycles.questions_help": "ערוך את מאגר השאלות של המחזור הזה. לכל מחזור עותק משלו של תבנית ברירת המחדל — שינויים כאן חלים רק על המחזור הנוכחי.",
   "rec.cycles.edit_questions": "ערוך שאלות",
+
+  // Candidates list + detail (Phase C3)
+  "rec.candidates.cycle": "מחזור",
+  "rec.candidates.search": "חיפוש",
+  "rec.candidates.search_ph": "שם או מספר אישי",
+  "rec.candidates.team": "צוות",
+  "rec.candidates.team_filter": "סינון לפי צוות",
+  "rec.candidates.status_filter": "סינון לפי סטטוס",
+  "rec.candidates.all_teams": "כל הצוותים",
+  "rec.candidates.all_status": "כל הסטטוסים",
+  "rec.candidates.no_team": "ללא צוות",
+  "rec.candidates.empty_cycle": "אין עדיין מועמדים במחזור הזה.",
+  "rec.candidates.empty_filtered": "אין מועמדים התואמים לסינון.",
+
+  // Candidate status labels
+  "rec.candidate_status.survey_in_progress": "שאלון במהלך",
+  "rec.candidate_status.survey_done": "שאלון הוגש",
+  "rec.candidate_status.interviewed": "רואיין",
+  "rec.candidate_status.ready_for_exam": "מוכן לבחינה",
+  "rec.candidate_status.exam_in_progress": "בחינה במהלך",
+  "rec.candidate_status.exam_done": "סיים בחינה",
+  "rec.candidate_status.accepted": "התקבל",
+  "rec.candidate_status.rejected": "נפסל",
+  "rec.final_status.accepted": "התקבל",
+  "rec.final_status.rejected": "נפסל",
+
+  // Candidate detail
+  "rec.candidate.summary": "סיכום",
+  "rec.candidate.personal_id": "מספר אישי",
+  "rec.candidate.team": "צוות",
+  "rec.candidate.status": "סטטוס",
+  "rec.candidate.final_status": "החלטה סופית",
+  "rec.candidate.actions": "פעולות",
+  "rec.candidate.mark_accepted": "סמן כהתקבל",
+  "rec.candidate.mark_rejected": "סמן כנפסל",
+  "rec.candidate.status_updated": "הסטטוס עודכן.",
+
+  // Section labels for the response viewer
+  "rec.section.identity": "פרטים אישיים",
+  "rec.section.self_assessment": "מוטיבציה והערכה עצמית",
+  "rec.section.background": "רקע אקדמי וצבאי",
+  "rec.section.physical": "כושר ומוטיבציה",
+
+  // Interview panel
+  "rec.interview.title": "ראיון",
+  "rec.interview.subtitle": "רישום הראיון שלך פרטי לך ולשאר המראיינים. לכל מראיין רישום משלו.",
+  "rec.interview.your_interview": "הראיון שלך",
+  "rec.interview.score": "ציון",
+  "rec.interview.tags": "תגיות (מופרדות בפסיק)",
+  "rec.interview.tags_ph": "לדוגמה: ממוקד, תקשורתי, חשש-משמעת",
+  "rec.interview.notes": "הערות",
+  "rec.interview.notes_ph": "תיעוד חופשי מהראיון…",
+  "rec.interview.save_btn": "שמור ראיון",
+  "rec.interview.saved": "הראיון נשמר.",
+  "rec.interview.others": "ראיונות אחרים",
 
   // Question editor (Phase C2)
   "rec.editor.title": "עורך שאלות",

@@ -136,6 +136,51 @@ export async function listCandidates(cycleId, { team, status } = {}) {
   return q;
 }
 
+// Fetch the candidate row + every survey question for their cycle +
+// every survey response. Joins are done client-side because we need
+// all three regardless and Supabase select-with-relations gets
+// awkward when the relation isn't a direct FK.
+export async function getCandidateWithDetails(candidateId) {
+  const { data: candidate, error: cErr } = await supabase
+    .from("candidates")
+    .select("*")
+    .eq("id", candidateId)
+    .maybeSingle();
+  if (cErr || !candidate) return { error: cErr || new Error("not_found") };
+
+  const [questionsRes, responsesRes] = await Promise.all([
+    supabase
+      .from("survey_questions")
+      .select("*")
+      .eq("cycle_id", candidate.cycle_id)
+      .order("ord", { ascending: true }),
+    supabase
+      .from("survey_responses")
+      .select("*")
+      .eq("candidate_id", candidateId),
+  ]);
+
+  if (questionsRes.error) return { error: questionsRes.error };
+  if (responsesRes.error) return { error: responsesRes.error };
+
+  return {
+    data: {
+      candidate,
+      questions: questionsRes.data || [],
+      responses: responsesRes.data || [],
+    },
+  };
+}
+
+export async function updateCandidate(id, patch) {
+  return supabase
+    .from("candidates")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+}
+
 // ── URL helpers ────────────────────────────────────────────────────
 
 // Build the absolute candidate-facing survey URL for a cycle. Hash-routed
