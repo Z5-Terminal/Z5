@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth, roleLabelT, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
 import { useTheme } from "../ThemeContext";
@@ -7,6 +7,7 @@ import { supabase } from "../supabase";
 import { Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, S, FONT_MONO } from "../theme";
+import { uploadProfileAvatar, profileAvatarPublicUrl } from "../data/avatars";
 import Gear from "./Gear";
 
 // ── Collapsible section used on Profile page ──────────────────────────
@@ -72,6 +73,155 @@ function Section({ title, icon, defaultOpen = false, children }) {
   );
 }
 
+// ── Profile card hero ─────────────────────────────────────────────
+// Avatar (circular) + callsign + name + role badge. Tapping the avatar
+// opens the file picker; upload writes to the profile-avatars bucket
+// and stores the path in profiles.avatar_url.
+function ProfileHero({ profile, onAvatarChanged }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const avatarSrc = profileAvatarPublicUrl(profile?.avatar_url);
+  const initials = (profile?.callsign || profile?.full_name || profile?.email || "?")
+    .trim()
+    .slice(0, 2)
+    .toUpperCase();
+
+  async function handleFile(file) {
+    if (!file || !profile?.id) return;
+    setUploading(true); setErr("");
+    const { path, error } = await uploadProfileAvatar(profile.id, file);
+    if (error) {
+      setErr(error.message || String(error));
+      setUploading(false);
+      return;
+    }
+    const { error: updErr } = await supabase
+      .from("profiles")
+      .update({ avatar_url: path })
+      .eq("id", profile.id);
+    setUploading(false);
+    if (updErr) { setErr(updErr.message); return; }
+    onAvatarChanged && onAvatarChanged();
+  }
+
+  const avatarSize = isMobile ? 96 : 104;
+
+  return (
+    <div style={{
+      border: `1px solid ${C.border}`,
+      borderRadius: 6,
+      background: C.cardBg,
+      padding: isMobile ? "20px 16px" : "22px 24px",
+      marginBottom: isMobile ? 14 : 18,
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      alignItems: "center",
+      gap: isMobile ? 14 : 22,
+    }}>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        title={t("prof.upload_avatar")}
+        style={{
+          all: "unset",
+          width: avatarSize,
+          height: avatarSize,
+          borderRadius: "50%",
+          background: C.inputBg,
+          border: `1px solid ${C.borderBright}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          flexShrink: 0,
+          cursor: uploading ? "wait" : "pointer",
+          position: "relative",
+        }}
+      >
+        {avatarSrc ? (
+          <img
+            src={avatarSrc}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <div style={{
+            fontSize: avatarSize * 0.36,
+            color: C.dim,
+            fontFamily: FONT_MONO,
+            fontWeight: 700,
+            letterSpacing: "1.5px",
+          }}>{initials}</div>
+        )}
+        {uploading && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#fff", fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
+          }}>{t("prof.uploading")}</div>
+        )}
+      </button>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) handleFile(f);
+        }}
+      />
+
+      <div style={{
+        flex: 1,
+        minWidth: 0,
+        textAlign: isMobile ? "center" : "start",
+        width: "100%",
+      }}>
+        <div style={{
+          fontFamily: FONT_MONO,
+          fontSize: isMobile ? 22 : 26,
+          color: C.bright,
+          fontWeight: 700,
+          letterSpacing: "2px",
+          marginBottom: 4,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>{profile?.callsign || "—"}</div>
+        <div style={{
+          color: C.dim,
+          fontSize: 14,
+          marginBottom: 12,
+        }}>{profile?.full_name || profile?.email || ""}</div>
+        <div style={{
+          display: "flex",
+          gap: 6,
+          flexWrap: "wrap",
+          justifyContent: isMobile ? "center" : "flex-start",
+          marginBottom: 14,
+        }}>
+          <Badge tone="bright">{roleLabelT(profile?.role, t)}</Badge>
+          {profile?.is_instructor && <Badge tone="ok">{t("prof.instructor_badge")}</Badge>}
+          {profile?.is_recruiter && <Badge tone="ok">{t("prof.recruiter_badge")}</Badge>}
+        </div>
+        <Btn small onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {avatarSrc ? t("prof.replace_avatar") : t("prof.upload_avatar")}
+        </Btn>
+        <ErrLine>{err}</ErrLine>
+      </div>
+    </div>
+  );
+}
+
 export default function Profile() {
   const { profile, refreshProfile, signOut } = useAuth();
   const { t, lang, setLang } = useI18n();
@@ -132,9 +282,10 @@ export default function Profile() {
         subtitle={t("prof.subtitle")}
       />
 
-      {/* Sections — each is its own bordered box. The wrapper just
-          provides space below the page header. */}
       <div style={{ marginTop: isMobile ? 18 : 24 }}>
+
+      {/* Profile card hero — avatar + identity + role badges */}
+      <ProfileHero profile={profile} onAvatarChanged={refreshProfile} />
 
       {/* Personal gear inventory */}
       <Section title={t("gear.title")} icon={<GearIcon mode={mode} />}>

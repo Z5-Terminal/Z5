@@ -2,7 +2,7 @@
 // Two sub-views: list (cycle + team + status + search filters, grouped
 // by team) and detail (full survey responses + interview workflow).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../auth";
 import { useI18n } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
@@ -16,6 +16,12 @@ import {
 import {
   listCandidateInterviews, upsertInterview,
 } from "../../data/interviews";
+import {
+  uploadCandidatePhoto, candidatePhotoSignedUrl,
+} from "../../data/avatars";
+import {
+  PREDEFINED_TAGS, tagLabel, tagTone,
+} from "../../data/recruitmentTags";
 
 const TEAMS = [1, 2, 3, 4];
 const STATUSES = [
@@ -261,6 +267,7 @@ function CandidateDetail({ candidateId, onBack }) {
   const { profile } = useAuth();
   const [data, setData] = useState(null); // { candidate, questions, responses }
   const [interviews, setInterviews] = useState([]);
+  const [photoSrc, setPhotoSrc] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -274,9 +281,25 @@ function CandidateDetail({ candidateId, onBack }) {
     setData(details);
     if (iErr) setErr(iErr.message);
     else setInterviews(ivs || []);
+    // Resolve a 24h signed URL for the candidate photo (private bucket)
+    if (details?.candidate?.photo_url) {
+      const url = await candidatePhotoSignedUrl(details.candidate.photo_url);
+      setPhotoSrc(url);
+    } else {
+      setPhotoSrc(null);
+    }
   }
 
   useEffect(() => { refresh(); }, [candidateId]);
+
+  async function handlePhotoUpload(file) {
+    setErr("");
+    const { path, error } = await uploadCandidatePhoto(candidateId, file);
+    if (error) { setErr(error.message || String(error)); return; }
+    const { error: updErr } = await updateCandidate(candidateId, { photo_url: path });
+    if (updErr) { setErr(updErr.message); return; }
+    await refresh();
+  }
 
   function flash(setter, msg, ms = 2000) {
     setter(msg);
@@ -314,21 +337,18 @@ function CandidateDetail({ candidateId, onBack }) {
         action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>}
       />
 
-      <Panel connectTop title={t("rec.candidate.summary")}>
-        <SummaryRow label={t("rec.candidate.personal_id")}
-          value={<span style={{ fontFamily: FONT_MONO }}>{candidate.personal_id || "—"}</span>} />
-        <SummaryRow label={t("rec.candidate.team")}  value={candidate.team || "—"} />
-        <SummaryRow label={t("rec.candidate.status")}
-          value={<Badge tone={statusTone(candidate.status)}>{t(`rec.candidate_status.${candidate.status}`)}</Badge>} />
-        {candidate.final_status && (
-          <SummaryRow label={t("rec.candidate.final_status")}
-            value={<Badge tone={candidate.final_status === "accepted" ? "ok" : "error"}>
-              {t(`rec.final_status.${candidate.final_status}`)}
-            </Badge>} />
-        )}
-        <ErrLine>{err}</ErrLine>
-        <OkLine>{ok}</OkLine>
-      </Panel>
+      <CandidateHero
+        candidate={candidate}
+        photoSrc={photoSrc}
+        onUpload={handlePhotoUpload}
+      />
+
+      {(err || ok) && (
+        <Panel>
+          <ErrLine>{err}</ErrLine>
+          <OkLine>{ok}</OkLine>
+        </Panel>
+      )}
 
       <SurveyResponses questions={questions} responsesByQ={responsesByQ} />
 
@@ -365,6 +385,158 @@ function CandidateDetail({ candidateId, onBack }) {
         </div>
       </Panel>
     </>
+  );
+}
+
+// ── Candidate hero (profile-card style) ────────────────────────────
+
+function CandidateHero({ candidate, photoSrc, onUpload }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const initials = (candidate.full_name || "?")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((s) => s[0] || "")
+    .join("")
+    .toUpperCase() || "?";
+
+  async function handleFile(file) {
+    if (!file) return;
+    setUploading(true); setErr("");
+    try {
+      await onUpload(file);
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const photoSize = isMobile ? 96 : 112;
+
+  return (
+    <div style={{
+      border: `1px solid ${C.border}`,
+      borderRadius: 6,
+      background: C.cardBg,
+      padding: isMobile ? "20px 16px" : "24px",
+      marginBottom: isMobile ? 14 : 18,
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      alignItems: "center",
+      gap: isMobile ? 14 : 22,
+    }}>
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        title={t("rec.candidate.upload_photo")}
+        style={{
+          all: "unset",
+          width: photoSize,
+          height: photoSize,
+          borderRadius: "50%",
+          background: C.inputBg,
+          border: `1px solid ${C.borderBright}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          flexShrink: 0,
+          cursor: uploading ? "wait" : "pointer",
+          position: "relative",
+        }}
+      >
+        {photoSrc ? (
+          <img
+            src={photoSrc}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <div style={{
+            fontSize: photoSize * 0.34,
+            color: C.dim,
+            fontFamily: FONT_MONO,
+            fontWeight: 700,
+            letterSpacing: "1.5px",
+          }}>{initials}</div>
+        )}
+        {uploading && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#fff", fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
+          }}>{t("rec.candidate.uploading")}</div>
+        )}
+      </button>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) handleFile(f);
+        }}
+      />
+
+      <div style={{
+        flex: 1,
+        minWidth: 0,
+        textAlign: isMobile ? "center" : "start",
+        width: "100%",
+      }}>
+        <div style={{
+          fontSize: isMobile ? 18 : 22,
+          color: C.bright,
+          fontWeight: 700,
+          letterSpacing: "0.5px",
+          marginBottom: 6,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>{candidate.full_name || "—"}</div>
+        <div style={{
+          fontFamily: FONT_MONO,
+          fontSize: 13,
+          color: C.dim,
+          marginBottom: 12,
+          letterSpacing: "0.5px",
+        }}>{candidate.personal_id || "—"}</div>
+        <div style={{
+          display: "flex",
+          gap: 6,
+          flexWrap: "wrap",
+          justifyContent: isMobile ? "center" : "flex-start",
+          marginBottom: 14,
+        }}>
+          {candidate.team && (
+            <Badge tone="bright">{t("rec.candidates.team")} {candidate.team}</Badge>
+          )}
+          <Badge tone={statusTone(candidate.status)}>
+            {t(`rec.candidate_status.${candidate.status}`)}
+          </Badge>
+          {candidate.final_status && (
+            <Badge tone={candidate.final_status === "accepted" ? "ok" : "error"}>
+              {t(`rec.final_status.${candidate.final_status}`)}
+            </Badge>
+          )}
+        </div>
+        <Btn small onClick={() => fileRef.current?.click()} disabled={uploading}>
+          {photoSrc ? t("rec.candidate.replace_photo") : t("rec.candidate.upload_photo")}
+        </Btn>
+        <ErrLine>{err}</ErrLine>
+      </div>
+    </div>
   );
 }
 
@@ -486,7 +658,7 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
   const others = interviews.filter((i) => i.interviewer_id !== currentUserId);
 
   const [score, setScore] = useState(mine?.score ?? "");
-  const [tagsText, setTagsText] = useState((mine?.tags || []).join(", "));
+  const [tags, setTags] = useState(Array.isArray(mine?.tags) ? mine.tags : []);
   const [notes, setNotes] = useState(mine?.notes || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -495,14 +667,13 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
   // Sync local form state when refresh brings new data
   useEffect(() => {
     setScore(mine?.score ?? "");
-    setTagsText((mine?.tags || []).join(", "));
+    setTags(Array.isArray(mine?.tags) ? mine.tags : []);
     setNotes(mine?.notes || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mine?.id]);
 
   async function save() {
     setBusy(true); setErr(""); setOk("");
-    const tags = tagsText.split(",").map((s) => s.trim()).filter(Boolean);
     const { error } = await upsertInterview({
       candidateId,
       interviewerId: currentUserId,
@@ -527,11 +698,7 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
         <ScorePicker value={score} onChange={setScore} />
       </Field>
       <Field label={t("rec.interview.tags")}>
-        <Input
-          value={tagsText}
-          onChange={(e) => setTagsText(e.target.value)}
-          placeholder={t("rec.interview.tags_ph")}
-        />
+        <TagPicker selected={tags} onChange={setTags} />
       </Field>
       <Field label={t("rec.interview.notes")}>
         <Textarea
@@ -622,7 +789,9 @@ function OtherInterviewCard({ interview }) {
       </div>
       {interview.tags && interview.tags.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          {interview.tags.map((tag, i) => <Badge key={i}>{tag}</Badge>)}
+          {interview.tags.map((tag, i) => (
+            <Badge key={i} tone={tagTone(tag)}>{tagLabel(tag, t)}</Badge>
+          ))}
         </div>
       )}
       {interview.notes && (
@@ -633,6 +802,55 @@ function OtherInterviewCard({ interview }) {
       )}
     </div>
   );
+}
+
+// ── Tag picker (predefined chips) ──────────────────────────────────
+
+function TagPicker({ selected, onChange }) {
+  const { t } = useI18n();
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {PREDEFINED_TAGS.map((tag) => {
+        const active = selected.includes(tag.key);
+        const colors = chipColors(tag.tone, active);
+        return (
+          <button
+            key={tag.key}
+            type="button"
+            onClick={() => {
+              if (active) onChange(selected.filter((s) => s !== tag.key));
+              else onChange([...selected, tag.key]);
+            }}
+            style={{
+              padding: "7px 12px",
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: "0.4px",
+              textTransform: "uppercase",
+              background: colors.bg,
+              color: colors.fg,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 2,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "background 140ms ease-out, border-color 140ms ease-out",
+            }}
+          >
+            {tagLabel(tag.key, t)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function chipColors(tone, active) {
+  if (!active) {
+    return { bg: "transparent", fg: C.dim, border: C.border };
+  }
+  if (tone === "ok")   return { bg: C.badgeOk,   fg: C.ok,   border: C.badgeOkBorder };
+  if (tone === "warn") return { bg: C.badgeWarn, fg: C.warn, border: C.badgeWarnBorder };
+  return { bg: C.badgeBright, fg: C.bright, border: C.borderBright };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
