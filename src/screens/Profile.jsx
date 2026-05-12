@@ -287,10 +287,8 @@ export default function Profile() {
       {/* Profile card hero — avatar + identity + role badges */}
       <ProfileHero profile={profile} onAvatarChanged={refreshProfile} />
 
-      {/* Personal gear inventory */}
-      <Section title={t("gear.title")} icon={<GearIcon mode={mode} />}>
-        <Gear embedded />
-      </Section>
+      {/* Order: Identity → Gear → Display → Language → Password → Console → Logout.
+          Most-important / most-frequently-edited sections at the top. */}
 
       {/* Identity */}
       <Section title={t("prof.title")} icon={<SoldierIcon />}>
@@ -315,20 +313,9 @@ export default function Profile() {
         </form>
       </Section>
 
-      {/* Password */}
-      <Section title={t("prof.password")} icon={<LockIcon />}>
-        <form onSubmit={changePassword}>
-          <Field label={t("prof.newpw")}>
-            <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
-          </Field>
-          <Field label={t("prof.confirmpw")}>
-            <Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
-          </Field>
-          <Btn primary type="submit" disabled={busy}>{t("prof.changepw")}</Btn>
-        </form>
-        <div style={{ color: C.dim, fontSize: 12, marginTop: 14 }}>
-          {t("prof.pw_note")}
-        </div>
+      {/* Personal gear inventory */}
+      <Section title={t("gear.title")} icon={<GearIcon mode={mode} />}>
+        <Gear embedded />
       </Section>
 
       {/* Theme */}
@@ -348,6 +335,22 @@ export default function Profile() {
         <div style={{ display: "flex", gap: 10 }}>
           <Btn small active={lang === "he"} onClick={() => setLang("he")}>עברית</Btn>
           <Btn small active={lang === "en"} onClick={() => setLang("en")}>English</Btn>
+        </div>
+      </Section>
+
+      {/* Password */}
+      <Section title={t("prof.password")} icon={<LockIcon />}>
+        <form onSubmit={changePassword}>
+          <Field label={t("prof.newpw")}>
+            <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
+          </Field>
+          <Field label={t("prof.confirmpw")}>
+            <Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+          </Field>
+          <Btn primary type="submit" disabled={busy}>{t("prof.changepw")}</Btn>
+        </form>
+        <div style={{ color: C.dim, fontSize: 12, marginTop: 14 }}>
+          {t("prof.pw_note")}
         </div>
       </Section>
 

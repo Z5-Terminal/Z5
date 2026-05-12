@@ -250,7 +250,11 @@ export function NavLabel({ children }) {
 // corners) so a Panel with connectTop can join it. Pass `standalone`
 // when nothing connects from below so the header closes itself with a
 // full border + full rounded corners.
-export function PageHeader({ title, subtitle, action, standalone }) {
+// Page header — self-contained card with full borders + rounded corners.
+// The old `standalone` prop is ignored (kept for backward-compat with
+// existing call sites that still pass it) — every header now closes its
+// own bottom border so the next section sits cleanly below.
+export function PageHeader({ title, subtitle, action }) {
   const isMobile = useIsMobile();
   return (
     <div style={{
@@ -261,8 +265,7 @@ export function PageHeader({ title, subtitle, action, standalone }) {
       marginBottom: 0,
       padding: isMobile ? "12px 14px" : "18px 24px",
       border: `1px solid ${C.border}`,
-      borderBottom: standalone ? `1px solid ${C.border}` : "none",
-      borderRadius: standalone ? 4 : "4px 4px 0 0",
+      borderRadius: 4,
       background: C.headerBg,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -291,16 +294,15 @@ export function PageHeader({ title, subtitle, action, standalone }) {
   );
 }
 
-export function Panel({ title, children, action, connectTop }) {
+// Panel — always rendered as its own bordered card with marginTop above.
+// `connectTop` is accepted as a no-op for backward-compat with existing
+// call sites; the prop no longer changes rendering.
+export function Panel({ title, children, action }) {
   const isMobile = useIsMobile();
   const base = isMobile
     ? { ...S.panel, padding: "14px 14px", marginBottom: 14, borderRadius: 6 }
     : { ...S.panel };
-  if (connectTop) {
-    base.borderRadius = isMobile ? "0 0 6px 6px" : "0 0 4px 4px";
-  } else {
-    base.marginTop = isMobile ? 14 : 20;
-  }
+  base.marginTop = isMobile ? 14 : 20;
   return (
     <div style={base}>
       {title && (
