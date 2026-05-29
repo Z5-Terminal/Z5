@@ -136,10 +136,8 @@ export async function listCandidates(cycleId, { team, status } = {}) {
   return q;
 }
 
-// Fetch the candidate row + every survey question for their cycle +
-// every survey response. Joins are done client-side because we need
-// all three regardless and Supabase select-with-relations gets
-// awkward when the relation isn't a direct FK.
+// Fetch the candidate row + parent cycle + every survey question for
+// the cycle + every survey response. Joins are done client-side.
 export async function getCandidateWithDetails(candidateId) {
   const { data: candidate, error: cErr } = await supabase
     .from("candidates")
@@ -148,7 +146,12 @@ export async function getCandidateWithDetails(candidateId) {
     .maybeSingle();
   if (cErr || !candidate) return { error: cErr || new Error("not_found") };
 
-  const [questionsRes, responsesRes] = await Promise.all([
+  const [cycleRes, questionsRes, responsesRes] = await Promise.all([
+    supabase
+      .from("recruitment_cycles")
+      .select("*")
+      .eq("id", candidate.cycle_id)
+      .maybeSingle(),
     supabase
       .from("survey_questions")
       .select("*")
@@ -160,16 +163,38 @@ export async function getCandidateWithDetails(candidateId) {
       .eq("candidate_id", candidateId),
   ]);
 
+  if (cycleRes.error)     return { error: cycleRes.error };
   if (questionsRes.error) return { error: questionsRes.error };
   if (responsesRes.error) return { error: responsesRes.error };
 
   return {
     data: {
       candidate,
+      cycle: cycleRes.data,
       questions: questionsRes.data || [],
       responses: responsesRes.data || [],
     },
   };
+}
+
+// Fetch a candidate's exam attempt (if any). Returns null when the
+// candidate hasn't started the exam yet.
+export async function getCandidateExam(candidateId) {
+  return supabase
+    .from("exam_attempts")
+    .select("*")
+    .eq("candidate_id", candidateId)
+    .maybeSingle();
+}
+
+// Build the candidate-facing exam URL for a (cycle, candidate) pair.
+// Returns null when the cycle has no access_token yet (cycle still in
+// draft) or the candidate has no personal_id.
+export function examUrlFor(cycle, candidate) {
+  if (!cycle?.access_token || !candidate?.personal_id) return null;
+  if (typeof window === "undefined") return null;
+  const base = (import.meta.env && import.meta.env.BASE_URL) || "/";
+  return `${window.location.origin}${base}#/recruitment/${cycle.access_token}/exam/${encodeURIComponent(candidate.personal_id)}`;
 }
 
 export async function updateCandidate(id, patch) {

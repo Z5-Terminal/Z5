@@ -12,6 +12,7 @@ import {
 import { C, S, FONT_MONO } from "../../theme";
 import {
   listCycles, listCandidates, getCandidateWithDetails, updateCandidate,
+  getCandidateExam, examUrlFor,
 } from "../../data/recruitment";
 import {
   listCandidateInterviews, upsertInterview,
@@ -265,22 +266,29 @@ function CandidateRow({ candidate, onClick }) {
 function CandidateDetail({ candidateId, onBack }) {
   const { t } = useI18n();
   const { profile } = useAuth();
-  const [data, setData] = useState(null); // { candidate, questions, responses }
+  const [data, setData] = useState(null); // { candidate, cycle, questions, responses }
   const [interviews, setInterviews] = useState([]);
+  const [examAttempt, setExamAttempt] = useState(null);
   const [photoSrc, setPhotoSrc] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
   async function refresh() {
-    const [{ data: details, error: dErr }, { data: ivs, error: iErr }] = await Promise.all([
+    const [
+      { data: details, error: dErr },
+      { data: ivs, error: iErr },
+      { data: attempt },
+    ] = await Promise.all([
       getCandidateWithDetails(candidateId),
       listCandidateInterviews(candidateId),
+      getCandidateExam(candidateId),
     ]);
     if (dErr) { setErr(dErr.message || String(dErr)); return; }
     setData(details);
     if (iErr) setErr(iErr.message);
     else setInterviews(ivs || []);
+    setExamAttempt(attempt || null);
     // Resolve a 24h signed URL for the candidate photo (private bucket)
     if (details?.candidate?.photo_url) {
       const url = await candidatePhotoSignedUrl(details.candidate.photo_url);
@@ -326,8 +334,28 @@ function CandidateDetail({ candidateId, onBack }) {
     );
   }
 
-  const { candidate, questions, responses } = data;
+  const { candidate, cycle, questions, responses } = data;
   const responsesByQ = new Map(responses.map((r) => [r.question_id, r]));
+
+  async function handleToggleExamUnlock() {
+    setBusy(true); setErr(""); setOk("");
+    const { error } = await updateCandidate(candidateId, {
+      exam_unlocked: !candidate.exam_unlocked,
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    flash(setOk, t("rec.candidate.exam_unlock_updated"));
+    await refresh();
+  }
+
+  async function copyExamUrl(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      flash(setOk, t("rec.cycles.url_copied"));
+    } catch {
+      setErr(t("rec.cycles.url_copy_failed"));
+    }
+  }
 
   return (
     <>
@@ -358,6 +386,15 @@ function CandidateDetail({ candidateId, onBack }) {
         currentUserId={profile?.id}
         currentUserCallsign={profile?.callsign}
         onSaved={refresh}
+      />
+
+      <ExamPanel
+        candidate={candidate}
+        cycle={cycle}
+        attempt={examAttempt}
+        busy={busy}
+        onToggleUnlock={handleToggleExamUnlock}
+        onCopyUrl={copyExamUrl}
       />
 
       <Panel title={t("rec.candidate.actions")}>
@@ -647,6 +684,85 @@ function ResponseRow({ question, response }) {
         fontStyle: response ? "normal" : "italic",
       }}>{answer}</div>
     </div>
+  );
+}
+
+// ── Exam panel ─────────────────────────────────────────────────────
+
+function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl }) {
+  const { t } = useI18n();
+  const url = examUrlFor(cycle, candidate);
+  const finished = attempt?.finished_at;
+  const inProgress = attempt && !finished;
+
+  return (
+    <Panel title={t("rec.candidate.exam")}>
+      {/* Score display first — most important info when present */}
+      {finished && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 14, marginBottom: 14,
+          padding: "14px 16px", border: `1px solid ${C.border}`,
+          background: C.cardBg, borderRadius: 4,
+        }}>
+          <div style={{
+            fontFamily: FONT_MONO, fontSize: 28, fontWeight: 700, color: C.bright,
+          }}>{attempt.score} / {attempt.total}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontSize: 11, color: C.dim, letterSpacing: "0.8px",
+              textTransform: "uppercase", fontWeight: 600,
+            }}>{t("rec.candidate.exam_score")}</div>
+            <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>
+              {new Date(attempt.finished_at).toLocaleString()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inProgress && (
+        <div style={{
+          padding: "10px 14px", background: C.warnBg || "rgba(255,204,85,0.08)",
+          border: `1px solid ${C.warnBorderFaint}`, color: C.warn,
+          borderRadius: 3, fontSize: 13, marginBottom: 14,
+        }}>
+          {t("rec.candidate.exam_in_progress_note")}
+        </div>
+      )}
+
+      {!attempt && (
+        <div style={{ color: C.dim, fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+          {candidate.exam_unlocked
+            ? t("rec.candidate.exam_unlocked_explainer")
+            : t("rec.candidate.exam_locked_explainer")}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+        <Btn small onClick={onToggleUnlock} disabled={busy}>
+          {candidate.exam_unlocked
+            ? t("rec.candidate.lock_exam")
+            : t("rec.candidate.unlock_exam")}
+        </Btn>
+        {candidate.exam_unlocked && url && (
+          <Btn small onClick={() => onCopyUrl(url)}>{t("rec.candidate.copy_exam_url")}</Btn>
+        )}
+      </div>
+
+      {candidate.exam_unlocked && url && (
+        <div style={{
+          fontFamily: FONT_MONO, fontSize: 12,
+          padding: "10px 12px", background: C.cardBg,
+          border: `1px solid ${C.border}`, borderRadius: 3,
+          wordBreak: "break-all", color: C.text, lineHeight: 1.5,
+        }}>{url}</div>
+      )}
+
+      {candidate.exam_unlocked && !url && (
+        <div style={{ color: C.warn, fontSize: 12 }}>
+          {t("rec.candidate.no_exam_url")}
+        </div>
+      )}
+    </Panel>
   );
 }
 

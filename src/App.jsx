@@ -8,18 +8,23 @@ import Auth from "./screens/Auth";
 import Shell from "./screens/Shell";
 import Hub from "./screens/Hub";
 import PublicSurvey from "./screens/PublicSurvey";
+import PublicExam from "./screens/PublicExam";
 import { C } from "./theme";
 
 // Hash routes that bypass auth entirely. Keep this list narrow — only
-// truly public anonymous flows (recruitment survey, future recruitment
-// exam) belong here. Everything else goes through the normal auth
-// flow inside Inner().
+// truly public anonymous flows (recruitment survey + exam) belong here.
+// Everything else goes through the normal auth flow inside Inner().
 function detectPublicRoute() {
   if (typeof window === "undefined") return null;
   const hash = window.location.hash || "";
   // #/recruitment/<32-hex>/survey
-  const m = hash.match(/^#\/recruitment\/([a-f0-9]{32})\/survey/i);
-  if (m) return { kind: "survey", token: m[1] };
+  const survey = hash.match(/^#\/recruitment\/([a-f0-9]{32})\/survey/i);
+  if (survey) return { kind: "survey", token: survey[1] };
+  // #/recruitment/<32-hex>/exam/<personal-id>
+  // Personal ID is whatever the candidate typed at intake — accept any
+  // non-slash characters, URL-decoded by the browser already.
+  const exam = hash.match(/^#\/recruitment\/([a-f0-9]{32})\/exam\/([^/?#]+)/i);
+  if (exam) return { kind: "exam", token: exam[1], personalId: decodeURIComponent(exam[2]) };
   return null;
 }
 
@@ -42,6 +47,9 @@ function Inner() {
   // Public routes bypass auth, console, and shell entirely.
   if (publicRoute?.kind === "survey") {
     return <PublicSurvey token={publicRoute.token} />;
+  }
+  if (publicRoute?.kind === "exam") {
+    return <PublicExam token={publicRoute.token} personalId={publicRoute.personalId} />;
   }
 
   if (loading) {

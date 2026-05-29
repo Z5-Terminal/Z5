@@ -14,6 +14,7 @@ import {
   beginCycle, regenerateToken, setCycleStatus, surveyUrlForCycle,
 } from "../../data/recruitment";
 import QuestionEditor from "./QuestionEditor";
+import ExamEditor from "./ExamEditor";
 
 export default function Cycles() {
   const { t } = useI18n();
@@ -38,12 +39,22 @@ export default function Cycles() {
       />
     );
   }
+  if (view === "exam" && activeId) {
+    return (
+      <ExamEditor
+        cycleId={activeId}
+        cycleName={activeName}
+        onBack={() => setView("detail")}
+      />
+    );
+  }
   if (view === "detail" && activeId) {
     return (
       <CycleDetail
         cycleId={activeId}
         onBack={() => setView("list")}
         onEditQuestions={(name) => { setActiveName(name); setView("questions"); }}
+        onEditExam={(name) => { setActiveName(name); setView("exam"); }}
       />
     );
   }
@@ -199,7 +210,7 @@ function CycleCreate({ onCreated, onCancel }) {
 
 // ── Detail ─────────────────────────────────────────────────────────
 
-function CycleDetail({ cycleId, onBack, onEditQuestions }) {
+function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const [cycle, setCycle] = useState(null);
@@ -404,6 +415,15 @@ function CycleDetail({ cycleId, onBack, onEditQuestions }) {
         </div>
         <Btn small onClick={() => onEditQuestions(cycle.name)}>
           {t("rec.cycles.edit_questions")}
+        </Btn>
+      </Panel>
+
+      <Panel title={t("rec.cycles.exam")}>
+        <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
+          {t("rec.cycles.exam_help")}
+        </div>
+        <Btn small onClick={() => onEditExam(cycle.name)}>
+          {t("rec.cycles.edit_exam")}
         </Btn>
       </Panel>
 
