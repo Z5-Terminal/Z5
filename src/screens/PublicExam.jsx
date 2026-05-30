@@ -28,6 +28,10 @@ const T = {
   time_left: "זמן שנותר",
   time_up: "הזמן נגמר",
   question: "שאלה",
+  of: "מתוך",
+  answered: "נענו",
+  previous: "‹ הקודמת",
+  next: "הבאה ›",
   result_title: "המבחן הוגש.",
   result_score: "ציון",
   result_body: "תשובותיך נשמרו ונבדקו. המשך לחכות לעדכון מהמפקדים.",
@@ -183,7 +187,11 @@ function Intro({ exam, onStart }) {
 
 function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onSubmitted, onError }) {
   const isMobile = useIsMobile();
-  const questions = (exam.questions || []).slice().sort((a, b) => a.ord - b.ord);
+  // Server returns questions in the candidate's stored question_order;
+  // do NOT sort by ord here — that would defeat the per-candidate shuffle.
+  const questions = exam.questions || [];
+  const total = questions.length;
+  const [pageIdx, setPageIdx] = useState(0);
   const [remaining, setRemaining] = useState(() => secondsLeft(attempt.expires_at));
   const [submitting, setSubmitting] = useState(false);
   const submittedRef = useRef(false);
@@ -227,11 +235,31 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
     doSubmit();
   }
 
+  function scrollTop() {
+    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
+  }
+  function goPrev() {
+    if (pageIdx === 0) return;
+    setPageIdx((i) => i - 1);
+    scrollTop();
+  }
+  function goNext() {
+    if (pageIdx >= total - 1) return;
+    setPageIdx((i) => i + 1);
+    scrollTop();
+  }
+
   const danger = remaining <= 60;
+  const current = questions[pageIdx];
+  const isFirst = pageIdx === 0;
+  const isLast = pageIdx === total - 1;
+  const answeredCount = questions.filter((q) => answers[q.id]).length;
+
+  if (!current) return null;
 
   return (
     <div>
-      {/* Sticky countdown header */}
+      {/* Sticky countdown + progress header */}
       <div style={{
         position: "sticky",
         top: 0,
@@ -243,34 +271,70 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
       }}>
-        <div style={{
-          fontFamily: FONT_MONO, fontSize: 12, color: C.dim,
-          letterSpacing: "1px", textTransform: "uppercase",
-        }}>{T.time_left}</div>
-        <div style={{
-          fontFamily: FONT_MONO,
-          fontSize: 24,
-          fontWeight: 700,
-          color: danger ? C.error : C.bright,
-          letterSpacing: "1px",
-        }}>{remaining <= 0 ? T.time_up : formatClock(remaining)}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{
+            fontFamily: FONT_MONO, fontSize: 11, color: C.dim,
+            letterSpacing: "1px", textTransform: "uppercase",
+          }}>{T.time_left}</div>
+          <div style={{
+            fontFamily: FONT_MONO,
+            fontSize: isMobile ? 22 : 26,
+            fontWeight: 700,
+            color: danger ? C.error : C.bright,
+            letterSpacing: "1px",
+            lineHeight: 1,
+          }}>{remaining <= 0 ? T.time_up : formatClock(remaining)}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, textAlign: "end" }}>
+          <div style={{
+            fontFamily: FONT_MONO, fontSize: 11, color: C.dim,
+            letterSpacing: "1px", textTransform: "uppercase",
+          }}>{T.question}</div>
+          <div style={{
+            fontFamily: FONT_MONO,
+            fontSize: isMobile ? 16 : 18,
+            fontWeight: 700,
+            color: C.bright,
+            letterSpacing: "0.5px",
+            lineHeight: 1,
+          }}>
+            {pageIdx + 1} {T.of} {total}
+            <span style={{
+              color: C.dim, fontSize: isMobile ? 11 : 12, fontWeight: 400,
+              marginInlineStart: 8,
+            }}>· {answeredCount} {T.answered}</span>
+          </div>
+        </div>
       </div>
 
-      {questions.map((q, i) => (
-        <ExamQuestion
-          key={q.id}
-          index={i + 1}
-          question={q}
-          selected={answers[q.id]}
-          onPick={(optKey) => pick(q.id, optKey)}
-        />
-      ))}
+      <ExamQuestion
+        key={current.id}
+        index={pageIdx + 1}
+        question={current}
+        selected={answers[current.id]}
+        onPick={(optKey) => pick(current.id, optKey)}
+      />
 
-      <div style={{ marginTop: 24 }}>
-        <BigButton primary onClick={handleSubmitClick} disabled={submitting}>
-          {submitting ? T.submitting : T.submit}
+      <div style={{
+        marginTop: 22,
+        display: "flex",
+        gap: 10,
+      }}>
+        <BigButton onClick={goPrev} disabled={isFirst}>
+          {T.previous}
         </BigButton>
+        {isLast ? (
+          <BigButton primary onClick={handleSubmitClick} disabled={submitting}>
+            {submitting ? T.submitting : T.submit}
+          </BigButton>
+        ) : (
+          <BigButton primary onClick={goNext}>
+            {T.next}
+          </BigButton>
+        )}
       </div>
     </div>
   );
