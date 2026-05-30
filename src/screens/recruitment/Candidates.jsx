@@ -1,6 +1,8 @@
-// Z5 :: Candidates (Recruitment) — Phase C3.
-// Two sub-views: list (cycle + team + status + search filters, grouped
-// by team) and detail (full survey responses + interview workflow).
+// Z5 :: Candidates (Recruitment).
+// Two sub-views: list (cycle + team + status + search filters + sort
+// dropdown — switches between team-grouped layout and ranked leaderboard
+// layout depending on sort) and detail (survey responses + interview +
+// exam + cycle links).
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../auth";
@@ -11,8 +13,8 @@ import {
 } from "../../ui";
 import { C, S, FONT_MONO } from "../../theme";
 import {
-  listCycles, listCandidates, getCandidateWithDetails, updateCandidate,
-  getCandidateExam, examUrlFor,
+  listCycles, getCandidatesEnriched, getCandidateWithDetails, updateCandidate,
+  getCandidateExam, examUrlFor, surveyUrlForCycle,
 } from "../../data/recruitment";
 import {
   listCandidateInterviews, upsertInterview,
@@ -35,6 +37,7 @@ const STATUSES = [
   "accepted",
   "rejected",
 ];
+const SORTS = ["newest", "name", "personal_id", "interview_score", "exam_score"];
 const SECTION_ORDER = ["identity", "self_assessment", "background", "physical"];
 
 export default function Candidates() {
@@ -62,12 +65,14 @@ function CandidatesList({ onPick }) {
   const { t } = useI18n();
   const [cycles, setCycles] = useState([]);
   const [cycleId, setCycleId] = useState("");
-  const [candidates, setCandidates] = useState([]);
+  const [rows, setRows] = useState([]);          // enriched: { candidate, interviews, avgScore, examAttempt, ... }
   const [team, setTeam] = useState("all");
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("newest");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
 
   // Load cycles once
   useEffect(() => {
@@ -78,7 +83,6 @@ function CandidatesList({ onPick }) {
       if (error) { setErr(error.message); setLoading(false); return; }
       const list = data || [];
       setCycles(list);
-      // Default: first non-closed cycle, else most recent.
       const active = list.find((c) => c.status !== "draft" && c.status !== "closed");
       const fallback = active || list[0];
       if (fallback) setCycleId(fallback.id);
@@ -87,21 +91,23 @@ function CandidatesList({ onPick }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Reload candidates whenever cycle changes
+  // Reload enriched rows whenever cycle changes
   useEffect(() => {
-    if (!cycleId) { setCandidates([]); return; }
+    if (!cycleId) { setRows([]); return; }
     let cancelled = false;
     (async () => {
-      const { data, error } = await listCandidates(cycleId);
+      const { data, error } = await getCandidatesEnriched(cycleId);
       if (cancelled) return;
       if (error) { setErr(error.message); return; }
-      setCandidates(data || []);
+      setErr("");
+      setRows(data || []);
     })();
     return () => { cancelled = true; };
   }, [cycleId]);
 
   const filtered = useMemo(() => {
-    return candidates.filter((c) => {
+    return rows.filter((r) => {
+      const c = r.candidate;
       if (team !== "all" && c.team !== Number(team)) return false;
       if (status !== "all" && c.status !== status) return false;
       if (search) {
@@ -112,17 +118,47 @@ function CandidatesList({ onPick }) {
       }
       return true;
     });
-  }, [candidates, team, status, search]);
+  }, [rows, team, status, search]);
 
+  const sorted = useMemo(() => {
+    const arr = filtered.slice();
+    switch (sort) {
+      case "name":
+        arr.sort((a, b) =>
+          (a.candidate.full_name || "").localeCompare(b.candidate.full_name || ""));
+        break;
+      case "personal_id":
+        arr.sort((a, b) =>
+          (a.candidate.personal_id || "").localeCompare(b.candidate.personal_id || ""));
+        break;
+      case "interview_score":
+        arr.sort((a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1));
+        break;
+      case "exam_score":
+        arr.sort((a, b) => (b.examAttempt?.score ?? -1) - (a.examAttempt?.score ?? -1));
+        break;
+      case "newest":
+      default:
+        arr.sort((a, b) =>
+          new Date(b.candidate.created_at).getTime() -
+          new Date(a.candidate.created_at).getTime());
+    }
+    return arr;
+  }, [filtered, sort]);
+
+  const isScoreSort = sort === "interview_score" || sort === "exam_score";
+
+  // Team-grouped layout (for non-score sorts).
   const grouped = useMemo(() => {
     const map = new Map(TEAMS.map((tt) => [tt, []]));
     const orphans = [];
-    for (const c of filtered) {
-      if (c.team && map.has(c.team)) map.get(c.team).push(c);
-      else orphans.push(c);
+    for (const r of sorted) {
+      const tn = r.candidate.team;
+      if (tn && map.has(tn)) map.get(tn).push(r);
+      else orphans.push(r);
     }
     return { map, orphans };
-  }, [filtered]);
+  }, [sorted]);
 
   const cycle = cycles.find((c) => c.id === cycleId);
 
@@ -131,10 +167,10 @@ function CandidatesList({ onPick }) {
       <PageHeader
         title={t("rec.candidates.title")}
         subtitle={cycle
-          ? `${cycle.name} — ${filtered.length} / ${candidates.length}`
+          ? `${cycle.name} — ${filtered.length} / ${rows.length}`
           : t("rec.candidates.subtitle")}
       />
-      <Panel connectTop>
+      <Panel>
         <Field label={t("rec.candidates.cycle")}>
           <select
             value={cycleId}
@@ -156,6 +192,18 @@ function CandidatesList({ onPick }) {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("rec.candidates.search_ph")}
           />
+        </Field>
+
+        <Field label={t("rec.candidates.sort")}>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            style={{ ...S.input, fontSize: 14 }}
+          >
+            {SORTS.map((s) => (
+              <option key={s} value={s}>{t(`rec.candidates.sort.${s}`)}</option>
+            ))}
+          </select>
         </Field>
 
         <div style={{ marginBottom: 12 }}>
@@ -195,27 +243,45 @@ function CandidatesList({ onPick }) {
       {!loading && filtered.length === 0 && (
         <Panel>
           <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
-            {candidates.length === 0
+            {rows.length === 0
               ? t("rec.candidates.empty_cycle")
               : t("rec.candidates.empty_filtered")}
           </div>
         </Panel>
       )}
 
-      {[...grouped.map.entries()].map(([teamNum, list]) => {
+      {isScoreSort && sorted.length > 0 && (
+        <Panel title={t(`rec.candidates.sort.${sort}`)}>
+          {sorted.map((row, idx) => (
+            <LeaderboardRow
+              key={row.candidate.id}
+              row={row}
+              rank={idx + 1}
+              sortKey={sort}
+              expanded={expandedId === row.candidate.id}
+              onToggle={() => setExpandedId(
+                expandedId === row.candidate.id ? null : row.candidate.id
+              )}
+              onOpen={() => onPick(row.candidate.id)}
+            />
+          ))}
+        </Panel>
+      )}
+
+      {!isScoreSort && [...grouped.map.entries()].map(([teamNum, list]) => {
         if (list.length === 0) return null;
         return (
           <Panel key={teamNum} title={`${t("rec.candidates.team")} ${teamNum} (${list.length})`}>
-            {list.map((c) => (
-              <CandidateRow key={c.id} candidate={c} onClick={() => onPick(c.id)} />
+            {list.map((r) => (
+              <CandidateRow key={r.candidate.id} candidate={r.candidate} onClick={() => onPick(r.candidate.id)} />
             ))}
           </Panel>
         );
       })}
-      {grouped.orphans.length > 0 && (
+      {!isScoreSort && grouped.orphans.length > 0 && (
         <Panel title={t("rec.candidates.no_team")}>
-          {grouped.orphans.map((c) => (
-            <CandidateRow key={c.id} candidate={c} onClick={() => onPick(c.id)} />
+          {grouped.orphans.map((r) => (
+            <CandidateRow key={r.candidate.id} candidate={r.candidate} onClick={() => onPick(r.candidate.id)} />
           ))}
         </Panel>
       )}
@@ -262,6 +328,226 @@ function CandidateRow({ candidate, onClick }) {
 }
 
 // ── Detail ────────────────────────────────────────────────────────
+
+// ── Leaderboard row (used when sorted by interview / exam score) ────
+
+function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const { candidate, avgScore, interviewCount, scoredCount, minScore, maxScore, tags, examAttempt } = row;
+
+  const initials = (candidate.full_name || "?")
+    .trim().split(/\s+/).slice(0, 2)
+    .map((s) => s[0] || "").join("").toUpperCase() || "?";
+
+  // Pick which score this sort cares about.
+  const isExamSort = sortKey === "exam_score";
+  const score = isExamSort ? (examAttempt?.score ?? null) : avgScore;
+  const scoreMax = isExamSort ? (examAttempt?.total ?? null) : 10;
+  const hasScore = score != null;
+  const hasRange = !isExamSort && minScore != null && maxScore != null && minScore !== maxScore;
+
+  return (
+    <div style={{
+      border: `1px solid ${C.border}`,
+      borderRadius: 4,
+      marginBottom: 10,
+      background: C.cardBg,
+      overflow: "hidden",
+    }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          all: "unset",
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          gap: isMobile ? 10 : 14,
+          width: "100%",
+          padding: isMobile ? "12px 12px" : "14px 16px",
+          cursor: "pointer",
+        }}
+      >
+        <div style={{
+          flexShrink: 0,
+          width: isMobile ? 30 : 36,
+          textAlign: "center",
+          fontFamily: FONT_MONO,
+          fontSize: isMobile ? 13 : 15,
+          fontWeight: 700,
+          color: !hasScore ? C.dimmer : (rank <= 4 ? C.bright : C.dim),
+        }}>
+          {hasScore ? `#${rank}` : "—"}
+        </div>
+
+        <div style={{
+          flexShrink: 0,
+          width: isMobile ? 36 : 42,
+          height: isMobile ? 36 : 42,
+          borderRadius: "50%",
+          background: C.inputBg,
+          border: `1px solid ${C.border}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: FONT_MONO,
+          fontSize: isMobile ? 12 : 13,
+          fontWeight: 700,
+          color: C.dim,
+        }}>{initials}</div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            color: C.bright, fontSize: isMobile ? 14 : 15, fontWeight: 600,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{candidate.full_name || "—"}</div>
+          <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>
+            <span style={{ fontFamily: FONT_MONO }}>{candidate.personal_id || "—"}</span>
+            {candidate.team ? ` · ${t("rec.candidates.team")} ${candidate.team}` : ""}
+          </div>
+          {tags.length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+              {tags.slice(0, isMobile ? 2 : 4).map((tg) => (
+                <Badge key={tg} tone={tagTone(tg)}>{tagLabel(tg, t)}</Badge>
+              ))}
+              {tags.length > (isMobile ? 2 : 4) && (
+                <Badge>+{tags.length - (isMobile ? 2 : 4)}</Badge>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ flexShrink: 0, textAlign: "center", minWidth: isMobile ? 56 : 72 }}>
+          <div style={{
+            fontFamily: FONT_MONO,
+            fontSize: isMobile ? 20 : 26,
+            fontWeight: 700,
+            color: scoreColor(score, scoreMax),
+            lineHeight: 1,
+          }}>
+            {!hasScore ? "—"
+              : isExamSort ? `${score} / ${scoreMax}`
+              : score.toFixed(1)}
+          </div>
+          <div style={{
+            fontSize: 10, color: C.dim, marginTop: 4,
+            letterSpacing: "0.5px", textTransform: "uppercase",
+          }}>
+            {!hasScore ? t("rec.candidates.no_score_short")
+              : isExamSort ? t("rec.candidates.exam_label")
+              : t("rec.candidates.avg_label")}
+          </div>
+          {hasRange && (
+            <div style={{ fontSize: 10, color: C.dimmer, marginTop: 2, fontFamily: FONT_MONO }}>
+              {minScore}–{maxScore}
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          flexShrink: 0,
+          color: C.dim,
+          fontSize: 12,
+          transform: expanded ? "rotate(90deg)" : "none",
+          transition: "transform 120ms",
+        }}>▶</div>
+      </button>
+
+      {expanded && (
+        <div style={{
+          borderTop: `1px solid ${C.border}`,
+          padding: isMobile ? "12px" : "14px 16px",
+        }}>
+          <div style={{ ...S.label, marginBottom: 10 }}>
+            {interviewCount === 1
+              ? t("rec.candidates.one_interview")
+              : t("rec.candidates.n_interviews", { n: interviewCount })}
+            {scoredCount < interviewCount && (
+              <span style={{ color: C.dimmer, fontWeight: 400 }}>
+                {" "}· {t("rec.candidates.unscored", { n: interviewCount - scoredCount })}
+              </span>
+            )}
+          </div>
+          {row.interviews.length === 0 && (
+            <div style={{ color: C.dim, fontSize: 13 }}>
+              {t("rec.candidates.no_interviews_yet")}
+            </div>
+          )}
+          {row.interviews.map((iv) => (
+            <InterviewBreakdown key={iv.id} interview={iv} />
+          ))}
+          <div style={{ marginTop: 14 }}>
+            <Btn small onClick={onOpen}>{t("rec.candidates.open_detail")} →</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InterviewBreakdown({ interview }) {
+  const { t } = useI18n();
+  const interviewer = interview.interviewer;
+  return (
+    <div style={{
+      padding: "10px 0",
+      borderBottom: `1px solid ${C.border}`,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+        marginBottom: interview.tags?.length || interview.notes ? 8 : 0,
+        flexWrap: "wrap",
+      }}>
+        <span style={{
+          fontFamily: FONT_MONO, fontSize: 13, color: C.bright,
+          fontWeight: 600, letterSpacing: "0.5px",
+        }}>
+          {interviewer?.callsign || "—"}
+        </span>
+        {interviewer?.full_name && (
+          <span style={{ fontSize: 12, color: C.dim }}>{interviewer.full_name}</span>
+        )}
+        <div style={{ flex: 1 }} />
+        {interview.score != null && (
+          <Badge tone={scoreToneBadge(interview.score)}>
+            {interview.score} / 10
+          </Badge>
+        )}
+      </div>
+      {interview.tags && interview.tags.length > 0 && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+          {interview.tags.map((tg, i) => (
+            <Badge key={i} tone={tagTone(tg)}>{tagLabel(tg, t)}</Badge>
+          ))}
+        </div>
+      )}
+      {interview.notes && (
+        <div style={{
+          fontSize: 13, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap",
+        }}>{interview.notes}</div>
+      )}
+    </div>
+  );
+}
+
+// Score-to-colour mapping. `max` is the score scale (10 for interviews,
+// total for exam) — we colour by percentage so an 8/17 exam reads "low"
+// the same way a 2/10 interview does.
+function scoreColor(score, max) {
+  if (score == null) return C.dim;
+  const pct = max ? score / max : score / 10;
+  if (pct >= 0.8) return C.ok;
+  if (pct >= 0.5) return C.bright;
+  return C.warn;
+}
+
+function scoreToneBadge(score) {
+  if (score == null) return "default";
+  if (score >= 8) return "ok";
+  if (score >= 5) return "bright";
+  return "warn";
+}
 
 function CandidateDetail({ candidateId, onBack }) {
   const { t } = useI18n();
@@ -386,6 +672,11 @@ function CandidateDetail({ candidateId, onBack }) {
         currentUserId={profile?.id}
         currentUserCallsign={profile?.callsign}
         onSaved={refresh}
+      />
+
+      <CycleLinksPanel
+        cycle={cycle}
+        onCopy={(url) => copyExamUrl(url)}
       />
 
       <ExamPanel
@@ -688,6 +979,43 @@ function ResponseRow({ question, response }) {
 }
 
 // ── Exam panel ─────────────────────────────────────────────────────
+
+// ── Cycle links panel — surfaces the shared survey URL on this
+// candidate's page so admins don't have to navigate back to Cycles. ─
+
+function CycleLinksPanel({ cycle, onCopy }) {
+  const { t } = useI18n();
+  const surveyUrl = surveyUrlForCycle(cycle);
+  if (!surveyUrl) {
+    return (
+      <Panel title={t("rec.candidate.cycle_links")}>
+        <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6 }}>
+          {t("rec.candidate.no_survey_url")}
+        </div>
+      </Panel>
+    );
+  }
+  return (
+    <Panel title={t("rec.candidate.cycle_links")}>
+      <div style={{
+        color: C.dim, fontSize: 12, marginBottom: 6,
+        letterSpacing: "0.5px", textTransform: "uppercase",
+      }}>
+        {t("rec.candidate.shared_survey_url")}
+      </div>
+      <div style={{
+        fontFamily: FONT_MONO, fontSize: 12,
+        padding: "10px 12px", background: C.cardBg,
+        border: `1px solid ${C.border}`, borderRadius: 3,
+        wordBreak: "break-all", color: C.text, lineHeight: 1.5,
+        marginBottom: 12,
+      }}>{surveyUrl}</div>
+      <Btn small onClick={() => onCopy(surveyUrl)}>
+        {t("rec.candidate.copy_survey_url")}
+      </Btn>
+    </Panel>
+  );
+}
 
 function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl }) {
   const { t } = useI18n();

@@ -175,6 +175,20 @@ const EN = {
 
   // Candidates list + detail (Phase C3)
   "rec.candidates.cycle": "Cycle",
+  "rec.candidates.sort": "Sort by",
+  "rec.candidates.sort.newest": "Newest",
+  "rec.candidates.sort.name": "Name (A–Z)",
+  "rec.candidates.sort.personal_id": "Personal ID",
+  "rec.candidates.sort.interview_score": "Interview score",
+  "rec.candidates.sort.exam_score": "Exam score",
+  "rec.candidates.avg_label": "avg",
+  "rec.candidates.exam_label": "exam",
+  "rec.candidates.no_score_short": "no score",
+  "rec.candidates.one_interview": "1 interview",
+  "rec.candidates.n_interviews": "{n} interviews",
+  "rec.candidates.unscored": "{n} without a score",
+  "rec.candidates.no_interviews_yet": "No interviews recorded yet.",
+  "rec.candidates.open_detail": "Open candidate",
   "rec.candidates.search": "Search",
   "rec.candidates.search_ph": "Name or personal ID",
   "rec.candidates.team": "Team",
@@ -208,6 +222,13 @@ const EN = {
   "rec.candidate.mark_accepted": "Mark accepted",
   "rec.candidate.mark_rejected": "Mark rejected",
   "rec.candidate.status_updated": "Status updated.",
+
+  // Cycle links panel on candidate detail (shared survey URL surfaced
+  // here so admins don't have to navigate back to Cycles).
+  "rec.candidate.cycle_links": "Cycle links",
+  "rec.candidate.shared_survey_url": "Shared survey URL (for all candidates of this cycle)",
+  "rec.candidate.copy_survey_url": "Copy survey URL",
+  "rec.candidate.no_survey_url": "This cycle has no access token yet — begin the cycle to generate the survey URL.",
 
   // Exam panel on candidate detail
   "rec.candidate.exam": "Exam",
@@ -854,6 +875,20 @@ const HE = {
 
   // Candidates list + detail (Phase C3)
   "rec.candidates.cycle": "מחזור",
+  "rec.candidates.sort": "מיון לפי",
+  "rec.candidates.sort.newest": "חדש ביותר",
+  "rec.candidates.sort.name": "שם (א-ת)",
+  "rec.candidates.sort.personal_id": "מספר אישי",
+  "rec.candidates.sort.interview_score": "ציון ראיון",
+  "rec.candidates.sort.exam_score": "ציון מבחן",
+  "rec.candidates.avg_label": "ממוצע",
+  "rec.candidates.exam_label": "מבחן",
+  "rec.candidates.no_score_short": "אין ציון",
+  "rec.candidates.one_interview": "ראיון אחד",
+  "rec.candidates.n_interviews": "{n} ראיונות",
+  "rec.candidates.unscored": "{n} ללא ציון",
+  "rec.candidates.no_interviews_yet": "טרם תועדו ראיונות.",
+  "rec.candidates.open_detail": "פתח כרטיס מועמד",
   "rec.candidates.search": "חיפוש",
   "rec.candidates.search_ph": "שם או מספר אישי",
   "rec.candidates.team": "צוות",
@@ -887,6 +922,12 @@ const HE = {
   "rec.candidate.mark_accepted": "סמן כהתקבל",
   "rec.candidate.mark_rejected": "סמן כנפסל",
   "rec.candidate.status_updated": "הסטטוס עודכן.",
+
+  // Cycle links panel on candidate detail
+  "rec.candidate.cycle_links": "קישורי מחזור",
+  "rec.candidate.shared_survey_url": "כתובת השאלון המשותפת (לכל מועמדי המחזור)",
+  "rec.candidate.copy_survey_url": "העתק כתובת שאלון",
+  "rec.candidate.no_survey_url": "למחזור אין עדיין access token — פתח את המחזור כדי לייצר את כתובת השאלון.",
 
   // Exam panel on candidate detail
   "rec.candidate.exam": "מבחן",

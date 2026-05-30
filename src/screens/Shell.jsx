@@ -17,8 +17,6 @@ import Knowledge from "./Knowledge";
 import CourseProgress from "./CourseProgress";
 import Cycles from "./recruitment/Cycles";
 import Candidates from "./recruitment/Candidates";
-import Evaluations from "./recruitment/Evaluations";
-import Documents from "./recruitment/Documents";
 
 // Knowledge tab icon (kept identical to its prior inline form).
 const KnowledgeIcon = (
@@ -67,8 +65,6 @@ export default function Shell() {
       const recTabs = [
         { key: "cycles",      label: t("nav.cycles"),      icon: "◇" },
         { key: "candidates",  label: t("nav.candidates"),  icon: "◍" },
-        { key: "evaluations", label: t("nav.evaluations"), icon: "✓" },
-        { key: "documents",   label: t("nav.documents"),   icon: "▦" },
       ];
       recTabs.push({ key: "profile", label: t("nav.profile"), icon: "◍" });
       return recTabs;
@@ -253,8 +249,6 @@ export default function Shell() {
     if (consoleMode === "recruitment") {
       if (view === "cycles")      return <Cycles />;
       if (view === "candidates")  return <Candidates />;
-      if (view === "evaluations") return <Evaluations />;
-      if (view === "documents")   return <Documents />;
       return null;
     }
 

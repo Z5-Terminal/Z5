@@ -206,11 +206,12 @@ export async function updateCandidate(id, patch) {
     .single();
 }
 
-// Aggregate every candidate in a cycle with their interview results:
-// average score, scored count, min/max range, the union of tags (with
-// frequency), and the per-interviewer breakdown. Used by the
-// Evaluations screen to rank candidates by interview score.
-export async function getCycleEvaluations(cycleId) {
+// Aggregate every candidate in a cycle with their interview + exam
+// results: avg interview score, scored count, min/max range, union of
+// tags (with frequency), per-interviewer breakdown, and exam attempt
+// (if any). The Candidates screen uses this for both its team-grouped
+// layout and its score-ranked leaderboard layout.
+export async function getCandidatesEnriched(cycleId) {
   const { data: candidates, error: cErr } = await supabase
     .from("candidates")
     .select("*")
@@ -219,14 +220,24 @@ export async function getCycleEvaluations(cycleId) {
   if (!candidates || candidates.length === 0) return { data: [] };
 
   const candidateIds = candidates.map((c) => c.id);
-  const { data: interviews, error: iErr } = await supabase
-    .from("candidate_interviews")
-    .select("*")
-    .in("candidate_id", candidateIds);
-  if (iErr) return { error: iErr };
+  const [interviewsRes, examsRes] = await Promise.all([
+    supabase
+      .from("candidate_interviews")
+      .select("*")
+      .in("candidate_id", candidateIds),
+    supabase
+      .from("exam_attempts")
+      .select("*")
+      .in("candidate_id", candidateIds),
+  ]);
+  if (interviewsRes.error) return { error: interviewsRes.error };
+  if (examsRes.error)      return { error: examsRes.error };
+
+  const interviews = interviewsRes.data || [];
+  const exams      = examsRes.data || [];
 
   // Resolve interviewer profiles for the drill-down view.
-  const interviewerIds = [...new Set((interviews || []).map((i) => i.interviewer_id))];
+  const interviewerIds = [...new Set(interviews.map((i) => i.interviewer_id))];
   let profsById = new Map();
   if (interviewerIds.length > 0) {
     const { data: profs } = await supabase
@@ -236,25 +247,26 @@ export async function getCycleEvaluations(cycleId) {
     profsById = new Map((profs || []).map((p) => [p.id, p]));
   }
 
-  // Group interviews by candidate.
-  const byCandidate = new Map();
-  for (const iv of interviews || []) {
-    if (!byCandidate.has(iv.candidate_id)) byCandidate.set(iv.candidate_id, []);
-    byCandidate.get(iv.candidate_id).push({
+  // Group interviews and exams by candidate.
+  const interviewsByCand = new Map();
+  for (const iv of interviews) {
+    if (!interviewsByCand.has(iv.candidate_id)) interviewsByCand.set(iv.candidate_id, []);
+    interviewsByCand.get(iv.candidate_id).push({
       ...iv,
       interviewer: profsById.get(iv.interviewer_id) || null,
     });
   }
+  const examByCand = new Map();
+  for (const ex of exams) examByCand.set(ex.candidate_id, ex);
 
   const rows = candidates.map((candidate) => {
-    const ivs = byCandidate.get(candidate.id) || [];
+    const ivs = interviewsByCand.get(candidate.id) || [];
     const scored = ivs.filter((i) => i.score != null);
     const scores = scored.map((i) => i.score);
     const avgScore = scores.length
       ? scores.reduce((a, b) => a + b, 0) / scores.length
       : null;
 
-    // Tag frequency across all of this candidate's interviews.
     const tagCounts = {};
     for (const iv of ivs) {
       for (const tag of iv.tags || []) {
@@ -272,6 +284,7 @@ export async function getCycleEvaluations(cycleId) {
       maxScore: scores.length ? Math.max(...scores) : null,
       tags: Object.keys(tagCounts),
       tagCounts,
+      examAttempt: examByCand.get(candidate.id) || null,
     };
   });
 
