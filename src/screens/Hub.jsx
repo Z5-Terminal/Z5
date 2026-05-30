@@ -17,11 +17,15 @@ import { useIsMobile } from "../useIsMobile";
 import { Page } from "../ui";
 import { C, FONT, FONT_MONO } from "../theme";
 
-function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, isLight }) {
+function ConsoleRow({ iconSrc, name, tagline, enabled, comingSoon, noAccessLabel, comingSoonLabel, onSelect, isLight }) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
   const [focus, setFocus] = useState(false);
   const [pressed, setPressed] = useState(false);
+
+  // "Locked" subsumes both feature-not-ready ("Coming soon") and
+  // user-has-no-access. Either state blocks the click and dims the row.
+  const locked = comingSoon || !enabled;
 
   // Background fill is driven by hover + pressed only. Focus is
   // intentionally NOT in the lit predicate: on desktop browsers
@@ -29,7 +33,7 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
   // leave the row stuck grey after the user moved their mouse away.
   // The keyboard focus-ring still draws via boxShadow below, so a11y
   // is preserved.
-  const lit = enabled && (hover || pressed);
+  const lit = !locked && (hover || pressed);
   const TRANS = "background 220ms ease-out, border-color 220ms ease-out, transform 160ms ease-out, box-shadow 220ms ease-out";
 
   // Skip hover state on touch — iOS Safari leaves the row in a sticky
@@ -42,7 +46,7 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
   // tap feedback actually paints. Also blur the button after the
   // click so the focus ring doesn't persist on desktop click.
   const handleClick = (e) => {
-    if (!enabled) return;
+    if (locked) return;
     setPressed(true);
     if (e && e.currentTarget && typeof e.currentTarget.blur === "function") {
       e.currentTarget.blur();
@@ -61,7 +65,7 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
       onPointerCancel={() => setPressed(false)}
       onFocus={() => setFocus(true)}
       onBlur={() => setFocus(false)}
-      disabled={!enabled}
+      disabled={locked}
       aria-label={name}
       style={{
         width: "100%",
@@ -71,13 +75,13 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
         color: C.text,
         border: `1px solid ${lit ? C.borderBright : C.border}`,
         borderLeftWidth: lit ? 4 : 3,
-        borderLeftColor: enabled ? C.bright : C.borderBright,
+        borderLeftColor: locked ? C.borderBright : C.bright,
         borderRadius: 0,
         padding: 0,
         fontFamily: FONT,
-        cursor: enabled ? "pointer" : "not-allowed",
+        cursor: locked ? "not-allowed" : "pointer",
         textAlign: "left",
-        opacity: enabled ? 1 : 0.5,
+        opacity: locked ? 0.5 : 1,
         minHeight: isMobile ? 92 : 108,
         transition: TRANS,
         transform: pressed ? "scale(0.99)" : "scale(1)",
@@ -100,7 +104,7 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
             width: isMobile ? 48 : 72,
             height: isMobile ? 48 : 72,
             objectFit: "contain",
-            opacity: enabled ? 0.92 : 0.4,
+            opacity: locked ? 0.4 : 0.92,
             // Icons are pre-baked as white silhouettes with a real
             // alpha channel. Dark mode shows them as-is. Light mode
             // uses brightness(0) to recolor the white silhouette to
@@ -123,7 +127,7 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
         <div style={{
           fontSize: isMobile ? 13 : 16,
           fontWeight: 700,
-          color: enabled ? C.bright : C.dim,
+          color: locked ? C.dim : C.bright,
           letterSpacing: "2.5px",
           textTransform: "uppercase",
         }}>
@@ -131,14 +135,26 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
         </div>
         <div style={{
           fontSize: isMobile ? 12 : 13,
-          color: enabled ? C.text : C.dim,
-          opacity: enabled ? 0.78 : 1,
+          color: locked ? C.dim : C.text,
+          opacity: locked ? 1 : 0.78,
           letterSpacing: "0.2px",
           lineHeight: 1.45,
         }}>
           {tagline}
         </div>
-        {!enabled && (
+        {comingSoon && (
+          <div style={{
+            fontSize: 10,
+            color: C.dim,
+            letterSpacing: "1.5px",
+            marginTop: 2,
+            textTransform: "uppercase",
+            fontWeight: 600,
+          }}>
+            {comingSoonLabel}
+          </div>
+        )}
+        {!comingSoon && !enabled && (
           <div style={{
             fontSize: 10,
             color: C.warn,
@@ -159,8 +175,8 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, noAccessLabel, onSelect, 
         justifyContent: "center",
         width: isMobile ? 44 : 60,
         fontSize: 24,
-        color: lit ? C.bright : (enabled ? C.text : C.dim),
-        opacity: enabled ? (lit ? 1 : 0.6) : 1,
+        color: lit ? C.bright : (locked ? C.dim : C.text),
+        opacity: locked ? 1 : (lit ? 1 : 0.6),
         transform: lit ? "translateX(4px)" : "translateX(0)",
         transition: "color 220ms ease-out, transform 220ms ease-out, opacity 220ms ease-out",
       }}>
@@ -178,6 +194,12 @@ export default function Hub() {
   const isMobile = useIsMobile();
   const isLight = mode === "light";
 
+  // Consoles locked for everyone regardless of role. The banner still
+  // renders so users can see what's planned, but it's unclickable and
+  // shows a "Coming soon" label in place of the no-access tag.
+  const LOCKED_CONSOLES = ["bootcamp"];
+  const isLocked = (mode) => LOCKED_CONSOLES.includes(mode);
+
   const banners = [
     {
       mode: "terminal",
@@ -185,6 +207,7 @@ export default function Hub() {
       name: t("console.terminal"),
       tagline: t("hub.tagline.terminal"),
       enabled: availableConsoles.terminal,
+      comingSoon: isLocked("terminal"),
     },
     {
       mode: "bootcamp",
@@ -192,6 +215,7 @@ export default function Hub() {
       name: t("console.bootcamp"),
       tagline: t("hub.tagline.bootcamp"),
       enabled: availableConsoles.bootcamp,
+      comingSoon: isLocked("bootcamp"),
     },
     {
       mode: "recruitment",
@@ -199,6 +223,7 @@ export default function Hub() {
       name: t("console.recruitment"),
       tagline: t("hub.tagline.recruitment"),
       enabled: availableConsoles.recruitment,
+      comingSoon: isLocked("recruitment"),
     },
   ];
 
@@ -288,6 +313,7 @@ export default function Hub() {
                   tagline={b.tagline}
                   enabled={b.enabled}
                   noAccessLabel={t("console.noaccess")}
+                  comingSoonLabel={t("console.coming_soon")}
                   onSelect={() => setConsoleMode(b.mode)}
                   isLight={isLight}
                 />
