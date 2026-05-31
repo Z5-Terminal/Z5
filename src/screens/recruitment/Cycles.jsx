@@ -369,45 +369,48 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
         <OkLine>{ok}</OkLine>
       </Panel>
 
-      {!isClosed && !isDraft && (
-        <Panel title={t("rec.cycles.lifecycle")}>
-          <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>
-            {t(`rec.cycles.status_help.${cycle.status}`)}
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {cycle.status === "open" && (
-              <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
-                → {t("rec.cycle_status.interviewing")}
-              </Btn>
-            )}
-            {cycle.status === "interviewing" && (
-              <>
-                <Btn small onClick={() => handleStatus("open")} disabled={busy}>
-                  ← {t("rec.cycle_status.open")}
+      <Panel title={t("rec.cycles.lifecycle")}>
+        <CycleStageStepper currentStatus={cycle.status} />
+        {!isClosed && !isDraft && (
+          <>
+            <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6, marginTop: 22, marginBottom: 14 }}>
+              {t(`rec.cycles.status_help.${cycle.status}`)}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {cycle.status === "open" && (
+                <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
+                  → {t("rec.cycle_status.interviewing")}
                 </Btn>
-                <Btn small onClick={() => handleStatus("exam")} disabled={busy}>
-                  → {t("rec.cycle_status.exam")}
+              )}
+              {cycle.status === "interviewing" && (
+                <>
+                  <Btn small onClick={() => handleStatus("open")} disabled={busy}>
+                    ← {t("rec.cycle_status.open")}
+                  </Btn>
+                  <Btn small onClick={() => handleStatus("exam")} disabled={busy}>
+                    → {t("rec.cycle_status.exam")}
+                  </Btn>
+                </>
+              )}
+              {cycle.status === "exam" && (
+                <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
+                  ← {t("rec.cycle_status.interviewing")}
                 </Btn>
-              </>
-            )}
-            {cycle.status === "exam" && (
-              <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
-                ← {t("rec.cycle_status.interviewing")}
-              </Btn>
-            )}
-            {confirmClose ? (
-              <>
-                <Btn small onClick={handleClose} disabled={busy}>
-                  {t("rec.cycles.close_confirm")}
-                </Btn>
-                <Btn small onClick={() => setConfirmClose(false)}>✕</Btn>
-              </>
-            ) : (
-              <Btn small onClick={() => setConfirmClose(true)}>{t("rec.cycles.close")}</Btn>
-            )}
-          </div>
-        </Panel>
-      )}
+              )}
+              {confirmClose ? (
+                <>
+                  <Btn small onClick={handleClose} disabled={busy}>
+                    {t("rec.cycles.close_confirm")}
+                  </Btn>
+                  <Btn small onClick={() => setConfirmClose(false)}>✕</Btn>
+                </>
+              ) : (
+                <Btn small onClick={() => setConfirmClose(true)}>{t("rec.cycles.close")}</Btn>
+              )}
+            </div>
+          </>
+        )}
+      </Panel>
 
       <Panel title={t("rec.cycles.questions")}>
         <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
@@ -443,6 +446,176 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
         )}
       </Panel>
     </>
+  );
+}
+
+// ── Cycle stage stepper ────────────────────────────────────────────
+// Horizontal on desktop, vertical on mobile. Five fixed stages, the
+// current one rendered in C.ok (green) with a faint glow ring; past
+// stages as solid dim circles with active connectors; future stages
+// as hollow outlined circles with faint connectors.
+
+const CYCLE_STAGES = ["draft", "open", "interviewing", "exam", "closed"];
+
+function CycleStageStepper({ currentStatus }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const currentIndex = CYCLE_STAGES.indexOf(currentStatus);
+
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {CYCLE_STAGES.map((stage, i) => (
+          <StageRowVert
+            key={stage}
+            stage={stage}
+            state={stageState(i, currentIndex)}
+            isLast={i === CYCLE_STAGES.length - 1}
+            t={t}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch" }}>
+      {CYCLE_STAGES.map((stage, i) => (
+        <StageCellHorz
+          key={stage}
+          stage={stage}
+          state={stageState(i, currentIndex)}
+          isFirst={i === 0}
+          isLast={i === CYCLE_STAGES.length - 1}
+          t={t}
+        />
+      ))}
+    </div>
+  );
+}
+
+function stageState(i, currentIndex) {
+  if (currentIndex < 0) return "future";
+  if (i < currentIndex)  return "past";
+  if (i === currentIndex) return "current";
+  return "future";
+}
+
+function StageCellHorz({ stage, state, isFirst, isLast, t }) {
+  // Left half-line is the segment FROM the previous stage; it's "active"
+  // (filled past colour) once we've left the previous stage — i.e., any
+  // time this stage is past or current.
+  const lineLeftActive  = !isFirst && (state === "past" || state === "current");
+  // Right half-line is the segment OUT of this stage; active only after
+  // we've moved past it.
+  const lineRightActive = !isLast  && state === "past";
+
+  const dotSize = state === "current" ? 14 : 10;
+  const dotBg = state === "current" ? C.ok
+              : state === "past"    ? C.dim
+              : "transparent";
+  const dotBorder = state === "future" ? `2px solid ${C.dimmer}` : "none";
+  const labelColor = state === "current" ? C.ok
+                  : state === "past"    ? C.dim
+                  : C.dimmer;
+
+  return (
+    <div style={{
+      flex: 1,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      minWidth: 0,
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", width: "100%", height: 18,
+      }}>
+        <div style={{
+          flex: 1, height: 2,
+          background: isFirst ? "transparent"
+                     : lineLeftActive ? C.dim : C.border,
+        }} />
+        <div style={{
+          width: dotSize, height: dotSize,
+          borderRadius: "50%",
+          background: dotBg,
+          border: dotBorder,
+          boxShadow: state === "current" ? `0 0 0 4px ${C.okBg}` : "none",
+          margin: "0 6px",
+          flexShrink: 0,
+          transition: "box-shadow 220ms ease-out",
+        }} />
+        <div style={{
+          flex: 1, height: 2,
+          background: isLast ? "transparent"
+                    : lineRightActive ? C.dim : C.border,
+        }} />
+      </div>
+      <div style={{
+        marginTop: 10,
+        fontSize: 11,
+        color: labelColor,
+        fontFamily: FONT_MONO,
+        letterSpacing: "1px",
+        textTransform: "uppercase",
+        fontWeight: state === "current" ? 700 : 500,
+        textAlign: "center",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        width: "100%",
+      }}>
+        {t(`rec.cycle_status.${stage}`)}
+      </div>
+    </div>
+  );
+}
+
+function StageRowVert({ stage, state, isLast, t }) {
+  const dotSize = state === "current" ? 14 : 10;
+  const dotBg = state === "current" ? C.ok
+              : state === "past"    ? C.dim
+              : "transparent";
+  const dotBorder = state === "future" ? `2px solid ${C.dimmer}` : "none";
+  const labelColor = state === "current" ? C.ok
+                  : state === "past"    ? C.dim
+                  : C.dimmer;
+  const connectorColor = state === "past" ? C.dim : C.border;
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", gap: 12 }}>
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        width: 18, flexShrink: 0,
+      }}>
+        <div style={{ height: 4 }} />
+        <div style={{
+          width: dotSize, height: dotSize,
+          borderRadius: "50%",
+          background: dotBg,
+          border: dotBorder,
+          boxShadow: state === "current" ? `0 0 0 4px ${C.okBg}` : "none",
+        }} />
+        {!isLast && (
+          <div style={{
+            width: 2, flex: 1, background: connectorColor, marginTop: 4,
+          }} />
+        )}
+      </div>
+      <div style={{
+        flex: 1,
+        paddingBottom: isLast ? 0 : 12,
+        fontSize: 13,
+        color: labelColor,
+        fontFamily: FONT_MONO,
+        letterSpacing: "0.8px",
+        textTransform: "uppercase",
+        fontWeight: state === "current" ? 700 : 500,
+        lineHeight: 1.4,
+      }}>
+        {t(`rec.cycle_status.${stage}`)}
+      </div>
+    </div>
   );
 }
 
