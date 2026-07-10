@@ -291,6 +291,56 @@ export async function getCandidatesEnriched(cycleId) {
   return { data: rows };
 }
 
+// ── Phase C5: combined score + promote-to-bootcamp bridge ──────────
+
+// Combined screening score 0-100: 50% interview average (1-10 scale),
+// 50% exam percentage. Null until BOTH components exist — a candidate
+// with only one signal shouldn't outrank one with two.
+export function combinedScore(row) {
+  const iv = row?.avgScore;
+  const ex = row?.examAttempt;
+  if (iv == null || ex?.score == null || !ex?.total || !ex?.finished_at) return null;
+  return Math.round(iv * 10 * 0.5 + (ex.score / ex.total) * 100 * 0.5);
+}
+
+export async function listBootcampSquads() {
+  return supabase
+    .from("squads")
+    .select("id, name, status")
+    .eq("is_bootcamp", true)
+    .order("name");
+}
+
+function inviteCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s = "Z5-";
+  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  s += "-";
+  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return s;
+}
+
+// Bridge an accepted candidate into a bootcamp squad: mints a sniper
+// invite scoped to that squad and stamps the candidate row with the
+// promotion, so the invite code can be handed to the candidate.
+export async function promoteCandidate(candidateId, squadId) {
+  const code = inviteCode();
+  const { error: invErr } = await supabase
+    .from("invites")
+    .insert({ code, squad_id: squadId, role: "sniper" });
+  if (invErr) return { error: invErr };
+  return supabase
+    .from("candidates")
+    .update({
+      promoted_squad_id: squadId,
+      promoted_at: new Date().toISOString(),
+      promote_invite_code: code,
+    })
+    .eq("id", candidateId)
+    .select()
+    .single();
+}
+
 // ── URL helpers ────────────────────────────────────────────────────
 
 // Build the absolute candidate-facing survey URL for a cycle. Hash-routed

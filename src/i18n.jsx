@@ -182,6 +182,10 @@ const EN = {
   "rec.candidates.sort.personal_id": "Personal ID",
   "rec.candidates.sort.interview_score": "Interview score",
   "rec.candidates.sort.exam_score": "Exam score",
+  "rec.candidates.sort.combined_score": "Combined score",
+  "rec.candidates.combined_label": "combined",
+  "rec.candidates.min_combined": "Min combined score (0–100)",
+  "rec.candidates.min_combined_ph": "e.g. 70",
   "rec.candidates.avg_label": "avg",
   "rec.candidates.exam_label": "exam",
   "rec.candidates.no_score_short": "no score",
@@ -224,6 +228,18 @@ const EN = {
   "rec.candidate.mark_accepted": "Mark accepted",
   "rec.candidate.mark_rejected": "Mark rejected",
   "rec.candidate.status_updated": "Status updated.",
+
+  // Promote-to-bootcamp bridge (Phase C5)
+  "rec.candidate.promote_title": "Boot camp bridge",
+  "rec.candidate.promote_squad": "Target boot camp squad",
+  "rec.candidate.promote_action": "Promote to boot camp",
+  "rec.candidate.promote_hint": "Mints a squad-scoped sniper invite code and stamps the promotion on this candidate. Hand the code to the candidate — registering with it places them directly in the boot camp squad.",
+  "rec.candidate.promote_done_hint": "Give this invite code to the candidate. Registering with it places them in the boot camp squad.",
+  "rec.candidate.promoted": "Promoted",
+  "rec.candidate.promoted_squad": "Boot camp squad",
+  "rec.candidate.copy_invite": "Copy code",
+  "rec.candidate.invite_copied": "Invite code copied.",
+  "rec.candidate.no_bootcamp_squads": "No boot camp squads exist yet. Create one in the Roster tab and mark it as a boot camp squad.",
 
   // Cycle links panel on candidate detail (shared survey URL surfaced
   // here so admins don't have to navigate back to Cycles).
@@ -884,6 +900,10 @@ const HE = {
   "rec.candidates.sort.personal_id": "מספר אישי",
   "rec.candidates.sort.interview_score": "ציון ראיון",
   "rec.candidates.sort.exam_score": "ציון מבחן",
+  "rec.candidates.sort.combined_score": "ציון משוקלל",
+  "rec.candidates.combined_label": "משוקלל",
+  "rec.candidates.min_combined": "ציון משוקלל מינימלי (0–100)",
+  "rec.candidates.min_combined_ph": "לדוגמה 70",
   "rec.candidates.avg_label": "ממוצע",
   "rec.candidates.exam_label": "מבחן",
   "rec.candidates.no_score_short": "אין ציון",
@@ -926,6 +946,18 @@ const HE = {
   "rec.candidate.mark_accepted": "סמן כהתקבל",
   "rec.candidate.mark_rejected": "סמן כנפסל",
   "rec.candidate.status_updated": "הסטטוס עודכן.",
+
+  // Promote-to-bootcamp bridge (Phase C5)
+  "rec.candidate.promote_title": "מעבר לקורס צלפים",
+  "rec.candidate.promote_squad": "צוות יעד בקורס",
+  "rec.candidate.promote_action": "קדם לקורס צלפים",
+  "rec.candidate.promote_hint": "יוצר קוד הזמנה ייעודי לצוות ומתעד את הקידום על המועמד. מסרו את הקוד למועמד — הרשמה איתו מציבה אותו ישירות בצוות הקורס.",
+  "rec.candidate.promote_done_hint": "מסרו את קוד ההזמנה למועמד. הרשמה עם הקוד מציבה אותו בצוות הקורס.",
+  "rec.candidate.promoted": "קודם",
+  "rec.candidate.promoted_squad": "צוות קורס",
+  "rec.candidate.copy_invite": "העתק קוד",
+  "rec.candidate.invite_copied": "קוד ההזמנה הועתק.",
+  "rec.candidate.no_bootcamp_squads": "עדיין לא קיימים צוותי קורס. צרו צוות בלשונית הסגל וסמנו אותו כצוות קורס.",
 
   // Cycle links panel on candidate detail
   "rec.candidate.cycle_links": "קישורי מחזור",

@@ -15,6 +15,7 @@ import { C, S, FONT_MONO } from "../../theme";
 import {
   listCycles, getCandidatesEnriched, getCandidateWithDetails, updateCandidate,
   getCandidateExam, examUrlFor, surveyUrlForCycle,
+  combinedScore, listBootcampSquads, promoteCandidate,
 } from "../../data/recruitment";
 import {
   listCandidateInterviews, upsertInterview,
@@ -37,7 +38,7 @@ const STATUSES = [
   "accepted",
   "rejected",
 ];
-const SORTS = ["newest", "name", "personal_id", "interview_score", "exam_score"];
+const SORTS = ["newest", "name", "personal_id", "interview_score", "exam_score", "combined_score"];
 const SECTION_ORDER = ["identity", "self_assessment", "background", "physical"];
 
 export default function Candidates() {
@@ -70,6 +71,7 @@ function CandidatesList({ onPick }) {
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
+  const [minCombined, setMinCombined] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [expandedId, setExpandedId] = useState(null);
@@ -116,9 +118,14 @@ function CandidatesList({ onPick }) {
         const inId   = (c.personal_id || "").toLowerCase().includes(q);
         if (!inName && !inId) return false;
       }
+      // Combined-score threshold filter (only active on the combined sort).
+      if (sort === "combined_score" && minCombined !== "") {
+        const cs = combinedScore(r);
+        if (cs == null || cs < Number(minCombined)) return false;
+      }
       return true;
     });
-  }, [rows, team, status, search]);
+  }, [rows, team, status, search, sort, minCombined]);
 
   const sorted = useMemo(() => {
     const arr = filtered.slice();
@@ -137,6 +144,9 @@ function CandidatesList({ onPick }) {
       case "exam_score":
         arr.sort((a, b) => (b.examAttempt?.score ?? -1) - (a.examAttempt?.score ?? -1));
         break;
+      case "combined_score":
+        arr.sort((a, b) => (combinedScore(b) ?? -1) - (combinedScore(a) ?? -1));
+        break;
       case "newest":
       default:
         arr.sort((a, b) =>
@@ -146,7 +156,7 @@ function CandidatesList({ onPick }) {
     return arr;
   }, [filtered, sort]);
 
-  const isScoreSort = sort === "interview_score" || sort === "exam_score";
+  const isScoreSort = sort === "interview_score" || sort === "exam_score" || sort === "combined_score";
 
   // Team-grouped layout (for non-score sorts).
   const grouped = useMemo(() => {
@@ -206,6 +216,20 @@ function CandidatesList({ onPick }) {
             ))}
           </select>
         </Field>
+
+        {sort === "combined_score" && (
+          <Field label={t("rec.candidates.min_combined")}>
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              value={minCombined}
+              onChange={(e) => setMinCombined(e.target.value)}
+              placeholder={t("rec.candidates.min_combined_ph")}
+              style={{ maxWidth: 160, fontFamily: FONT_MONO }}
+            />
+          </Field>
+        )}
 
         <div style={{ marginBottom: 12 }}>
           <div style={{ ...S.label }}>{t("rec.candidates.team_filter")}</div>
@@ -541,10 +565,15 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
 
   // Pick which score this sort cares about.
   const isExamSort = sortKey === "exam_score";
-  const score = isExamSort ? (examAttempt?.score ?? null) : avgScore;
-  const scoreMax = isExamSort ? (examAttempt?.total ?? null) : 10;
+  const isCombinedSort = sortKey === "combined_score";
+  const combined = isCombinedSort ? combinedScore(row) : null;
+  const score = isCombinedSort ? combined
+    : isExamSort ? (examAttempt?.score ?? null)
+    : avgScore;
+  const scoreMax = isCombinedSort ? 100 : isExamSort ? (examAttempt?.total ?? null) : 10;
   const hasScore = score != null;
-  const hasRange = !isExamSort && minScore != null && maxScore != null && minScore !== maxScore;
+  const hasRange = !isExamSort && !isCombinedSort
+    && minScore != null && maxScore != null && minScore !== maxScore;
 
   return (
     <div style={{
@@ -626,6 +655,7 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
             lineHeight: 1,
           }}>
             {!hasScore ? "—"
+              : isCombinedSort ? String(score)
               : isExamSort ? `${score} / ${scoreMax}`
               : score.toFixed(1)}
           </div>
@@ -634,6 +664,7 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
             letterSpacing: "0.5px", textTransform: "uppercase",
           }}>
             {!hasScore ? t("rec.candidates.no_score_short")
+              : isCombinedSort ? t("rec.candidates.combined_label")
               : isExamSort ? t("rec.candidates.exam_label")
               : t("rec.candidates.avg_label")}
           </div>
@@ -887,6 +918,11 @@ function CandidateDetail({ candidateId, onBack }) {
         onCopyUrl={copyExamUrl}
       />
 
+      <PromotePanel candidate={candidate} onPromoted={refresh} onFlash={{
+        ok: (m) => flash(setOk, m),
+        err: (m) => setErr(m),
+      }} />
+
       <Panel title={t("rec.candidate.actions")}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {candidate.status === "survey_done" && (
@@ -912,6 +948,113 @@ function CandidateDetail({ candidateId, onBack }) {
         </div>
       </Panel>
     </>
+  );
+}
+
+// ── Promote-to-BootCamp bridge (Phase C5) ──────────────────────────
+// Shown once a candidate is accepted. Bridges recruitment → bootcamp:
+// pick a boot camp squad, mint a squad-scoped sniper invite, and hand
+// the code to the candidate. Read-only summary once promoted.
+
+function PromotePanel({ candidate, onPromoted, onFlash }) {
+  const { t } = useI18n();
+  const [squads, setSquads] = useState([]);
+  const [squadId, setSquadId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    listBootcampSquads().then(({ data }) => {
+      if (cancelled) return;
+      const list = data || [];
+      setSquads(list);
+      if (list.length > 0) setSquadId(list[0].id);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (candidate.status !== "accepted") return null;
+
+  const promotedSquad = squads.find((s) => s.id === candidate.promoted_squad_id);
+
+  async function handlePromote() {
+    if (!squadId || busy) return;
+    setBusy(true); setErr("");
+    const { error } = await promoteCandidate(candidate.id, squadId);
+    setBusy(false);
+    if (error) { setErr(error.message || String(error)); return; }
+    onPromoted();
+  }
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(candidate.promote_invite_code);
+      onFlash.ok(t("rec.candidate.invite_copied"));
+    } catch {
+      onFlash.err(t("rec.cycles.url_copy_failed"));
+    }
+  }
+
+  return (
+    <Panel title={t("rec.candidate.promote_title")}>
+      {candidate.promoted_squad_id ? (
+        <>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            flexWrap: "wrap", marginBottom: 12,
+          }}>
+            <Badge tone="ok">{t("rec.candidate.promoted")}</Badge>
+            <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>
+              {promotedSquad?.name || t("rec.candidate.promoted_squad")}
+            </span>
+            {candidate.promoted_at && (
+              <span style={{ color: C.dimmer, fontSize: 12, fontFamily: FONT_MONO }}>
+                {new Date(candidate.promoted_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          {candidate.promote_invite_code && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{
+                fontFamily: FONT_MONO, fontSize: 16, letterSpacing: "1.5px",
+                color: C.bright, border: `1px solid ${C.borderBright}`,
+                borderRadius: 2, padding: "8px 14px", background: C.inputBg,
+              }}>{candidate.promote_invite_code}</span>
+              <Btn small onClick={copyCode}>{t("rec.candidate.copy_invite")}</Btn>
+            </div>
+          )}
+          <div style={{ color: C.dim, fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+            {t("rec.candidate.promote_done_hint")}
+          </div>
+        </>
+      ) : squads.length === 0 ? (
+        <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6 }}>
+          {t("rec.candidate.no_bootcamp_squads")}
+        </div>
+      ) : (
+        <>
+          <Field label={t("rec.candidate.promote_squad")}>
+            <select
+              value={squadId}
+              onChange={(e) => setSquadId(e.target.value)}
+              style={{ ...S.input, fontSize: 14 }}
+            >
+              {squads.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </Field>
+          <Btn onClick={handlePromote} disabled={busy || !squadId}>
+            {t("rec.candidate.promote_action")}
+          </Btn>
+          <div style={{ color: C.dim, fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+            {t("rec.candidate.promote_hint")}
+          </div>
+          <ErrLine>{err}</ErrLine>
+        </>
+      )}
+    </Panel>
   );
 }
 
