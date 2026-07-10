@@ -270,7 +270,7 @@ export function PageHeader({ title, subtitle, action, hero = true }) {
   const heroSrc = hero && consoleMode
     ? `${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`
     : null;
-  const heroSize = isMobile ? 42 : 52;
+  const heroSize = isMobile ? 52 : 64;
   return (
     <div style={{
       display: "flex",
@@ -289,13 +289,14 @@ export function PageHeader({ title, subtitle, action, hero = true }) {
           style={{
             width: heroSize,
             height: heroSize,
-            borderRadius: 12,
             objectFit: "cover",
             objectPosition: "center 14%",
-            border: `1px solid ${C.border}`,
-            background: "#000",
             flexShrink: 0,
             alignSelf: "center",
+            // No border/box — a soft radial mask fades the edges so the
+            // artwork melts into whatever surface is behind it.
+            WebkitMaskImage: "radial-gradient(circle at center, black 45%, transparent 72%)",
+            maskImage: "radial-gradient(circle at center, black 45%, transparent 72%)",
           }}
         />
       )}
