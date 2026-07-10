@@ -432,7 +432,7 @@ function SoldierIcon() {
   return (
     <svg
       width="16" height="16" viewBox="0 0 16 16" fill="none"
-      style={{ verticalAlign: "middle", marginRight: 8, opacity: 0.8 }}
+      style={{ verticalAlign: "middle", marginInlineEnd: 8, opacity: 0.8 }}
     >
       <circle cx="8" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.2" />
       <path d="M5 3.5 Q8 1.5 11 3.5" stroke="currentColor" strokeWidth="1" fill="none" />
@@ -445,7 +445,7 @@ function ThemeIcon() {
   return (
     <svg
       width="16" height="16" viewBox="0 0 16 16" fill="none"
-      style={{ verticalAlign: "middle", marginRight: 8, opacity: 0.8 }}
+      style={{ verticalAlign: "middle", marginInlineEnd: 8, opacity: 0.8 }}
     >
       <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2" />
       <path d="M8 1.5 A6.5 6.5 0 0 1 8 14.5 Z" fill="currentColor" />
@@ -457,7 +457,7 @@ function LockIcon() {
   return (
     <svg
       width="16" height="16" viewBox="0 0 16 16" fill="none"
-      style={{ verticalAlign: "middle", marginRight: 8, opacity: 0.8 }}
+      style={{ verticalAlign: "middle", marginInlineEnd: 8, opacity: 0.8 }}
     >
       <rect x="3" y="7" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.2" />
       <path d="M5.5 7 V5 Q5.5 2 8 2 Q10.5 2 10.5 5 V7" stroke="currentColor" strokeWidth="1.2" fill="none" />
@@ -470,7 +470,7 @@ function ConsoleIcon() {
   return (
     <svg
       width="16" height="16" viewBox="0 0 16 16" fill="none"
-      style={{ verticalAlign: "middle", marginRight: 8, opacity: 0.8 }}
+      style={{ verticalAlign: "middle", marginInlineEnd: 8, opacity: 0.8 }}
     >
       <rect x="2" y="3" width="12" height="9" rx="1" stroke="currentColor" strokeWidth="1.2" />
       <line x1="5" y1="14" x2="11" y2="14" stroke="currentColor" strokeWidth="1.2" />

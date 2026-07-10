@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth, roleLabel, canCreateInvites } from "../auth";
-import { useI18n } from "../i18n";
+import { useI18n, fmtWhen } from "../i18n";
 import {
   getMission, getMyChecklistState, toggleChecklistItem,
   getMissionReadiness, subscribeMissionRealtime, updateMissionStatus,
@@ -564,7 +564,7 @@ function ProgressBar({ checked, total }) {
           }}>{checked}</span>
           <span style={{ fontFamily: FONT_MONO, fontSize: 15, color: C.dim }}>/{total}</span>
           <span style={{
-            fontSize: 11, color: C.dim, marginLeft: 8,
+            fontSize: 11, color: C.dim, marginInlineStart: 8,
             letterSpacing: "0.8px", textTransform: "uppercase",
           }}>{t("cl.complete")}</span>
         </div>
@@ -701,7 +701,7 @@ function ReadinessRow({ row, isMobile }) {
         </div>
       </div>
       <span style={{
-        fontFamily: FONT_MONO, fontSize: 11, color: C.dim, minWidth: 50, textAlign: "right",
+        fontFamily: FONT_MONO, fontSize: 11, color: C.dim, minWidth: 50, textAlign: "end",
       }}>{row.checked_items}/{row.total_items}</span>
       <Badge tone={ready ? "ok" : pct > 0 ? "warn" : "default"}>
         {ready ? t("cl.ready_label") : t("cl.notready_label")}
@@ -715,12 +715,7 @@ function ReadinessRow({ row, isMobile }) {
 // ═══════════════════════════════════════════════════════════════════
 
 function formatWhen(ts, t) {
-  if (!ts) return t ? t("common.tbd") : "TBD";
-  const d = new Date(ts);
-  return d.toLocaleString([], {
-    month: "short", day: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  }).toUpperCase();
+  return fmtWhen(ts, t);
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth, canCreateInvites, canManageSquads } from "../auth";
-import { useI18n } from "../i18n";
+import { useI18n, fmtWhen } from "../i18n";
 import { listMissions, getMissionReadiness } from "../data/missions";
 import {
   listRecentAnnouncements, subscribeAnnouncements,
@@ -140,7 +140,7 @@ export default function Missions({ onOpenMission, onCreateMission, isBootcamp, s
   return (
     <>
       <PageHeader
-        title={<><span style={{ marginRight: 8 }}>⌖</span>{t("mis.title")}</>}
+        title={<><span style={{ marginInlineEnd: 8 }}>⌖</span>{t("mis.title")}</>}
         subtitle={t("mis.subtitle")}
         action={showCreate && (
           <select
@@ -512,10 +512,5 @@ function AnnouncementRow({ a, canEdit, profileId, onDeleted, onUpdated }) {
 }
 
 function formatWhen(ts) {
-  if (!ts) return "TBD";
-  const d = new Date(ts);
-  return d.toLocaleString([], {
-    month: "short", day: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  }).toUpperCase();
+  return fmtWhen(ts, null) || "—";
 }

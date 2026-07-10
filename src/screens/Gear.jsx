@@ -160,7 +160,7 @@ function RifleIcon() {
         maxWidth: 60,
         width: "auto",
         verticalAlign: "middle",
-        marginRight: 8,
+        marginInlineEnd: 8,
         objectFit: "contain",
       }}
     />

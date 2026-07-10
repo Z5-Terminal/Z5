@@ -20,6 +20,7 @@ const DARK = {
   error:        "#d98a80",
   warn:         "#cfae62",
   ok:           "#8fbf9f",
+  schedule:     "#8aa8bf",
   // Semantic overlay / surface tokens
   overlay:        "rgba(246,244,236,",   // append "0.xx)" in usage
   overlayInverse: "rgba(22,22,19,",
@@ -67,6 +68,7 @@ const LIGHT = {
   error:        "#9c4038",
   warn:         "#8a6c22",
   ok:           "#3d6b50",
+  schedule:     "#41647e",
   // Semantic overlay / surface tokens
   overlay:        "rgba(20,19,16,",
   overlayInverse: "rgba(248,246,240,",
@@ -174,7 +176,7 @@ function buildStyles() {
     },
     table: { width: "100%", borderCollapse: "collapse", marginBottom: 12 },
     th: {
-      textAlign: "left",
+      textAlign: "start",
       color: C.dim,
       borderBottom: `1px solid ${C.border}`,
       padding: "10px 8px",

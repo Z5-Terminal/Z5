@@ -1,12 +1,24 @@
 // Z5 :: Internationalization — EN / HE
-import { createContext, useContext, useState, useCallback } from "react";
+// Hebrew-first: he is the default language and the whole app mirrors
+// to RTL (document.dir follows the active language).
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 const I18nCtx = createContext(null);
 
 const STORAGE_KEY = "z5_lang";
+const DEFAULT_LANG = "he";
 
 function getInitialLang() {
-  try { return localStorage.getItem(STORAGE_KEY) || "en"; } catch { return "en"; }
+  try {
+    // One-time migration to Hebrew-first: earlier builds defaulted to
+    // (and persisted) English. Reset once; toggles persist afterwards.
+    if (!localStorage.getItem("z5_lang_hefirst")) {
+      localStorage.setItem("z5_lang_hefirst", "1");
+      localStorage.setItem(STORAGE_KEY, DEFAULT_LANG);
+      return DEFAULT_LANG;
+    }
+    return localStorage.getItem(STORAGE_KEY) || DEFAULT_LANG;
+  } catch { return DEFAULT_LANG; }
 }
 
 export function I18nProvider({ children }) {
@@ -16,6 +28,14 @@ export function I18nProvider({ children }) {
     setLangState(l);
     try { localStorage.setItem(STORAGE_KEY, l); } catch {}
   }, []);
+
+  // Mirror the whole document for Hebrew. Inline styles use logical
+  // properties (textAlign start/end, marginInline*) so layout follows.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   const t = useCallback((key, params) => {
     const dict = lang === "he" ? HE : EN;
@@ -36,6 +56,20 @@ export function I18nProvider({ children }) {
       {children}
     </I18nCtx.Provider>
   );
+}
+
+// Format a timestamp in the ACTIVE app language. Reads document.lang
+// (kept in sync by I18nProvider), so it is safe to call from
+// module-level helpers without threading `lang` everywhere.
+export function fmtWhen(ts, t, opts) {
+  if (!ts) return t ? t("common.tbd") : "";
+  const lang = (typeof document !== "undefined" && document.documentElement.lang) || "en";
+  const locale = lang === "he" ? "he-IL" : "en-US";
+  const d = ts instanceof Date ? ts : new Date(ts);
+  const s = d.toLocaleString(locale, opts || {
+    month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  return lang === "he" ? s : s.toUpperCase();
 }
 
 export function useI18n() {

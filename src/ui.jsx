@@ -116,7 +116,7 @@ export function AppShell({ sidebar, mobileTopBar, mobileTabBar, children }) {
       <aside style={{
         width: 220,
         flexShrink: 0,
-        borderRight: `1px solid ${C.border}`,
+        borderInlineEnd: `1px solid ${C.border}`,
         padding: "28px 18px",
         background: C.sidebarBg,
         display: "flex",
@@ -166,7 +166,7 @@ export function NavItem({ active, onClick, children }) {
         color: active ? C.bright : C.text,
         border: "none",
         padding: "10px 14px",
-        textAlign: "left",
+        textAlign: "start",
         fontFamily: FONT,
         fontSize: 14,
         fontWeight: active ? 700 : 500,
@@ -254,52 +254,43 @@ export function NavLabel({ children }) {
   );
 }
 
-// Section heading used at the top of each screen.
-// By default the header has an open bottom (no border, top-only rounded
-// corners) so a Panel with connectTop can join it. Pass `standalone`
-// when nothing connects from below so the header closes itself with a
-// full border + full rounded corners.
-// Page header — self-contained card with full borders + rounded corners.
-// The old `standalone` prop is ignored (kept for backward-compat with
-// existing call sites that still pass it) — every header now closes its
-// own bottom border so the next section sits cleanly below.
+// Page header — plain typography, no card chrome. The title sits
+// directly on the page background; only content below lives in cards.
+// (The old bordered-card look created a "double card" stack that read
+// as broken borders.) `standalone` is still accepted as a no-op for
+// backward-compat with older call sites.
 export function PageHeader({ title, subtitle, action }) {
   const isMobile = useIsMobile();
   return (
     <div style={{
       display: "flex",
       justifyContent: "space-between",
-      alignItems: "center",
-      gap: isMobile ? 8 : 12,
+      alignItems: "flex-end",
+      gap: isMobile ? 10 : 16,
+      padding: isMobile ? "2px 2px 4px" : "4px 2px 8px",
       marginBottom: 0,
-      padding: isMobile ? "12px 14px" : "18px 24px",
-      border: `1px solid ${C.border}`,
-      borderRadius: 14,
-      background: C.headerBg,
-      boxShadow: C.shadow,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
           margin: 0,
-          fontSize: isMobile ? 14 : 22,
-          fontWeight: 700,
+          fontSize: isMobile ? 20 : 26,
+          fontWeight: 800,
           color: C.bright,
-          letterSpacing: "0.5px",
-          textTransform: "uppercase",
-          lineHeight: 1.2,
+          letterSpacing: "0.2px",
+          lineHeight: 1.15,
         }}>{title}</h1>
-        {subtitle && !isMobile && (
+        {subtitle && (
           <div style={{
             color: C.dim,
-            fontSize: 13,
-            marginTop: 5,
-            letterSpacing: "0.3px",
+            fontSize: isMobile ? 12.5 : 13.5,
+            marginTop: 4,
+            letterSpacing: "0.2px",
           }}>
             {subtitle}
           </div>
         )}
       </div>
-      {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+      {action && <div style={{ flexShrink: 0, paddingBottom: 2 }}>{action}</div>}
     </div>
   );
 }
@@ -339,7 +330,7 @@ export function Field({ label, children, inline }) {
   return (
     <div style={{
       display: inline && !isMobile ? "inline-block" : "block",
-      marginRight: inline && !isMobile ? 16 : 0,
+      marginInlineEnd: inline && !isMobile ? 16 : 0,
       marginBottom: 16,
       minWidth: inline && !isMobile ? 240 : "auto",
       width: isMobile ? "100%" : "auto",
@@ -526,7 +517,7 @@ export function DataCard({ title, rows, action }) {
           }}>{r.label}</div>
           <div style={{
             color: C.text,
-            textAlign: "right",
+            textAlign: "end",
             overflow: "hidden",
             textOverflow: "ellipsis",
             minWidth: 0,

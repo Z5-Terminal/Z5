@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../auth";
-import { useI18n } from "../../i18n";
+import { useI18n, fmtWhen } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
@@ -1010,7 +1010,7 @@ function PromotePanel({ candidate, onPromoted, onFlash }) {
             </span>
             {candidate.promoted_at && (
               <span style={{ color: C.dimmer, fontSize: 12, fontFamily: FONT_MONO }}>
-                {new Date(candidate.promoted_at).toLocaleDateString()}
+                {fmtWhen(candidate.promoted_at, t, { year: "numeric", month: "short", day: "numeric" })}
               </span>
             )}
           </div>
@@ -1383,7 +1383,7 @@ function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl 
               textTransform: "uppercase", fontWeight: 600,
             }}>{t("rec.candidate.exam_score")}</div>
             <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>
-              {new Date(attempt.finished_at).toLocaleString()}
+              {fmtWhen(attempt.finished_at, t)}
             </div>
           </div>
         </div>

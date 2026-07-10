@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth, roleLabelT } from "../auth";
-import { useI18n } from "../i18n";
+import { useI18n, fmtWhen } from "../i18n";
 import { Panel, PageHeader, Badge, Btn } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, FONT_MONO } from "../theme";
@@ -225,7 +225,7 @@ function MissionCardRow({ mission, pct, checked, total, onClick, t }) {
           fontSize: 11,
           color: C.dim,
           minWidth: 60,
-          textAlign: "right",
+          textAlign: "end",
         }}>
           {checked}/{total} · {pct}%
         </div>
@@ -275,12 +275,7 @@ function AnnouncementRow({ a, t }) {
 }
 
 function formatWhen(ts) {
-  if (!ts) return "TBD";
-  const d = new Date(ts);
-  return d.toLocaleString([], {
-    month: "short", day: "2-digit",
-    hour: "2-digit", minute: "2-digit",
-  }).toUpperCase();
+  return fmtWhen(ts, null) || "—";
 }
 
 function greet(t) {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth, roleLabel, canManageSquads, canCreateInvites } from "../auth";
-import { useI18n } from "../i18n";
+import { useI18n, fmtWhen } from "../i18n";
 import { supabase } from "../supabase";
 import { Panel, PageHeader, Btn, Input, Field, ErrLine, OkLine, Badge, Mono } from "../ui";
 import { useIsMobile } from "../useIsMobile";
@@ -326,7 +326,7 @@ function SquadBlock({
 
         {canManage && !editing && !isUnassignedBlock && (
           <div style={{
-            marginLeft: isMobile ? 0 : "auto",
+            marginInlineStart: isMobile ? 0 : "auto",
             display: "flex",
             gap: 6,
             flexShrink: 0,
@@ -377,7 +377,7 @@ function SquadBlock({
               <th style={{ ...S.th, width: "20%" }}>{t("ros.name")}</th>
               <th style={{ ...S.th, width: "14%" }}>{t("ros.role")}</th>
               <th style={{ ...S.th }}>{t("ros.email")}</th>
-              {canManage && <th style={{ ...S.th, width: "22%", textAlign: "right" }}></th>}
+              {canManage && <th style={{ ...S.th, width: "22%", textAlign: "end" }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -440,7 +440,7 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
       </td>
       <td style={{ ...S.td, color: C.dim }}>{member.email}</td>
       {canManage && (
-        <td style={{ ...S.td, textAlign: "right", whiteSpace: "nowrap" }}>
+        <td style={{ ...S.td, textAlign: "end", whiteSpace: "nowrap" }}>
           <div style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end" }}>
             {/* Assign/Move is available for everyone including self */}
             {onAssignSquad && assignableSquads.length > 0 && (
@@ -879,9 +879,7 @@ function InviteRowDesktop({ invite, squads, canDelete, onDelete }) {
         {used ? <Badge>{t("ros.used")}</Badge> : <Badge tone="ok">{t("ros.available")}</Badge>}
       </td>
       <td style={{ ...S.td, color: C.dim }}>
-        {new Date(invite.created_at).toLocaleString([], {
-          month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit",
-        })}
+        {fmtWhen(invite.created_at, t)}
       </td>
       {canDelete && (
         <td style={S.td}>
@@ -934,9 +932,7 @@ function InviteCardMobile({ invite, squads, canDelete, onDelete }) {
         {sq?.name || "—"} · {roleLabel(invite.role)}
       </div>
       <div style={{ fontSize: 11, color: C.dim }}>
-        {new Date(invite.created_at).toLocaleString([], {
-          month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit",
-        })}
+        {fmtWhen(invite.created_at, t)}
       </div>
       {canDelete && !used && (
         <div style={{ marginTop: 8 }}>

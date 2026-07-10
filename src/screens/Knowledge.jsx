@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { useAuth } from "../auth";
-import { useI18n } from "../i18n";
+import { useI18n, fmtWhen } from "../i18n";
 import { Panel, PageHeader, Btn, Input, Textarea, Field, ErrLine, OkLine, Badge } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, FONT_MONO, S } from "../theme";
@@ -89,7 +89,7 @@ export default function Knowledge({ isBootcamp, canSquadEditKnowledge }) {
 
     return (
       <>
-        <PageHeader title={<><span style={{ marginRight: 8 }}>▦</span>{viewingTitle}</>} />
+        <PageHeader title={<><span style={{ marginInlineEnd: 8 }}>▦</span>{viewingTitle}</>} />
         <Panel>
           {!isPdf && !isImage && (
             <div style={{ color: C.dim, fontSize: 12, marginBottom: 8, fontFamily: FONT_MONO }}>
@@ -140,7 +140,7 @@ export default function Knowledge({ isBootcamp, canSquadEditKnowledge }) {
   return (
     <>
       <PageHeader
-        title={<><span style={{ marginRight: 8 }}>▦</span>{t("kn.title")}</>}
+        title={<><span style={{ marginInlineEnd: 8 }}>▦</span>{t("kn.title")}</>}
         subtitle={isBootcamp ? t("kn.sub_bootcamp") : t("kn.sub_normal")}
         action={showUpload && (
           <Btn small primary onClick={() => setShowUploadForm(!showUploadForm)}>
@@ -162,7 +162,7 @@ export default function Knowledge({ isBootcamp, canSquadEditKnowledge }) {
             <div style={{
               color: C.dim, fontSize: 11, fontWeight: 700,
               letterSpacing: "0.8px", textTransform: "uppercase",
-              alignSelf: "center", marginRight: 4,
+              alignSelf: "center", marginInlineEnd: 4,
             }}>{t("kn.track")}:</div>
             <Btn small active={adminTrack === "operational"} onClick={() => setAdminTrack("operational")}>
               {t("kn.track_op")}
@@ -620,7 +620,7 @@ function MaterialRow({ material, canDelete, showWeek, onView, onDeleted }) {
             <Badge>{subjectLabel.toUpperCase()}</Badge>
             {showWeek && material.week && <Badge tone="warn">{t("kn.week", { n: material.week })}</Badge>}
             <span>{sizeLabel}</span>
-            <span>{new Date(material.created_at).toLocaleDateString()}</span>
+            <span>{fmtWhen(material.created_at, t, { year: "numeric", month: "short", day: "numeric" })}</span>
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "flex-start" }}>

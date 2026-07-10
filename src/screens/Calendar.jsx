@@ -21,11 +21,10 @@ import { supabase } from "../supabase";
 //   • schedule_events.starts_at (calendar-only entries)
 // Schedule events never appear on Home or Missions — they are calendar-only.
 
-const SCHEDULE_TONE = "#55b8ff"; // distinct from mission (green) and admin (yellow)
-
 export default function Calendar() {
   const { profile } = useAuth();
-  const { t, dir } = useI18n();
+  const { t, dir, lang } = useI18n();
+  const locale = lang === "he" ? "he-IL" : "en-US";
   const isMobile = useIsMobile();
   const showCreate = canCreateInvites(profile?.role) || !!profile?.is_instructor;
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -108,7 +107,10 @@ export default function Calendar() {
     setScheduleEditing(null);
   }
 
-  const monthLabel = cursor.toLocaleString([], { month: "long", year: "numeric" }).toUpperCase();
+  const monthLabel = (() => {
+    const s = cursor.toLocaleString(locale, { month: "long", year: "numeric" });
+    return lang === "he" ? s : s.toUpperCase();
+  })();
 
   // Let the page flow naturally — the month grid has its own minHeight so it
   // won't collapse when a day with many events is selected.
@@ -124,11 +126,11 @@ export default function Calendar() {
 
       <div style={{
         ...S.panel,
+        marginTop: isMobile ? 12 : 16,
         marginBottom: selectedDay ? 16 : 0,
         display: "flex",
         flexDirection: "column",
         padding: isMobile ? "12px 10px" : "18px 22px",
-        borderRadius: isMobile ? "0 0 6px 6px" : "0 0 4px 4px",
         minHeight: isMobile ? 360 : 520,
       }}>
         <div style={{
@@ -173,7 +175,7 @@ export default function Calendar() {
 
         return (
           <Panel
-            title={dayHeader(selectedDay)}
+            title={dayHeader(selectedDay, locale, lang)}
             action={showCreate && (
               <Btn small primary onClick={() => setScheduleEditing("new")}>
                 {t("cal.new_schedule")}
@@ -337,7 +339,7 @@ function DayCell({ date, inMonth, isToday, isSelected, events, onClick, isMobile
         fontSize: isMobile ? 12 : 13,
         fontWeight: isToday ? 700 : 500,
         lineHeight: 1,
-        textAlign: "right",
+        textAlign: "end",
       }}>
         {date.getDate()}
       </div>
@@ -376,7 +378,7 @@ function DayCell({ date, inMonth, isToday, isSelected, events, onClick, isMobile
 }
 
 function dotColor(e) {
-  if (e.source === "schedule") return SCHEDULE_TONE;
+  if (e.source === "schedule") return C.schedule;
   if (e.kind === "admin") return C.warn;
   return C.ok;
 }
@@ -413,12 +415,12 @@ function ScheduleRow({ event, canManage, onEdit, onDeleted, t }) {
       {/* Time */}
       <div style={{
         fontFamily: FONT_MONO,
-        color: SCHEDULE_TONE,
+        color: C.schedule,
         fontSize: 13,
         fontWeight: 700,
         flexShrink: 0,
         lineHeight: 1.3,
-        textAlign: "right",
+        textAlign: "end",
       }}>
         {timeStr}
         {endStr && (
@@ -691,10 +693,11 @@ function format24(d) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-function dayHeader(d) {
-  return d.toLocaleDateString([], {
+function dayHeader(d, locale = "en-US", lang = "en") {
+  const s = d.toLocaleDateString(locale, {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
-  }).toUpperCase();
+  });
+  return lang === "he" ? s : s.toUpperCase();
 }
 // Build a "YYYY-MM-DDTHH:MM" string for <input type="datetime-local"> from a Date + hour.
 function dateToLocalInput(date, hour = 9) {
