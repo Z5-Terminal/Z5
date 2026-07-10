@@ -3,6 +3,7 @@ import { useState } from "react";
 import { C, S, FONT, FONT_MONO } from "./theme";
 import { useIsMobile } from "./useIsMobile";
 import { useTheme } from "./ThemeContext";
+import { useConsoleMaybe } from "./console";
 
 // Full-viewport page wrapper.
 export function Page({ children }) {
@@ -259,8 +260,17 @@ export function NavLabel({ children }) {
 // (The old bordered-card look created a "double card" stack that read
 // as broken borders.) `standalone` is still accepted as a no-op for
 // backward-compat with older call sites.
-export function PageHeader({ title, subtitle, action }) {
+export function PageHeader({ title, subtitle, action, hero = true }) {
   const isMobile = useIsMobile();
+  // Console hero thumbnail — the operator artwork of the active console,
+  // small scale, beside the title. Renders only inside a console and
+  // can be disabled per-header with hero={false}.
+  const consoleMode = useConsoleMaybe()?.consoleMode || null;
+  const [heroOk, setHeroOk] = useState(true);
+  const heroSrc = hero && consoleMode
+    ? `${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`
+    : null;
+  const heroSize = isMobile ? 42 : 52;
   return (
     <div style={{
       display: "flex",
@@ -270,6 +280,25 @@ export function PageHeader({ title, subtitle, action }) {
       padding: isMobile ? "2px 2px 4px" : "4px 2px 8px",
       marginBottom: 0,
     }}>
+      {heroSrc && heroOk && (
+        <img
+          src={heroSrc}
+          alt=""
+          aria-hidden
+          onError={() => setHeroOk(false)}
+          style={{
+            width: heroSize,
+            height: heroSize,
+            borderRadius: 12,
+            objectFit: "cover",
+            objectPosition: "center 14%",
+            border: `1px solid ${C.border}`,
+            background: "#000",
+            flexShrink: 0,
+            alignSelf: "center",
+          }}
+        />
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
           margin: 0,

@@ -67,6 +67,12 @@ export function ConsoleProvider({ children }) {
   );
 }
 
+// Safe variant for shared UI primitives that may render outside the
+// provider (public pages): returns null instead of throwing.
+export function useConsoleMaybe() {
+  return useContext(ConsoleCtx);
+}
+
 export function useConsole() {
   const ctx = useContext(ConsoleCtx);
   if (!ctx) throw new Error("useConsole must be inside ConsoleProvider");
