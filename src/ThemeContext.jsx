@@ -31,6 +31,15 @@ function syncDocumentChrome(mode) {
 export function ThemeProvider({ children }) {
   const [mode, setMode] = useState(() => {
     try {
+      // One-time migration to the e-ink design language: older builds
+      // defaulted (and persisted) dark. Reset everyone to paper once so
+      // the redesign is actually seen; toggles persist normally after.
+      if (!localStorage.getItem("z5-theme-eink")) {
+        localStorage.setItem("z5-theme-eink", "1");
+        localStorage.setItem(STORAGE_KEY, DEFAULT_MODE);
+        applyTheme(DEFAULT_MODE);
+        return DEFAULT_MODE;
+      }
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved === "light" || saved === "dark") {
         applyTheme(saved);
