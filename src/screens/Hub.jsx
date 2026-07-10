@@ -60,8 +60,13 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
         flexDirection: "column",
         justifyContent: "flex-end",
         width: "100%",
-        aspectRatio: isMobile ? "4 / 5" : "9 / 14",
-        maxHeight: isMobile ? 440 : 640,
+        // Desktop: height budgeted from the viewport so the whole Hub
+        // (brand + posters + footer) fits one screen; mobile keeps a
+        // portrait ratio and scrolls naturally.
+        aspectRatio: isMobile ? "4 / 5" : "auto",
+        height: isMobile ? "auto" : "min(52vh, 520px)",
+        minHeight: isMobile ? 0 : 300,
+        maxHeight: isMobile ? 420 : 520,
         borderRadius: 18,
         overflow: "hidden",
         border: `1px solid ${lit ? C.borderBright : C.border}`,
@@ -243,8 +248,8 @@ export default function Hub() {
         flexDirection: "column",
         boxSizing: "border-box",
         padding: isMobile
-          ? "calc(28px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))"
-          : "48px 24px",
+          ? "calc(24px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))"
+          : "24px 24px 16px",
       }}>
         {/* Main content centered */}
         <div style={{
@@ -260,15 +265,15 @@ export default function Hub() {
             maxWidth: isMobile ? 520 : 1100,
             display: "flex",
             flexDirection: "column",
-            gap: isMobile ? 22 : 32,
+            gap: isMobile ? 18 : 20,
           }}>
             {/* Brand block */}
             <div style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: isMobile ? 14 : 18,
-              paddingBottom: isMobile ? 18 : 30,
+              gap: isMobile ? 10 : 10,
+              paddingBottom: isMobile ? 14 : 14,
               borderBottom: `1px solid ${C.border}`,
             }}>
               <img
@@ -276,8 +281,8 @@ export default function Hub() {
                 alt="Z5"
                 style={{
                   width: "100%",
-                  maxWidth: isMobile ? 240 : 360,
-                  maxHeight: isMobile ? 160 : 240,
+                  maxWidth: isMobile ? 170 : 200,
+                  maxHeight: isMobile ? 95 : 105,
                   objectFit: "contain",
                   display: "block",
                   filter: isLight ? "none" : "invert(0.9)",
@@ -285,15 +290,15 @@ export default function Hub() {
               />
               <div style={{
                 color: C.bright,
-                fontSize: isMobile ? 22 : 38,
+                fontSize: isMobile ? 19 : 24,
                 fontWeight: 800,
-                letterSpacing: isMobile ? "5px" : "7px",
+                letterSpacing: isMobile ? "4px" : "5px",
               }}>
                 {t("nav.terminal")}
               </div>
               <div style={{
                 fontFamily: FONT_MONO,
-                fontSize: isMobile ? 13 : 15,
+                fontSize: isMobile ? 12 : 13,
                 letterSpacing: "0.4px",
                 textAlign: "center",
                 lineHeight: 1.6,
@@ -336,7 +341,7 @@ export default function Hub() {
 
         {/* Footer */}
         <div style={{
-          paddingTop: isMobile ? 18 : 24,
+          paddingTop: isMobile ? 16 : 14,
           textAlign: "center",
           fontFamily: FONT_MONO,
           fontSize: isMobile ? 10 : 11,
