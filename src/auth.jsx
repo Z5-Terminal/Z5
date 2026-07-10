@@ -11,6 +11,9 @@ export function AuthProvider({ children }) {
   // Guards: prevent overlapping calls and auth-listener hammering
   const lastFailTime = useRef(0);
   const inflightRef  = useRef(false); // true while a loadProfile query is running
+  const profileRef   = useRef(null);  // mirrors `profile` for reads inside stable callbacks
+
+  useEffect(() => { profileRef.current = profile; }, [profile]);
 
   const loadProfile = useCallback(async (userId, { fromListener = false } = {}) => {
     if (!userId) { setProfile(null); setProfileError(null); return; }
@@ -98,12 +101,25 @@ export function AuthProvider({ children }) {
       }
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
       if (cancelled) return;
       setSession(sess);
       if (sess?.user) {
-        try { await loadProfile(sess.user.id, { fromListener: true }); }
-        catch (e) { console.warn("loadProfile (auth change) failed", e); }
+        // Skip redundant reloads — e.g. TOKEN_REFRESHED / tab-focus events
+        // while this user's profile is already loaded.
+        if (profileRef.current?.id === sess.user.id) return;
+        // IMPORTANT: never run (or await) Supabase queries directly inside
+        // onAuthStateChange. supabase-js holds its auth lock while this
+        // callback runs, and any query here needs that same lock to attach
+        // the access token — so it deadlocks and hangs until our 10s
+        // timeout fires ("Server not responding"). Defer to the next tick,
+        // after the lock is released.
+        setTimeout(() => {
+          if (!cancelled) {
+            loadProfile(sess.user.id, { fromListener: true })
+              .catch((e) => console.warn("loadProfile (auth change) failed", e));
+          }
+        }, 0);
       } else {
         setProfile(null);
       }
