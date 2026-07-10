@@ -165,16 +165,15 @@ export function NavItem({ active, onClick, children }) {
         background: bg,
         color: active ? C.bright : C.text,
         border: "none",
-        borderLeft: `2px solid ${active ? C.bright : "transparent"}`,
         padding: "10px 14px",
         textAlign: "left",
         fontFamily: FONT,
         fontSize: 14,
-        fontWeight: active ? 600 : 500,
+        fontWeight: active ? 700 : 500,
         cursor: "pointer",
         letterSpacing: "0.3px",
         transition: "background 140ms ease-out, color 140ms ease-out",
-        borderRadius: 0,
+        borderRadius: 10,
         opacity: active ? 1 : 0.92,
       }}
     >
@@ -183,7 +182,8 @@ export function NavItem({ active, onClick, children }) {
   );
 }
 
-// Bottom tab bar item (mobile).
+// Bottom tab bar item (mobile). The active tab's icon sits in a soft
+// rounded pill — modern bottom-nav pattern (no hard border accents).
 export function TabItem({ active, onClick, icon, label }) {
   return (
     <button
@@ -192,10 +192,9 @@ export function TabItem({ active, onClick, icon, label }) {
         flex: 1,
         background: "transparent",
         border: "none",
-        borderTop: `2px solid ${active ? C.bright : "transparent"}`,
         color: active ? C.bright : C.dim,
         fontFamily: FONT,
-        fontSize: 11,
+        fontSize: 10.5,
         fontWeight: active ? 700 : 500,
         letterSpacing: "0.4px",
         textTransform: "uppercase",
@@ -205,11 +204,21 @@ export function TabItem({ active, onClick, icon, label }) {
         alignItems: "center",
         justifyContent: "center",
         gap: 3,
-        padding: "8px 4px",
+        padding: "7px 4px",
         minWidth: 0,
       }}
     >
-      <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
+      <span aria-hidden style={{
+        fontSize: 20,
+        lineHeight: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "3px 14px",
+        borderRadius: 999,
+        background: active ? C.navActiveBg : "transparent",
+        transition: "background 140ms ease-out",
+      }}>{icon}</span>
       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
         {label}
       </span>
@@ -265,8 +274,9 @@ export function PageHeader({ title, subtitle, action }) {
       marginBottom: 0,
       padding: isMobile ? "12px 14px" : "18px 24px",
       border: `1px solid ${C.border}`,
-      borderRadius: 4,
+      borderRadius: 14,
       background: C.headerBg,
+      boxShadow: C.shadow,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <h1 style={{
@@ -300,7 +310,7 @@ export function PageHeader({ title, subtitle, action }) {
 export function Panel({ title, children, action }) {
   const isMobile = useIsMobile();
   const base = isMobile
-    ? { ...S.panel, padding: "14px 14px", marginBottom: 14, borderRadius: 6 }
+    ? { ...S.panel, padding: "14px 14px", marginBottom: 14, borderRadius: 12 }
     : { ...S.panel };
   base.marginTop = isMobile ? 14 : 20;
   return (
@@ -425,7 +435,7 @@ export function Badge({ children, tone = "default" }) {
       background: t.bg,
       color: t.fg,
       border: `1px solid ${t.border}`,
-      borderRadius: 2,
+      borderRadius: 999,
     }}>{children}</span>
   );
 }
@@ -440,7 +450,7 @@ export function ErrLine({ children }) {
       padding: "8px 12px",
       background: C.errBg,
       border: `1px solid ${C.errBorder}`,
-      borderRadius: 2,
+      borderRadius: 10,
     }}>{children}</div>
   );
 }
@@ -455,7 +465,7 @@ export function OkLine({ children }) {
       padding: "8px 12px",
       background: C.okBg,
       border: `1px solid ${C.okBorder}`,
-      borderRadius: 2,
+      borderRadius: 10,
     }}>{children}</div>
   );
 }
@@ -479,10 +489,11 @@ export function DataCard({ title, rows, action }) {
   return (
     <div style={{
       border: `1px solid ${C.border}`,
-      borderRadius: 4,
+      borderRadius: 12,
       padding: "12px 12px 8px",
       marginBottom: 10,
       background: C.cardBg,
+      boxShadow: C.shadow,
     }}>
       {(title || action) && (
         <div style={{

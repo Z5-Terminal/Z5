@@ -4,10 +4,12 @@ import { useI18n } from "../i18n";
 import { Page, CenteredColumn, Field, Btn, Input, ErrLine, OkLine } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C } from "../theme";
+import { useTheme } from "../ThemeContext";
 
 export default function Auth() {
   const [mode, setMode] = useState("login"); // 'login' | 'signup'
   const { t } = useI18n();
+  const { mode: themeMode } = useTheme();
   const isMobile = useIsMobile();
   return (
     <Page>
@@ -16,7 +18,8 @@ export default function Auth() {
           border: `1px solid ${C.border}`,
           padding: isMobile ? "28px 20px" : "40px 44px",
           background: C.cardBg,
-          borderRadius: 6,
+          borderRadius: 14,
+          boxShadow: C.shadow,
         }}>
           <div style={{
             display: "flex",
@@ -33,6 +36,7 @@ export default function Auth() {
                 maxHeight: isMobile ? 100 : 140,
                 objectFit: "contain",
                 marginBottom: isMobile ? 12 : 16,
+                filter: themeMode === "dark" ? "invert(0.9)" : "none",
               }}
             />
             <h1 style={{

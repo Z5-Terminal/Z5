@@ -1,10 +1,10 @@
 // Z5 :: Theme context — provides dark/light mode toggle
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { applyTheme, getMode, C } from "./theme";
+import { applyTheme, getMode, C, DEFAULT_MODE } from "./theme";
 
 const STORAGE_KEY = "z5-theme";
 
-const ThemeCtx = createContext({ mode: "dark", toggle: () => {} });
+const ThemeCtx = createContext({ mode: DEFAULT_MODE, toggle: () => {} });
 
 // Sync the document's outer surfaces (html/body/#root) and the iOS PWA
 // meta tags with the active theme. Without this, the system status bar
@@ -37,7 +37,7 @@ export function ThemeProvider({ children }) {
         return saved;
       }
     } catch { /* ignore */ }
-    return "dark";
+    return DEFAULT_MODE;
   });
 
   const toggle = useCallback(() => {

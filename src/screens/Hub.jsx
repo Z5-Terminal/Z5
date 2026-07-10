@@ -272,6 +272,7 @@ export default function Hub() {
                   maxHeight: isMobile ? 160 : 240,
                   objectFit: "contain",
                   display: "block",
+                  filter: isLight ? "none" : "invert(0.9)",
                 }}
               />
               <div style={{
