@@ -17,40 +17,29 @@ import { useIsMobile } from "../useIsMobile";
 import { Page } from "../ui";
 import { C, FONT, FONT_MONO } from "../theme";
 
-function ConsoleRow({ iconSrc, name, tagline, enabled, comingSoon, noAccessLabel, comingSoonLabel, onSelect, isLight }) {
+// Full-bleed hero poster card. The operator artwork (public/hero-*.png)
+// fills the card; title + tagline sit over a bottom gradient. If the
+// hero image is missing, falls back to the console icon centered on
+// black, so the Hub works before the artwork is dropped in.
+// Poster cards are photographic and intrinsically dark in BOTH themes,
+// so the black backdrop / white overlay text here are deliberate
+// image-context literals, not theme-token violations.
+function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAccessLabel, comingSoonLabel, enterLabel, onSelect, isLight }) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
-  const [focus, setFocus] = useState(false);
   const [pressed, setPressed] = useState(false);
+  const [imgOk, setImgOk] = useState(true);
 
-  // "Locked" subsumes both feature-not-ready ("Coming soon") and
-  // user-has-no-access. Either state blocks the click and dims the row.
   const locked = comingSoon || !enabled;
-
-  // Background fill is driven by hover + pressed only. Focus is
-  // intentionally NOT in the lit predicate: on desktop browsers
-  // (Chrome/Firefox) clicking a button gives it focus, which used to
-  // leave the row stuck grey after the user moved their mouse away.
-  // The keyboard focus-ring still draws via boxShadow below, so a11y
-  // is preserved.
   const lit = !locked && (hover || pressed);
-  const TRANS = "background 220ms ease-out, border-color 220ms ease-out, transform 160ms ease-out, box-shadow 220ms ease-out";
 
-  // Skip hover state on touch — iOS Safari leaves the row in a sticky
-  // :hover-equivalent after a tap because there's no corresponding
-  // pointerleave for touch, so we filter touch pointer types out.
   const onPointerEnter = (e) => { if (e.pointerType !== "touch") setHover(true); };
   const onPointerLeave = () => { setHover(false); setPressed(false); };
 
-  // Hold the press state visible for ~120ms before navigating so the
-  // tap feedback actually paints. Also blur the button after the
-  // click so the focus ring doesn't persist on desktop click.
   const handleClick = (e) => {
     if (locked) return;
     setPressed(true);
-    if (e && e.currentTarget && typeof e.currentTarget.blur === "function") {
-      e.currentTarget.blur();
-    }
+    if (e?.currentTarget?.blur) e.currentTarget.blur();
     window.setTimeout(() => { onSelect(); }, 120);
   };
 
@@ -63,124 +52,143 @@ function ConsoleRow({ iconSrc, name, tagline, enabled, comingSoon, noAccessLabel
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerCancel={() => setPressed(false)}
-      onFocus={() => setFocus(true)}
-      onBlur={() => setFocus(false)}
       disabled={locked}
       aria-label={name}
       style={{
-        width: "100%",
+        position: "relative",
         display: "flex",
-        alignItems: "stretch",
-        background: lit ? C.hoverBg : "transparent",
-        color: C.text,
+        flexDirection: "column",
+        justifyContent: "flex-end",
+        width: "100%",
+        aspectRatio: isMobile ? "4 / 5" : "9 / 14",
+        maxHeight: isMobile ? 440 : 640,
+        borderRadius: 18,
+        overflow: "hidden",
         border: `1px solid ${lit ? C.borderBright : C.border}`,
-        borderInlineStartWidth: lit ? 4 : 3,
-        borderInlineStartColor: locked ? C.borderBright : C.bright,
-        borderRadius: 0,
+        background: "#000",
         padding: 0,
         fontFamily: FONT,
-        cursor: locked ? "not-allowed" : "pointer",
         textAlign: "start",
-        opacity: locked ? 0.5 : 1,
-        minHeight: isMobile ? 92 : 108,
-        transition: TRANS,
-        transform: pressed ? "scale(0.99)" : "scale(1)",
-        boxShadow: focus ? `0 0 0 1px ${C.bright}` : "none",
+        cursor: locked ? "not-allowed" : "pointer",
+        transform: pressed ? "scale(0.985)" : "scale(1)",
+        transition: "transform 160ms ease-out, border-color 220ms ease-out, box-shadow 220ms ease-out",
+        boxShadow: lit ? "0 16px 44px rgba(0,0,0,0.5)" : "none",
         outline: "none",
         WebkitTapHighlightColor: "transparent",
       }}
     >
-      <div style={{
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: isMobile ? 88 : 130,
-      }}>
+      {/* Artwork */}
+      {imgOk && heroSrc ? (
         <img
-          src={`${import.meta.env.BASE_URL}${iconSrc}`}
+          src={heroSrc}
           alt=""
+          aria-hidden
+          onError={() => setImgOk(false)}
           style={{
-            width: isMobile ? 48 : 72,
-            height: isMobile ? 48 : 72,
-            objectFit: "contain",
-            opacity: locked ? 0.4 : 0.92,
-            // Icons are pre-baked as white silhouettes with a real
-            // alpha channel. Dark mode shows them as-is. Light mode
-            // uses brightness(0) to recolor the white silhouette to
-            // black while preserving the alpha — no blend-mode
-            // tricks, no white rectangle leak.
-            filter: isLight ? "brightness(0)" : "none",
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center",
+            filter: locked ? "grayscale(1) brightness(0.42)" : "none",
+            transform: lit ? "scale(1.05)" : "scale(1)",
+            transition: "transform 700ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease-out",
           }}
         />
-      </div>
+      ) : (
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <img
+            src={`${import.meta.env.BASE_URL}${iconSrc}`}
+            alt=""
+            style={{
+              width: isMobile ? 72 : 96,
+              height: isMobile ? 72 : 96,
+              objectFit: "contain",
+              opacity: locked ? 0.3 : 0.75,
+            }}
+          />
+        </div>
+      )}
 
+      {/* Bottom gradient for text legibility */}
+      <div aria-hidden style={{
+        position: "absolute",
+        inset: 0,
+        background: "linear-gradient(to top, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.62) 24%, rgba(0,0,0,0) 52%)",
+      }} />
+
+      {/* Copy */}
       <div style={{
-        flex: 1,
-        padding: isMobile ? "12px 8px 12px 4px" : "16px 10px 16px 4px",
+        position: "relative",
+        padding: isMobile ? "16px 16px 18px" : "20px 20px 24px",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
         gap: 6,
-        minWidth: 0,
       }}>
         <div style={{
-          fontSize: isMobile ? 13 : 16,
-          fontWeight: 700,
-          color: locked ? C.dim : C.bright,
-          letterSpacing: "2.5px",
+          fontSize: isMobile ? 16 : 18,
+          fontWeight: 800,
+          letterSpacing: "3px",
           textTransform: "uppercase",
+          color: "#fff",
         }}>
           {name}
         </div>
         <div style={{
           fontSize: isMobile ? 12 : 13,
-          color: locked ? C.dim : C.text,
-          opacity: locked ? 1 : 0.78,
-          letterSpacing: "0.2px",
-          lineHeight: 1.45,
+          lineHeight: 1.5,
+          color: "rgba(255,255,255,0.72)",
         }}>
           {tagline}
         </div>
         {comingSoon && (
           <div style={{
+            marginTop: 4,
+            fontFamily: FONT_MONO,
             fontSize: 10,
-            color: C.dim,
             letterSpacing: "1.5px",
-            marginTop: 2,
             textTransform: "uppercase",
             fontWeight: 600,
+            color: "rgba(255,255,255,0.55)",
           }}>
             {comingSoonLabel}
           </div>
         )}
         {!comingSoon && !enabled && (
           <div style={{
+            marginTop: 4,
+            fontFamily: FONT_MONO,
             fontSize: 10,
-            color: C.warn,
             letterSpacing: "1.5px",
-            marginTop: 2,
             textTransform: "uppercase",
             fontWeight: 600,
+            color: C.warn,
           }}>
             {noAccessLabel}
           </div>
         )}
-      </div>
-
-      <div style={{
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: isMobile ? 44 : 60,
-        fontSize: 24,
-        color: lit ? C.bright : (locked ? C.dim : C.text),
-        opacity: locked ? 1 : (lit ? 1 : 0.6),
-        transform: lit ? "translateX(4px)" : "translateX(0)",
-        transition: "color 220ms ease-out, transform 220ms ease-out, opacity 220ms ease-out",
-      }}>
-        {"›"}
+        {!locked && (
+          <div style={{
+            marginTop: 6,
+            fontFamily: FONT_MONO,
+            fontSize: 11,
+            letterSpacing: "2px",
+            textTransform: "uppercase",
+            fontWeight: 700,
+            color: "#fff",
+            opacity: lit ? 1 : 0.55,
+            transition: "opacity 200ms ease-out",
+          }}>
+            {enterLabel} ›
+          </div>
+        )}
       </div>
     </button>
   );
@@ -249,7 +257,7 @@ export default function Hub() {
         }}>
           <div style={{
             width: "100%",
-            maxWidth: isMobile ? 520 : 760,
+            maxWidth: isMobile ? 520 : 1100,
             display: "flex",
             flexDirection: "column",
             gap: isMobile ? 22 : 32,
@@ -300,21 +308,24 @@ export default function Hub() {
               </div>
             </div>
 
-            {/* Banner list */}
+            {/* Poster wall — three vertical hero cards */}
             <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: isMobile ? 10 : 14,
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+              gap: isMobile ? 14 : 20,
             }}>
               {banners.map((b) => (
-                <ConsoleRow
+                <PosterCard
                   key={b.mode}
+                  heroSrc={`${import.meta.env.BASE_URL}hero-${b.mode}.png`}
                   iconSrc={b.iconSrc}
                   name={b.name}
                   tagline={b.tagline}
                   enabled={b.enabled}
+                  comingSoon={b.comingSoon}
                   noAccessLabel={t("console.noaccess")}
                   comingSoonLabel={t("console.coming_soon")}
+                  enterLabel={t("hub.enter")}
                   onSelect={() => setConsoleMode(b.mode)}
                   isLight={isLight}
                 />
