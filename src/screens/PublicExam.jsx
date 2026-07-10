@@ -21,7 +21,7 @@ const T = {
   already_completed: "כבר השלמת את המבחן.",
   generic_error: "אירעה תקלה. נסה שוב.",
   intro_title: "מבחן פסיכוטכני לצוות צלפים",
-  intro_body: "במבחן יש 16 שאלות. סך הזמן למבחן הוא 15 דקות.\n\nניתן ומומלץ להשתמש בדף ועט. ברגע שתתחיל — השעון מתחיל לרוץ ולא ניתן לעצור אותו.",
+  intro_body: "במבחן יש {n} שאלות. סך הזמן למבחן הוא 15 דקות.\n\nניתן ומומלץ להשתמש בדף ועט. ברגע שתתחיל — השעון מתחיל לרוץ ולא ניתן לעצור אותו.",
   start: "התחל מבחן",
   submit: "סיים והגש",
   submitting: "מגיש…",
@@ -177,7 +177,7 @@ function Intro({ exam, onStart }) {
       <div style={{
         whiteSpace: "pre-line", fontSize: 15, lineHeight: 1.8,
         color: C.text, marginBottom: 32,
-      }}>{T.intro_body}</div>
+      }}>{T.intro_body.replace("{n}", String((exam.questions || []).length || 17))}</div>
       <BigButton primary onClick={onStart}>{T.start}</BigButton>
     </div>
   );

@@ -170,6 +170,7 @@ function CandidatesList({ onPick }) {
           ? `${cycle.name} — ${filtered.length} / ${rows.length}`
           : t("rec.candidates.subtitle")}
       />
+      <AcceptedCohortPanel rows={rows} onPick={onPick} />
       <Panel>
         <Field label={t("rec.candidates.cycle")}>
           <select
@@ -328,6 +329,204 @@ function CandidateRow({ candidate, onClick }) {
 }
 
 // ── Detail ────────────────────────────────────────────────────────
+
+// ── Accepted cohort panel ──────────────────────────────────────────
+// Renders at the top of the Candidates list when one or more
+// candidates have status='accepted'. A celebratory summary of the
+// final pick — photo, name, personal_id + team, interview + exam
+// score chips. Hidden when nobody's accepted yet.
+
+function AcceptedCohortPanel({ rows, onPick }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const accepted = useMemo(
+    () => rows.filter((r) => r.candidate.status === "accepted"),
+    [rows]
+  );
+  if (accepted.length === 0) return null;
+  return (
+    <Panel title={`${t("rec.candidates.accepted_cohort")} (${accepted.length})`}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+        gap: isMobile ? 10 : 14,
+      }}>
+        {accepted.map((row) => (
+          <AcceptedCard
+            key={row.candidate.id}
+            row={row}
+            onClick={() => onPick(row.candidate.id)}
+          />
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function AcceptedCard({ row, onClick }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const { candidate, avgScore, examAttempt } = row;
+  const [photoSrc, setPhotoSrc] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!candidate.photo_url) { setPhotoSrc(null); return; }
+    candidatePhotoSignedUrl(candidate.photo_url).then((url) => {
+      if (!cancelled) setPhotoSrc(url);
+    });
+    return () => { cancelled = true; };
+  }, [candidate.photo_url]);
+
+  const initials = (candidate.full_name || "?")
+    .trim().split(/\s+/).slice(0, 2)
+    .map((s) => s[0] || "").join("").toUpperCase() || "?";
+
+  const avatarSize = isMobile ? 72 : 88;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        all: "unset",
+        boxSizing: "border-box",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 10,
+        padding: isMobile ? "14px 10px" : "18px 14px",
+        background: C.cardBg,
+        border: `1px solid ${C.border}`,
+        borderRadius: 4,
+        cursor: "pointer",
+        textAlign: "center",
+        minWidth: 0,
+      }}
+    >
+      <div style={{
+        width: avatarSize,
+        height: avatarSize,
+        borderRadius: "50%",
+        background: C.inputBg,
+        border: `1px solid ${C.borderBright}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        flexShrink: 0,
+      }}>
+        {photoSrc ? (
+          <img src={photoSrc} alt="" style={{
+            width: "100%", height: "100%", objectFit: "cover",
+          }} />
+        ) : (
+          <div style={{
+            fontSize: avatarSize * 0.36,
+            color: C.dim,
+            fontFamily: FONT_MONO,
+            fontWeight: 700,
+            letterSpacing: "1.5px",
+          }}>{initials}</div>
+        )}
+      </div>
+
+      <div style={{ width: "100%", minWidth: 0 }}>
+        <div style={{
+          color: C.bright,
+          fontSize: isMobile ? 13 : 14,
+          fontWeight: 700,
+          letterSpacing: "0.3px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          marginBottom: 3,
+        }}>{candidate.full_name || "—"}</div>
+        <div style={{
+          fontFamily: FONT_MONO,
+          fontSize: 11,
+          color: C.dim,
+          letterSpacing: "0.5px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>
+          {candidate.personal_id || "—"}
+          {candidate.team ? ` · T${candidate.team}` : ""}
+        </div>
+      </div>
+
+      <div style={{
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap",
+        justifyContent: "center",
+        width: "100%",
+      }}>
+        <ScoreChip
+          label={t("rec.candidates.avg_label")}
+          value={avgScore != null ? avgScore.toFixed(1) : "—"}
+          tone={scoreToneFromPct(avgScore, 10)}
+        />
+        <ScoreChip
+          label={t("rec.candidates.exam_label")}
+          value={examAttempt?.score != null && examAttempt?.total
+            ? `${examAttempt.score}/${examAttempt.total}`
+            : "—"}
+          tone={examAttempt?.score != null && examAttempt?.total
+            ? scoreToneFromPct(examAttempt.score, examAttempt.total)
+            : "default"}
+        />
+      </div>
+    </button>
+  );
+}
+
+function ScoreChip({ label, value, tone }) {
+  const tones = {
+    ok:      { fg: C.ok,    border: C.badgeOkBorder,    bg: C.badgeOk },
+    bright:  { fg: C.bright, border: C.borderBright,     bg: C.badgeBright },
+    warn:    { fg: C.warn,  border: C.badgeWarnBorder,  bg: C.badgeWarn },
+    default: { fg: C.dim,   border: C.border,           bg: "transparent" },
+  };
+  const c = tones[tone] || tones.default;
+  return (
+    <div style={{
+      display: "inline-flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 1,
+      padding: "5px 9px",
+      border: `1px solid ${c.border}`,
+      borderRadius: 2,
+      background: c.bg,
+      minWidth: 56,
+    }}>
+      <div style={{
+        fontFamily: FONT_MONO,
+        fontSize: 14,
+        fontWeight: 700,
+        color: c.fg,
+        letterSpacing: "0.3px",
+        lineHeight: 1,
+      }}>{value}</div>
+      <div style={{
+        fontSize: 9,
+        color: C.dim,
+        letterSpacing: "0.8px",
+        textTransform: "uppercase",
+      }}>{label}</div>
+    </div>
+  );
+}
+
+function scoreToneFromPct(score, max) {
+  if (score == null || !max) return "default";
+  const pct = score / max;
+  if (pct >= 0.8) return "ok";
+  if (pct >= 0.5) return "bright";
+  return "warn";
+}
 
 // ── Leaderboard row (used when sorted by interview / exam score) ────
 
