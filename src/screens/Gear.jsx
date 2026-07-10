@@ -14,8 +14,7 @@ function GearMobileCard({ row, onChange, onRemove, t }) {
 
   return (
     <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 5,
+      borderRadius: 10,
       marginBottom: 8,
       background: C.cardBg,
       overflow: "hidden",
@@ -448,8 +447,7 @@ function SquadGear({ currentUserId, profile, embedded }) {
 function MemberGearFolder({ name, role, gearCount, totalCount, expanded, onToggle, isMobile, t, children }) {
   return (
     <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
+      borderRadius: 10,
       marginBottom: isMobile ? 10 : 12,
       background: C.cardBg,
       overflow: "hidden",

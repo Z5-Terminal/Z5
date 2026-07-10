@@ -291,6 +291,41 @@ export async function getCandidatesEnriched(cycleId) {
   return { data: rows };
 }
 
+// ── Live survey activity ────────────────────────────────────────────
+
+// Per-cycle survey funnel: how many candidates opened the shared link
+// (a candidates row exists once they start), how many are mid-survey,
+// and how many have submitted (survey_done or any later status).
+export async function getCycleSurveyStats(cycleId) {
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("id, status")
+    .eq("cycle_id", cycleId);
+  if (error) return { error };
+  const rows = data || [];
+  const inProgress = rows.filter((r) => r.status === "survey_in_progress").length;
+  return {
+    data: {
+      total: rows.length,
+      inProgress,
+      submitted: rows.length - inProgress,
+    },
+  };
+}
+
+// Candidate counts for every cycle at once (Cycles list rows).
+export async function getCandidateCountsByCycle() {
+  const { data, error } = await supabase
+    .from("candidates")
+    .select("cycle_id");
+  if (error) return { error };
+  const counts = {};
+  for (const r of data || []) {
+    counts[r.cycle_id] = (counts[r.cycle_id] || 0) + 1;
+  }
+  return { data: counts };
+}
+
 // ── Phase C5: combined score + promote-to-bootcamp bridge ──────────
 
 // Combined screening score 0-100: 50% interview average (1-10 scale),

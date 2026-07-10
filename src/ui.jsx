@@ -461,6 +461,39 @@ export function OkLine({ children }) {
   );
 }
 
+// Skeleton shimmer — animated placeholder while content loads.
+// Keyframes (z5-shimmer) live in index.html; colors come from tokens.
+export function Skeleton({ width = "100%", height = 14, style }) {
+  return (
+    <div aria-hidden style={{
+      width,
+      height,
+      borderRadius: 6,
+      background: `linear-gradient(90deg, ${C.progressTrack} 25%, ${C.hoverBg} 50%, ${C.progressTrack} 75%)`,
+      backgroundSize: "600px 100%",
+      animation: "z5-shimmer 1.2s linear infinite",
+      ...style,
+    }} />
+  );
+}
+
+// A stack of skeleton "rows" approximating a list while it loads.
+export function SkeletonRows({ rows = 3 }) {
+  return (
+    <div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{
+          padding: "14px 2px",
+          borderBottom: i < rows - 1 ? `1px solid ${C.border}` : "none",
+        }}>
+          <Skeleton width={`${52 - i * 7}%`} height={15} style={{ marginBottom: 8 }} />
+          <Skeleton width={`${28 + i * 5}%`} height={11} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Footer({ text }) {
   return (
     <div style={{

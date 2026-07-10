@@ -525,8 +525,7 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
 
   return (
     <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
+      borderRadius: 10,
       padding: "12px 14px",
       marginBottom: 10,
       background: C.cardBg,
@@ -910,8 +909,7 @@ function InviteCardMobile({ invite, squads, canDelete, onDelete }) {
 
   return (
     <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
+      borderRadius: 10,
       padding: "12px 14px",
       marginBottom: 10,
       background: C.cardBg,

@@ -2,17 +2,20 @@
 // Three sub-views (list / create / detail) selected by local state.
 // Detail surfaces the candidate-facing URL once the cycle is opened.
 
-import { useEffect, useState } from "react";
-import { useI18n } from "../../i18n";
+import { useEffect, useRef, useState } from "react";
+import { useI18n, fmtWhen } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
+  Skeleton, SkeletonRows,
 } from "../../ui";
 import { C, FONT_MONO } from "../../theme";
 import {
   listCycles, getCycle, createCycle, updateCycle, deleteCycle,
   beginCycle, regenerateToken, setCycleStatus, surveyUrlForCycle,
+  getCycleSurveyStats, getCandidateCountsByCycle,
 } from "../../data/recruitment";
+import { supabase } from "../../supabase";
 import QuestionEditor from "./QuestionEditor";
 import ExamEditor from "./ExamEditor";
 
@@ -71,20 +74,36 @@ export default function Cycles() {
 function CycleList({ onPick, onNew }) {
   const { t } = useI18n();
   const [cycles, setCycles] = useState([]);
+  const [counts, setCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+
+  async function loadCounts() {
+    const { data } = await getCandidateCountsByCycle();
+    if (data) setCounts(data);
+  }
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data, error } = await listCycles();
+      const [{ data, error }] = await Promise.all([listCycles(), loadCounts()]);
       if (cancelled) return;
       if (error) setErr(error.message);
       else setCycles(data || []);
       setLoading(false);
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Live candidate counts — refresh whenever anyone enters a survey.
+  useEffect(() => {
+    const ch = supabase.channel("z5-cycles-live")
+      .on("postgres_changes",
+          { event: "*", schema: "public", table: "candidates" },
+          () => loadCounts())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   return (
@@ -94,13 +113,19 @@ function CycleList({ onPick, onNew }) {
         subtitle={t("rec.cycles.subtitle")}
         action={<Btn onClick={onNew}>{t("rec.cycles.new")}</Btn>}
       />
-      <Panel connectTop>
-        {loading && <div style={{ color: C.dim, fontSize: 14 }}>{t("common.loading")}</div>}
+      <Panel>
+        {loading && <SkeletonRows rows={3} />}
         {!loading && cycles.length === 0 && (
           <div style={{ color: C.dim, fontSize: 14 }}>{t("rec.cycles.empty")}</div>
         )}
-        {!loading && cycles.map((c) => (
-          <CycleRow key={c.id} cycle={c} onClick={() => onPick(c.id)} />
+        {!loading && cycles.map((c, i) => (
+          <CycleRow
+            key={c.id}
+            cycle={c}
+            count={counts[c.id] || 0}
+            isLast={i === cycles.length - 1}
+            onClick={() => onPick(c.id)}
+          />
         ))}
         <ErrLine>{err}</ErrLine>
       </Panel>
@@ -108,26 +133,40 @@ function CycleList({ onPick, onNew }) {
   );
 }
 
-function CycleRow({ cycle, onClick }) {
+// Flat list row — hairline divider between rows, no nested card borders.
+function CycleRow({ cycle, count, isLast, onClick }) {
   const { t } = useI18n();
+  const [hover, setHover] = useState(false);
+  const isLive = cycle.status === "open";
+  const subtitle = [
+    t("rec.cycles.n_candidates", { n: count }),
+    cycle.created_at
+      ? t("rec.cycles.created_on", { d: fmtWhen(cycle.created_at, t, { year: "numeric", month: "short", day: "numeric" }) })
+      : null,
+  ].filter(Boolean).join(" · ");
+
   return (
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        gap: 12,
         width: "100%",
-        padding: "14px 16px",
-        background: "transparent",
-        border: `1px solid ${C.border}`,
-        borderRadius: 4,
-        marginBottom: 10,
+        padding: "16px 8px",
+        background: hover ? C.hoverBg : "transparent",
+        border: "none",
+        borderBottom: isLast ? "none" : `1px solid ${C.border}`,
+        borderRadius: 8,
         textAlign: "start",
         cursor: "pointer",
         color: C.text,
         fontFamily: "inherit",
+        transition: "background 140ms ease-out",
       }}
     >
       <div style={{ minWidth: 0, flex: 1 }}>
@@ -135,14 +174,50 @@ function CycleRow({ cycle, onClick }) {
           color: C.bright, fontWeight: 600, fontSize: 15, letterSpacing: "0.3px",
           marginBottom: 4,
         }}>{cycle.name}</div>
-        <div style={{ fontSize: 12, color: C.dim }}>
-          {cycle.starts_on || "—"}{cycle.ends_on ? ` → ${cycle.ends_on}` : ""}
-        </div>
+        <div style={{ fontSize: 12, color: C.dim }}>{subtitle}</div>
       </div>
-      <Badge tone={statusTone(cycle.status)}>
-        {t(`rec.cycle_status.${cycle.status}`)}
-      </Badge>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {isLive && count > 0 && <LiveCountBadge count={count} />}
+        <Badge tone={statusTone(cycle.status)}>
+          {t(`rec.cycle_status.${cycle.status}`)}
+        </Badge>
+      </div>
     </button>
+  );
+}
+
+// Small pulsing "live" pill with the current candidate count.
+function LiveCountBadge({ count }) {
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 7,
+      padding: "3px 10px",
+      fontSize: 11,
+      fontWeight: 700,
+      fontFamily: FONT_MONO,
+      letterSpacing: "0.5px",
+      color: C.ok,
+      background: C.okBg,
+      border: `1px solid ${C.okBorder}`,
+      borderRadius: 999,
+    }}>
+      <LiveDot />
+      {count}
+    </span>
+  );
+}
+
+function LiveDot({ size = 7 }) {
+  return (
+    <span style={{ position: "relative", width: size, height: size, flexShrink: 0, display: "inline-block" }}>
+      <span style={{
+        position: "absolute", inset: 0, borderRadius: "50%",
+        background: C.ok, animation: "z5-ping 1.6s cubic-bezier(0,0,0.2,1) infinite",
+      }} />
+      <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: C.ok }} />
+    </span>
   );
 }
 
@@ -176,7 +251,7 @@ function CycleCreate({ onCreated, onCancel }) {
         subtitle={t("rec.cycles.create_subtitle")}
         action={<Btn small onClick={onCancel}>{t("rec.back")}</Btn>}
       />
-      <Panel connectTop>
+      <Panel>
         <form onSubmit={save}>
           <Field label={t("rec.cycles.name")}>
             <Input
@@ -230,10 +305,9 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
   if (!cycle) {
     return (
       <>
-        <PageHeader title={t("common.loading")} />
-        <Panel connectTop>
-          <div style={{ color: C.dim, fontSize: 14 }}>{t("common.loading")}</div>
-        </Panel>
+        <PageHeader title={<Skeleton width={180} height={24} />} />
+        <Panel><SkeletonRows rows={2} /></Panel>
+        <Panel><SkeletonRows rows={2} /></Panel>
       </>
     );
   }
@@ -311,7 +385,54 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
         action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>}
       />
 
-      <Panel connectTop title={t("rec.cycles.access")}>
+      {/* Stage first — the cycle's position in the lifecycle is the
+          headline information on this page. */}
+      <Panel title={t("rec.cycles.lifecycle")}>
+        <CycleStageStepper currentStatus={cycle.status} />
+        {!isClosed && !isDraft && (
+          <>
+            <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6, marginTop: 22, marginBottom: 14 }}>
+              {t(`rec.cycles.status_help.${cycle.status}`)}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {cycle.status === "open" && (
+                <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
+                  → {t("rec.cycle_status.interviewing")}
+                </Btn>
+              )}
+              {cycle.status === "interviewing" && (
+                <>
+                  <Btn small onClick={() => handleStatus("open")} disabled={busy}>
+                    ← {t("rec.cycle_status.open")}
+                  </Btn>
+                  <Btn small onClick={() => handleStatus("exam")} disabled={busy}>
+                    → {t("rec.cycle_status.exam")}
+                  </Btn>
+                </>
+              )}
+              {cycle.status === "exam" && (
+                <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
+                  ← {t("rec.cycle_status.interviewing")}
+                </Btn>
+              )}
+              {confirmClose ? (
+                <>
+                  <Btn small onClick={handleClose} disabled={busy}>
+                    {t("rec.cycles.close_confirm")}
+                  </Btn>
+                  <Btn small onClick={() => setConfirmClose(false)}>✕</Btn>
+                </>
+              ) : (
+                <Btn small onClick={() => setConfirmClose(true)}>{t("rec.cycles.close")}</Btn>
+              )}
+            </div>
+          </>
+        )}
+      </Panel>
+
+      {!isDraft && <SurveyActivity cycleId={cycleId} closed={isClosed} />}
+
+      <Panel title={t("rec.cycles.access")}>
         {isDraft && (
           <>
             <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6, marginBottom: 14 }}>
@@ -369,49 +490,6 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
         <OkLine>{ok}</OkLine>
       </Panel>
 
-      <Panel title={t("rec.cycles.lifecycle")}>
-        <CycleStageStepper currentStatus={cycle.status} />
-        {!isClosed && !isDraft && (
-          <>
-            <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6, marginTop: 22, marginBottom: 14 }}>
-              {t(`rec.cycles.status_help.${cycle.status}`)}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {cycle.status === "open" && (
-                <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
-                  → {t("rec.cycle_status.interviewing")}
-                </Btn>
-              )}
-              {cycle.status === "interviewing" && (
-                <>
-                  <Btn small onClick={() => handleStatus("open")} disabled={busy}>
-                    ← {t("rec.cycle_status.open")}
-                  </Btn>
-                  <Btn small onClick={() => handleStatus("exam")} disabled={busy}>
-                    → {t("rec.cycle_status.exam")}
-                  </Btn>
-                </>
-              )}
-              {cycle.status === "exam" && (
-                <Btn small onClick={() => handleStatus("interviewing")} disabled={busy}>
-                  ← {t("rec.cycle_status.interviewing")}
-                </Btn>
-              )}
-              {confirmClose ? (
-                <>
-                  <Btn small onClick={handleClose} disabled={busy}>
-                    {t("rec.cycles.close_confirm")}
-                  </Btn>
-                  <Btn small onClick={() => setConfirmClose(false)}>✕</Btn>
-                </>
-              ) : (
-                <Btn small onClick={() => setConfirmClose(true)}>{t("rec.cycles.close")}</Btn>
-              )}
-            </div>
-          </>
-        )}
-      </Panel>
-
       <Panel title={t("rec.cycles.questions")}>
         <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
           {t("rec.cycles.questions_help")}
@@ -446,6 +524,161 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
         )}
       </Panel>
     </>
+  );
+}
+
+// ── Live survey activity ────────────────────────────────────────────
+// Realtime funnel for the shared survey link: total candidates who
+// opened it, how many are mid-survey right now, how many submitted.
+// Subscribes to the candidates table so the numbers move live while
+// the panel is open; the big counter "pops" whenever a value changes.
+
+function SurveyActivity({ cycleId, closed }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const [stats, setStats] = useState(null); // { total, inProgress, submitted }
+  const [popKey, setPopKey] = useState(0);
+  const prevTotal = useRef(null);
+
+  async function load() {
+    const { data } = await getCycleSurveyStats(cycleId);
+    if (!data) return;
+    setStats(data);
+    if (prevTotal.current !== null && data.total !== prevTotal.current) {
+      setPopKey((k) => k + 1); // retrigger the pop animation
+    }
+    prevTotal.current = data.total;
+  }
+
+  useEffect(() => {
+    prevTotal.current = null;
+    load();
+    const ch = supabase.channel(`z5-cycle-live-${cycleId}`)
+      .on("postgres_changes",
+          { event: "*", schema: "public", table: "candidates", filter: `cycle_id=eq.${cycleId}` },
+          () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cycleId]);
+
+  const pct = stats && stats.total > 0
+    ? Math.round((stats.submitted / stats.total) * 100)
+    : 0;
+
+  return (
+    <Panel
+      title={t("rec.cycles.live_title")}
+      action={!closed && (
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 7,
+          fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+          letterSpacing: "1.5px", color: C.ok, textTransform: "uppercase",
+        }}>
+          <LiveDot />
+          {t("rec.cycles.live")}
+        </span>
+      )}
+    >
+      {!stats && <SkeletonRows rows={1} />}
+
+      {stats && stats.total === 0 && (
+        <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6 }}>
+          {t("rec.cycles.live_empty")}
+        </div>
+      )}
+
+      {stats && stats.total > 0 && (
+        <>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: isMobile ? 8 : 14,
+            marginBottom: 18,
+          }}>
+            <ActivityStat
+              key={`t${popKey}`}
+              value={stats.total}
+              label={t("rec.cycles.live_entered")}
+              tone={C.bright}
+              big
+              pop={popKey > 0}
+            />
+            <ActivityStat
+              value={stats.inProgress}
+              label={t("rec.cycles.live_in_progress")}
+              tone={stats.inProgress > 0 ? C.warn : C.dim}
+            />
+            <ActivityStat
+              value={stats.submitted}
+              label={t("rec.cycles.live_submitted")}
+              tone={stats.submitted > 0 ? C.ok : C.dim}
+            />
+          </div>
+
+          {/* Submission progress — animated width */}
+          <div style={{
+            height: 8,
+            borderRadius: 999,
+            background: C.progressTrack,
+            overflow: "hidden",
+          }}>
+            <div style={{
+              height: "100%",
+              width: `${pct}%`,
+              borderRadius: 999,
+              background: C.ok,
+              transition: "width 600ms cubic-bezier(0.22, 1, 0.36, 1)",
+            }} />
+          </div>
+          <div style={{
+            marginTop: 8,
+            fontSize: 11,
+            fontFamily: FONT_MONO,
+            color: C.dim,
+            letterSpacing: "0.5px",
+          }}>
+            {t("rec.cycles.live_pct", { pct })}
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function ActivityStat({ value, label, tone, big, pop }) {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 4,
+      padding: isMobile ? "10px 4px" : "14px 8px",
+      background: C.cardBg,
+      borderRadius: 10,
+    }}>
+      <div style={{
+        fontFamily: FONT_MONO,
+        fontSize: big ? (isMobile ? 30 : 38) : (isMobile ? 22 : 28),
+        fontWeight: 700,
+        lineHeight: 1,
+        color: tone,
+        animation: pop ? "z5-pop 420ms ease-out" : "none",
+      }}>
+        {value}
+      </div>
+      <div style={{
+        fontSize: 10,
+        color: C.dim,
+        letterSpacing: "1px",
+        textTransform: "uppercase",
+        fontWeight: 600,
+        textAlign: "center",
+      }}>
+        {label}
+      </div>
+    </div>
   );
 }
 
