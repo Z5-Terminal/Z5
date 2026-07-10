@@ -4,3 +4,5 @@ dist
 .env.local
 .DS_Store
 *.sql
+# AI-artwork source files (optimized copies live in public/)
+*-Hero.png

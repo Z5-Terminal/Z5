@@ -317,7 +317,7 @@ export default function Hub() {
               {banners.map((b) => (
                 <PosterCard
                   key={b.mode}
-                  heroSrc={`${import.meta.env.BASE_URL}hero-${b.mode}.png`}
+                  heroSrc={`${import.meta.env.BASE_URL}hero-${b.mode}.jpg`}
                   iconSrc={b.iconSrc}
                   name={b.name}
                   tagline={b.tagline}
