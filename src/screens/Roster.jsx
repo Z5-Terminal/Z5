@@ -406,13 +406,106 @@ function SquadBlock({
   );
 }
 
+/* ── Row action menu ──────────────────────────────────────────────────
+   All per-member actions live behind one "⋯" button — a clean dropdown
+   instead of four buttons per row. Destructive items ask for an inline
+   confirm inside the menu (first click arms, second executes). */
+function ActionMenu({ items, label = "⋯" }) {
+  const [open, setOpen] = useState(false);
+  const [confirmKey, setConfirmKey] = useState(null);
+  const list = (items || []).filter(Boolean);
+  if (list.length === 0) return null;
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <Btn small onClick={() => { setOpen((o) => !o); setConfirmKey(null); }}
+           aria-haspopup="menu" aria-expanded={open}
+           style={{ fontWeight: 700, letterSpacing: "1px", minWidth: 34 }}>
+        {label}
+      </Btn>
+      {open && (
+        <>
+          <div
+            onClick={() => { setOpen(false); setConfirmKey(null); }}
+            style={{ position: "fixed", inset: 0, zIndex: 40 }}
+          />
+          <div role="menu" style={{
+            position: "absolute",
+            zIndex: 41,
+            insetInlineEnd: 0,
+            top: "calc(100% + 6px)",
+            minWidth: 210,
+            background: C.bgElevated,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            boxShadow: `0 14px 36px ${C.overlayInverse}0.4)`,
+            padding: 6,
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+          }}>
+            {list.map((it) => {
+              const confirming = confirmKey === it.key;
+              const baseColor = it.tone === "error" ? C.error
+                              : it.tone === "warn" ? C.warn
+                              : C.text;
+              return (
+                <MenuItem
+                  key={it.key}
+                  color={confirming ? C.error : baseColor}
+                  bg={confirming ? C.errBg : "transparent"}
+                  bold={confirming}
+                  onClick={() => {
+                    if (it.confirmLabel && !confirming) { setConfirmKey(it.key); return; }
+                    setOpen(false); setConfirmKey(null);
+                    it.onSelect();
+                  }}
+                >
+                  {confirming ? it.confirmLabel : it.label}
+                </MenuItem>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({ color, bg, bold, onClick, children }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        all: "unset",
+        boxSizing: "border-box",
+        cursor: "pointer",
+        padding: "9px 12px",
+        borderRadius: 8,
+        fontSize: 13.5,
+        textAlign: "start",
+        color,
+        fontWeight: bold ? 700 : 500,
+        background: bg !== "transparent" ? bg : (hover ? C.hoverBg : "transparent"),
+        transition: "background 120ms ease-out",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /* ── Desktop member row with role change + remove ── */
 function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAssignSquad, onRemove, onDelete, onToggleInstructor, allSquads = [], isUnassignedBlock = false }) {
   const { t } = useI18n();
   const [editingRole, setEditingRole] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const assignableSquads = (allSquads || []).filter((s) => s.id && s.id !== member.squad_id);
 
   return (
@@ -441,73 +534,56 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
       <td style={{ ...S.td, color: C.dim }}>{member.email}</td>
       {canManage && (
         <td style={{ ...S.td, textAlign: "end", whiteSpace: "nowrap" }}>
-          <div style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end" }}>
-            {/* Assign/Move is available for everyone including self */}
-            {onAssignSquad && assignableSquads.length > 0 && (
-              assigning ? (
-                <select
-                  autoFocus
-                  defaultValue=""
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v) { onAssignSquad(member, v); setAssigning(false); }
-                  }}
-                  onBlur={() => setAssigning(false)}
-                  style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 140 }}
-                >
-                  <option value="">{t("ros.pick_squad")}</option>
-                  {assignableSquads.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <Btn small onClick={() => setAssigning(true)}>
-                  {isUnassignedBlock ? t("ros.assign") : t("ros.move")}
-                </Btn>
-              )
-            )}
-            {/* Role change, instructor toggle, remove, delete — not for self */}
-            {!isCurrentUser && (
-              <>
-              <Btn small onClick={() => setEditingRole(!editingRole)}>
-                {editingRole ? t("mis.cancel") : t("ros.change_role")}
-              </Btn>
-              <Btn small onClick={() => onToggleInstructor && onToggleInstructor(member)}
-                   style={member.is_instructor ? { color: C.warn, borderColor: C.warnBorderFaint } : {}}>
-                {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
-              </Btn>
-              {!isUnassignedBlock && member.squad_id && (
-                !confirmRemove ? (
-                  <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove_member")}</Btn>
-                ) : (
-                  <>
-                    <Btn small style={{ color: C.warn, borderColor: C.warn }}
-                         onClick={() => { onRemove(member); setConfirmRemove(false); }}>
-                      {t("ros.confirm_remove")}
-                    </Btn>
-                    <Btn small onClick={() => setConfirmRemove(false)}>{t("mis.cancel")}</Btn>
-                  </>
-                )
-              )}
-              {onDelete && (
-                !confirmDelete ? (
-                  <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
-                       onClick={() => setConfirmDelete(true)}>
-                    {t("ros.delete_user")}
-                  </Btn>
-                ) : (
-                  <>
-                    <Btn small style={{ color: C.error, borderColor: C.error, background: C.badgeError }}
-                         onClick={() => { onDelete(member); setConfirmDelete(false); }}>
-                      {t("ros.confirm_delete_user")}
-                    </Btn>
-                    <Btn small onClick={() => setConfirmDelete(false)}>{t("mis.cancel")}</Btn>
-                  </>
-                )
-              )}
-              </>
-            )}
-          </div>
+          {assigning ? (
+            <select
+              autoFocus
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v) { onAssignSquad(member, v); setAssigning(false); }
+              }}
+              onBlur={() => setAssigning(false)}
+              style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 160 }}
+            >
+              <option value="">{t("ros.pick_squad")}</option>
+              {assignableSquads.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          ) : (
+            <ActionMenu items={[
+              onAssignSquad && assignableSquads.length > 0 && {
+                key: "assign",
+                label: isUnassignedBlock ? t("ros.assign") : t("ros.move"),
+                onSelect: () => setAssigning(true),
+              },
+              !isCurrentUser && {
+                key: "role",
+                label: t("ros.change_role"),
+                onSelect: () => setEditingRole(true),
+              },
+              !isCurrentUser && {
+                key: "instructor",
+                label: member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor"),
+                tone: member.is_instructor ? "warn" : undefined,
+                onSelect: () => onToggleInstructor && onToggleInstructor(member),
+              },
+              !isCurrentUser && !isUnassignedBlock && member.squad_id && {
+                key: "remove",
+                label: t("ros.remove_member"),
+                confirmLabel: t("ros.confirm_remove"),
+                tone: "warn",
+                onSelect: () => onRemove(member),
+              },
+              !isCurrentUser && onDelete && {
+                key: "delete",
+                label: t("ros.delete_user"),
+                confirmLabel: t("ros.confirm_delete_user"),
+                tone: "error",
+                onSelect: () => onDelete(member),
+              },
+            ]} />
+          )}
         </td>
       )}
     </tr>
@@ -519,8 +595,6 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
   const { t } = useI18n();
   const [editingRole, setEditingRole] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const assignableSquads = (allSquads || []).filter((s) => s.id && s.id !== member.squad_id);
 
   return (
@@ -571,71 +645,56 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
         {member.email}
       </div>
       {canManage && (
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          {/* Assign/Move available for everyone including self */}
-          {onAssignSquad && assignableSquads.length > 0 && (
-            assigning ? (
-              <select
-                autoFocus
-                defaultValue=""
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v) { onAssignSquad(member, v); setAssigning(false); }
-                }}
-                onBlur={() => setAssigning(false)}
-                style={{ ...S.input, fontSize: 14, padding: "6px 10px", minHeight: 36, flex: 1 }}
-              >
-                <option value="">{t("ros.pick_squad")}</option>
-                {assignableSquads.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            ) : (
-              <Btn small onClick={() => setAssigning(true)}>
-                {isUnassignedBlock ? t("ros.assign") : t("ros.move")}
-              </Btn>
-            )
-          )}
-          {/* Role change, instructor toggle, remove, delete — not for self */}
-          {!isCurrentUser && (
-            <>
-            <Btn small onClick={() => setEditingRole(!editingRole)}>
-              {editingRole ? t("mis.cancel") : t("ros.change_role")}
-            </Btn>
-            <Btn small onClick={() => onToggleInstructor && onToggleInstructor(member)}
-                 style={member.is_instructor ? { color: C.warn, borderColor: C.warnBorderFaint } : {}}>
-              {member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor")}
-            </Btn>
-            {!isUnassignedBlock && member.squad_id && (
-              !confirmRemove ? (
-                <Btn small onClick={() => setConfirmRemove(true)}>{t("ros.remove_member")}</Btn>
-              ) : (
-                <>
-                  <Btn small style={{ color: C.warn, borderColor: C.warnBorderFaint }}
-                       onClick={() => { onRemove(member); setConfirmRemove(false); }}>
-                    {t("ros.confirm_remove")}
-                  </Btn>
-                  <Btn small onClick={() => setConfirmRemove(false)}>{t("mis.cancel")}</Btn>
-                </>
-              )
-            )}
-            {onDelete && (
-              !confirmDelete ? (
-                <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
-                     onClick={() => setConfirmDelete(true)}>
-                  {t("ros.delete_user")}
-                </Btn>
-              ) : (
-                <>
-                  <Btn small style={{ color: C.error, borderColor: C.error, background: C.badgeError }}
-                       onClick={() => { onDelete(member); setConfirmDelete(false); }}>
-                    {t("ros.confirm_delete_user")}
-                  </Btn>
-                  <Btn small onClick={() => setConfirmDelete(false)}>{t("mis.cancel")}</Btn>
-                </>
-              )
-            )}
-            </>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+          {assigning ? (
+            <select
+              autoFocus
+              defaultValue=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v) { onAssignSquad(member, v); setAssigning(false); }
+              }}
+              onBlur={() => setAssigning(false)}
+              style={{ ...S.input, fontSize: 14, padding: "6px 10px", minHeight: 36, flex: 1 }}
+            >
+              <option value="">{t("ros.pick_squad")}</option>
+              {assignableSquads.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          ) : (
+            <ActionMenu items={[
+              onAssignSquad && assignableSquads.length > 0 && {
+                key: "assign",
+                label: isUnassignedBlock ? t("ros.assign") : t("ros.move"),
+                onSelect: () => setAssigning(true),
+              },
+              !isCurrentUser && {
+                key: "role",
+                label: t("ros.change_role"),
+                onSelect: () => setEditingRole(true),
+              },
+              !isCurrentUser && {
+                key: "instructor",
+                label: member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor"),
+                tone: member.is_instructor ? "warn" : undefined,
+                onSelect: () => onToggleInstructor && onToggleInstructor(member),
+              },
+              !isCurrentUser && !isUnassignedBlock && member.squad_id && {
+                key: "remove",
+                label: t("ros.remove_member"),
+                confirmLabel: t("ros.confirm_remove"),
+                tone: "warn",
+                onSelect: () => onRemove(member),
+              },
+              !isCurrentUser && onDelete && {
+                key: "delete",
+                label: t("ros.delete_user"),
+                confirmLabel: t("ros.confirm_delete_user"),
+                tone: "error",
+                onSelect: () => onDelete(member),
+              },
+            ]} />
           )}
         </div>
       )}
