@@ -10,6 +10,7 @@ import { useI18n, fmtWhen } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
+  SkeletonRows,
 } from "../../ui";
 import { C, S, FONT_MONO } from "../../theme";
 import {
@@ -64,6 +65,7 @@ export default function Candidates() {
 
 function CandidatesList({ onPick }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [cycles, setCycles] = useState([]);
   const [cycleId, setCycleId] = useState("");
   const [rows, setRows] = useState([]);          // enriched: { candidate, interviews, avgScore, examAttempt, ... }
@@ -158,6 +160,25 @@ function CandidatesList({ onPick }) {
 
   const isScoreSort = sort === "interview_score" || sort === "exam_score" || sort === "combined_score";
 
+  // Per-status counts within the current cycle + team + search scope
+  // (the status filter itself is ignored so every chip stays informative).
+  const statusCounts = useMemo(() => {
+    const counts = { all: 0 };
+    for (const r of rows) {
+      const c = r.candidate;
+      if (team !== "all" && c.team !== Number(team)) continue;
+      if (search) {
+        const q = search.toLowerCase();
+        const inName = (c.full_name || "").toLowerCase().includes(q);
+        const inId   = (c.personal_id || "").toLowerCase().includes(q);
+        if (!inName && !inId) continue;
+      }
+      counts.all++;
+      counts[c.status] = (counts[c.status] || 0) + 1;
+    }
+    return counts;
+  }, [rows, team, search]);
+
   // Team-grouped layout (for non-score sorts).
   const grouped = useMemo(() => {
     const map = new Map(TEAMS.map((tt) => [tt, []]));
@@ -179,90 +200,113 @@ function CandidatesList({ onPick }) {
         subtitle={cycle
           ? `${cycle.name} — ${filtered.length} / ${rows.length}`
           : t("rec.candidates.subtitle")}
-      />
-      <AcceptedCohortPanel rows={rows} onPick={onPick} />
-      <Panel>
-        <Field label={t("rec.candidates.cycle")}>
+        action={
+          // Cycle = context switcher for the whole screen, so it lives in
+          // the header rather than among the filters.
           <select
             value={cycleId}
             onChange={(e) => setCycleId(e.target.value)}
-            style={{ ...S.input, fontSize: 14 }}
+            aria-label={t("rec.candidates.cycle")}
+            style={{
+              ...S.input,
+              fontSize: 13,
+              width: "auto",
+              maxWidth: isMobile ? 150 : 230,
+              padding: "8px 12px",
+            }}
           >
             <option value="">—</option>
             {cycles.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} · {c.status}
+                {c.name} · {t(`rec.cycle_status.${c.status}`)}
               </option>
             ))}
           </select>
-        </Field>
+        }
+      />
+      <AcceptedCohortPanel rows={rows} onPick={onPick} />
 
-        <Field label={t("rec.candidates.search")}>
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("rec.candidates.search_ph")}
-          />
-        </Field>
-
-        <Field label={t("rec.candidates.sort")}>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            style={{ ...S.input, fontSize: 14 }}
-          >
-            {SORTS.map((s) => (
-              <option key={s} value={s}>{t(`rec.candidates.sort.${s}`)}</option>
-            ))}
-          </select>
-        </Field>
-
-        {sort === "combined_score" && (
-          <Field label={t("rec.candidates.min_combined")}>
+      {/* Compact filter toolbar: search + sort in one row, chip rows below. */}
+      <Panel>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 240px", minWidth: 200 }}>
+            <div style={S.label}>{t("rec.candidates.search")}</div>
             <Input
-              type="number"
-              min="0"
-              max="100"
-              value={minCombined}
-              onChange={(e) => setMinCombined(e.target.value)}
-              placeholder={t("rec.candidates.min_combined_ph")}
-              style={{ maxWidth: 160, fontFamily: FONT_MONO }}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("rec.candidates.search_ph")}
             />
-          </Field>
-        )}
-
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ ...S.label }}>{t("rec.candidates.team_filter")}</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Btn small active={team === "all"} onClick={() => setTeam("all")}>
-              {t("rec.candidates.all_teams")}
-            </Btn>
-            {TEAMS.map((tt) => (
-              <Btn key={tt} small active={team === String(tt)} onClick={() => setTeam(String(tt))}>
-                {t("rec.candidates.team")} {tt}
-              </Btn>
-            ))}
           </div>
+          <div style={{ flex: "0 1 210px", minWidth: 170 }}>
+            <div style={S.label}>{t("rec.candidates.sort")}</div>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              style={{ ...S.input, fontSize: 14 }}
+            >
+              {SORTS.map((s) => (
+                <option key={s} value={s}>{t(`rec.candidates.sort.${s}`)}</option>
+              ))}
+            </select>
+          </div>
+          {sort === "combined_score" && (
+            <div style={{ flex: "0 1 170px", minWidth: 130 }}>
+              <div style={S.label}>{t("rec.candidates.min_combined")}</div>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={minCombined}
+                onChange={(e) => setMinCombined(e.target.value)}
+                placeholder={t("rec.candidates.min_combined_ph")}
+                style={{ fontFamily: FONT_MONO }}
+              />
+            </div>
+          )}
         </div>
 
-        <div>
-          <div style={{ ...S.label }}>{t("rec.candidates.status_filter")}</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {STATUSES.map((s) => (
-              <Btn key={s} small active={status === s} onClick={() => setStatus(s)}>
+        <FilterChipRow label={t("rec.candidates.team_filter")}>
+          <Btn small active={team === "all"} onClick={() => setTeam("all")} style={{ whiteSpace: "nowrap" }}>
+            {t("rec.candidates.all_teams")}
+          </Btn>
+          {TEAMS.map((tt) => (
+            <Btn key={tt} small active={team === String(tt)} onClick={() => setTeam(String(tt))} style={{ whiteSpace: "nowrap" }}>
+              {t("rec.candidates.team")} {tt}
+            </Btn>
+          ))}
+        </FilterChipRow>
+
+        <FilterChipRow label={t("rec.candidates.status_filter")}>
+          {STATUSES.map((s) => {
+            const n = s === "all" ? (statusCounts.all || 0) : (statusCounts[s] || 0);
+            const empty = s !== "all" && n === 0;
+            return (
+              <Btn
+                key={s}
+                small
+                active={status === s}
+                onClick={() => setStatus(s)}
+                style={{ whiteSpace: "nowrap", opacity: empty ? 0.45 : 1 }}
+              >
                 {s === "all"
                   ? t("rec.candidates.all_status")
                   : t(`rec.candidate_status.${s}`)}
+                <span style={{
+                  fontFamily: FONT_MONO,
+                  fontSize: 11,
+                  marginInlineStart: 6,
+                  opacity: 0.75,
+                }}>{n}</span>
               </Btn>
-            ))}
-          </div>
-        </div>
+            );
+          })}
+        </FilterChipRow>
 
         <ErrLine>{err}</ErrLine>
       </Panel>
 
       {loading && (
-        <Panel><div style={{ color: C.dim }}>{t("common.loading")}</div></Panel>
+        <Panel><SkeletonRows rows={4} /></Panel>
       )}
 
       {!loading && filtered.length === 0 && (
@@ -311,6 +355,28 @@ function CandidatesList({ onPick }) {
         </Panel>
       )}
     </>
+  );
+}
+
+// Labeled chip row for the filter toolbar. Wraps on desktop; on mobile
+// it becomes a single horizontally-scrollable strip so 8 status chips
+// never stack into a wall.
+function FilterChipRow({ label, children }) {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ ...S.label, marginBottom: 8 }}>{label}</div>
+      <div style={{
+        display: "flex",
+        gap: 6,
+        flexWrap: isMobile ? "nowrap" : "wrap",
+        overflowX: isMobile ? "auto" : "visible",
+        paddingBottom: isMobile ? 4 : 0,
+        WebkitOverflowScrolling: "touch",
+      }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
