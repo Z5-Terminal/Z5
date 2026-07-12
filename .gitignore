@@ -6,3 +6,5 @@ dist
 *.sql
 # AI-artwork source files (optimized copies live in public/)
 *-Hero.png
+# hero source grids
+ChatGPT Image*.png
