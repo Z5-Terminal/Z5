@@ -379,12 +379,8 @@ export default function Profile() {
 
   return (
     <>
-      <PageHeader
-        title={t("prof.title")}
-        subtitle={t("prof.subtitle")}
-      />
-
-      <div style={{ marginTop: isMobile ? 14 : 20 }}>
+      {/* No page title here — the hero card IS the page identity. */}
+      <div>
 
         {/* Hero: identity + quick prefs (theme / language) */}
         <ProfileHero profile={profile} onAvatarChanged={refreshProfile} />
