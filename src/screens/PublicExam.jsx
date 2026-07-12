@@ -28,6 +28,7 @@ const T = {
   time_left: "זמן שנותר",
   time_up: "הזמן נגמר",
   question: "שאלה",
+  points_suffix: "נק׳",
   of: "מתוך",
   answered: "נענו",
   previous: "‹ הקודמת",
@@ -156,7 +157,7 @@ function ErrorBlock({ message }) {
     <div style={{
       marginTop: 60, padding: "20px 18px", textAlign: "center",
       background: C.errBg, border: `1px solid ${C.errBorder}`,
-      borderRadius: 4, color: C.error, fontSize: 14, lineHeight: 1.6,
+      borderRadius: 12, color: C.error, fontSize: 14, lineHeight: 1.6,
     }}>{message}</div>
   );
 }
@@ -348,7 +349,7 @@ function ExamQuestion({ index, question, selected, onPick }) {
   return (
     <div style={{
       border: `1px solid ${C.border}`,
-      borderRadius: 4,
+      borderRadius: 14,
       background: C.cardBg,
       padding: isMobile ? "14px" : "18px 20px",
       marginBottom: 14,
@@ -356,7 +357,11 @@ function ExamQuestion({ index, question, selected, onPick }) {
       <div style={{
         fontFamily: FONT_MONO, fontSize: 12, color: C.dim,
         letterSpacing: "1px", marginBottom: 8,
-      }}>{T.question} {index}</div>
+        display: "flex", justifyContent: "space-between",
+      }}>
+        <span>{T.question} {index}</span>
+        <span>{question.points ?? 1} {T.points_suffix}</span>
+      </div>
 
       {question.prompt_text && (
         <div style={{
@@ -369,7 +374,7 @@ function ExamQuestion({ index, question, selected, onPick }) {
           alt=""
           style={{
             maxWidth: "100%", display: "block", margin: "0 auto 14px",
-            border: `1px solid ${C.border}`, borderRadius: 3,
+            border: `1px solid ${C.border}`, borderRadius: 8,
           }}
         />
       )}
@@ -396,7 +401,7 @@ function ExamQuestion({ index, question, selected, onPick }) {
                 padding: optImg ? "8px" : "12px 14px",
                 background: active ? C.selectedBg : C.inputBg,
                 border: `1px solid ${active ? C.bright : C.border}`,
-                borderRadius: 2,
+                borderRadius: 10,
                 cursor: "pointer",
                 fontFamily: FONT,
                 color: C.text,
@@ -470,7 +475,7 @@ function BigButton({ children, onClick, disabled, primary }) {
         letterSpacing: "0.4px",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.55 : 1,
-        borderRadius: 2,
+        borderRadius: 12,
         minHeight: isMobile ? 50 : 46,
       }}
     >{children}</button>

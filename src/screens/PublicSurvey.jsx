@@ -44,7 +44,18 @@ const T = {
   choose: "בחר…",
   recommend_ph: "שם 1, שם 2",
   dont_recommend_ph: "שם 1, שם 2, שם 3",
+  hebrew_only: "עברית בלבד",
+  other_detail_ph: "פרט כאן…",
+  group_recommend: "המלצות חיילים",
+  group_dont: "חיילים שאינך ממליץ עליהם",
+  group_names_note: "כל שם בשדה נפרד — עברית בלבד",
+  name_n: "שם",
 };
+
+// Hebrew-only free text: Latin letters are stripped as the user types.
+function heOnly(v) {
+  return String(v || "").replace(/[A-Za-z]/g, "");
+}
 
 const SECTION_ORDER = ["identity", "self_assessment", "background", "physical"];
 
@@ -197,7 +208,7 @@ function ErrorBlock({ message }) {
       padding: "20px 18px",
       background: C.errBg,
       border: `1px solid ${C.errBorder}`,
-      borderRadius: 4,
+      borderRadius: 12,
       color: C.error,
       fontSize: 14,
       lineHeight: 1.6,
@@ -282,6 +293,8 @@ function SurveyForm({ token, survey, onSubmitted }) {
         (a.value !== undefined && a.value !== null)
       );
       if (!filled) return false;
+      // "אחר" requires the manual detail field to be written out.
+      if (a.text === "אחר" && !String(a.other || "").trim()) return false;
     }
     return true;
   }
@@ -294,13 +307,23 @@ function SurveyForm({ token, survey, onSubmitted }) {
       setErr(T.generic_error); // shouldn't happen
       return null;
     }
-    const nameQ  = section.questions.find((q) => q.ord === 1);
-    const teamQ  = section.questions.find((q) => q.ord === 2);
-    const idQ    = section.questions.find((q) => q.ord === 3);
-    const fullName = nameQ ? answers[nameQ.id]?.text?.trim() : "";
+    const trim = (q) => (q ? String(answers[q.id]?.text || "").trim() : "");
+    const byText = (needle) => section.questions.find(
+      (q) => (q.question_text || "").trim() === needle);
+    // New template: separate first/last name questions. Falls back to a
+    // single ord-1 "full name" question for pre-v22 cycles.
+    const firstQ = byText("שם פרטי");
+    const lastQ  = byText("שם משפחה");
+    const legacyNameQ = !firstQ ? section.questions.find((q) => q.ord === 1) : null;
+    const teamQ = section.questions.find((q) => q.question_type === "team_radio");
+    const idQ   = section.questions.find(
+      (q) => (q.question_text || "").includes("מספר אישי"));
+    const fullName = firstQ
+      ? [trim(firstQ), trim(lastQ)].filter(Boolean).join(" ")
+      : trim(legacyNameQ);
     const teamStr  = teamQ ? answers[teamQ.id]?.text : "";
     const team = teamStr ? parseInt(teamStr, 10) : null;
-    const personalId = idQ ? answers[idQ.id]?.text?.trim() : "";
+    const personalId = idQ ? String(answers[idQ.id]?.text || "").trim() : "";
 
     if (!fullName)   { setErr(T.invalid_name); return null; }
     if (!team)       { setErr(T.invalid_team); return null; }
@@ -325,11 +348,15 @@ function SurveyForm({ token, survey, onSubmitted }) {
       .map((q) => {
         const a = answers[q.id];
         if (!a) return null;
+        // Compose "אחר: <detail>" so the manual answer travels with it.
+        const composedText = a.text === "אחר" && String(a.other || "").trim()
+          ? `אחר: ${String(a.other).trim()}`
+          : (a.text ?? null);
         return saveAnswer({
           token,
           candidateId: cid,
           questionId: q.id,
-          answerText: a.text ?? null,
+          answerText: composedText,
           answerValue: a.value ?? null,
         });
       })
@@ -386,7 +413,7 @@ function SurveyForm({ token, survey, onSubmitted }) {
 
   return (
     <div style={{ padding: "8px 4px" }}>
-      <ProgressBar pageIdx={pageIdx} totalPages={totalPages} />
+      <ProgressBar pageIdx={pageIdx} totalPages={totalPages} sections={sections} />
       <h2 style={{
         margin: "12px 0 24px",
         color: C.bright,
@@ -395,12 +422,12 @@ function SurveyForm({ token, survey, onSubmitted }) {
         letterSpacing: "0.5px",
       }}>{section.title}</h2>
 
-      {section.questions.map((q) => (
-        <QuestionField
-          key={q.id}
-          question={q}
-          answer={answers[q.id]}
-          onChange={(patch) => setAnswer(q.id, patch)}
+      {buildBlocks(section.questions).map((block, bi) => (
+        <QuestionBlock
+          key={bi}
+          block={block}
+          answers={answers}
+          setAnswer={setAnswer}
         />
       ))}
 
@@ -409,7 +436,7 @@ function SurveyForm({ token, survey, onSubmitted }) {
           padding: "10px 14px",
           background: C.errBg,
           border: `1px solid ${C.errBorder}`,
-          borderRadius: 3,
+          borderRadius: 10,
           color: C.error,
           fontSize: 13,
           marginTop: 16,
@@ -436,32 +463,163 @@ function SurveyForm({ token, survey, onSubmitted }) {
   );
 }
 
-function ProgressBar({ pageIdx, totalPages }) {
+// Group related questions into visual blocks:
+//   namerow — שם פרטי + שם משפחה side by side
+//   group   — the 3-name recommendation blocks in one rounded tile
+function buildBlocks(qs) {
+  const blocks = [];
+  let i = 0;
+  const txt = (q) => (q.question_text || "").trim();
+  while (i < qs.length) {
+    const q = qs[i];
+    if (txt(q) === "שם פרטי" && qs[i + 1] && txt(qs[i + 1]) === "שם משפחה") {
+      blocks.push({ type: "namerow", qs: [q, qs[i + 1]] });
+      i += 2;
+      continue;
+    }
+    if (txt(q).startsWith("חייל שאתה ממליץ")) {
+      const grp = [];
+      while (i < qs.length && txt(qs[i]).startsWith("חייל שאתה ממליץ")) grp.push(qs[i++]);
+      blocks.push({ type: "group", title: T.group_recommend, qs: grp });
+      continue;
+    }
+    if (txt(q).startsWith("חייל שלדעתך אינו")) {
+      const grp = [];
+      while (i < qs.length && txt(qs[i]).startsWith("חייל שלדעתך אינו")) grp.push(qs[i++]);
+      blocks.push({ type: "group", title: T.group_dont, qs: grp });
+      continue;
+    }
+    blocks.push({ type: "single", qs: [q] });
+    i += 1;
+  }
+  return blocks;
+}
+
+function QuestionBlock({ block, answers, setAnswer }) {
+  const isMobile = useIsMobile();
+
+  if (block.type === "namerow") {
+    return (
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+        columnGap: 14,
+      }}>
+        {block.qs.map((q) => (
+          <QuestionField
+            key={q.id}
+            question={q}
+            answer={answers[q.id]}
+            onChange={(patch) => setAnswer(q.id, patch)}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (block.type === "group") {
+    return (
+      <div style={{
+        background: C.cardBg,
+        borderRadius: 14,
+        padding: isMobile ? "14px 14px 4px" : "18px 18px 6px",
+        marginBottom: 22,
+      }}>
+        <div style={{
+          fontSize: 14, fontWeight: 700, color: C.bright, marginBottom: 2,
+        }}>
+          {block.title}
+          {block.qs.some((q) => q.required) && (
+            <span style={{ color: C.error, marginInlineStart: 4 }}>*</span>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: C.dim, marginBottom: 12 }}>
+          {T.group_names_note}
+        </div>
+        {block.qs.map((q, i) => (
+          <div key={q.id} style={{ marginBottom: 12 }}>
+            <div style={{
+              fontFamily: FONT_MONO, fontSize: 11, color: C.dim,
+              letterSpacing: "0.5px", marginBottom: 5,
+            }}>{T.name_n} {i + 1}</div>
+            <QuestionInput
+              question={{ ...q, question_type: "text" }}
+              answer={answers[q.id] || {}}
+              onChange={(patch) => setAnswer(q.id, patch)}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const q = block.qs[0];
+  return (
+    <QuestionField
+      question={q}
+      answer={answers[q.id]}
+      onChange={(patch) => setAnswer(q.id, patch)}
+    />
+  );
+}
+
+function ProgressBar({ pageIdx, totalPages, sections = [] }) {
+  const isMobile = useIsMobile();
   return (
     <div>
       <div style={{
-        fontFamily: FONT_MONO,
-        fontSize: 11,
-        color: C.dim,
-        letterSpacing: "1.2px",
-        textTransform: "uppercase",
-        marginBottom: 6,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        gap: 10,
+        marginBottom: 8,
       }}>
-        {T.page} {pageIdx + 1} {T.of} {totalPages}
+        <span style={{
+          fontFamily: FONT_MONO,
+          fontSize: 11,
+          color: C.dim,
+          letterSpacing: "1.2px",
+          textTransform: "uppercase",
+        }}>
+          {T.page} {pageIdx + 1} {T.of} {totalPages}
+        </span>
+        <span style={{
+          fontFamily: FONT_MONO, fontSize: 11, color: C.ok,
+          letterSpacing: "0.5px",
+        }}>
+          {Math.round(((pageIdx) / totalPages) * 100)}%
+        </span>
       </div>
-      <div style={{
-        height: 3,
-        background: C.progressTrack,
-        borderRadius: 0,
-        overflow: "hidden",
-      }}>
-        <div style={{
-          width: `${((pageIdx + 1) / totalPages) * 100}%`,
-          height: "100%",
-          background: C.bright,
-          transition: "width 240ms ease-out",
-        }} />
+      {/* One segment per section; done segments filled, current pulses bright */}
+      <div style={{ display: "flex", gap: 5 }}>
+        {Array.from({ length: totalPages }).map((_, i) => (
+          <div key={i} style={{
+            flex: 1,
+            height: 6,
+            borderRadius: 999,
+            background: i < pageIdx ? C.ok
+                      : i === pageIdx ? C.bright
+                      : C.progressTrack,
+            transition: "background 240ms ease-out",
+          }} />
+        ))}
       </div>
+      {!isMobile && sections.length > 0 && (
+        <div style={{ display: "flex", gap: 5, marginTop: 6 }}>
+          {sections.map((sec, i) => (
+            <div key={sec.key} style={{
+              flex: 1,
+              fontSize: 10.5,
+              textAlign: "center",
+              color: i === pageIdx ? C.bright : C.dimmer,
+              fontWeight: i === pageIdx ? 700 : 500,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}>{sec.title}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -515,7 +673,7 @@ const inputBase = {
   width: "100%",
   outline: "none",
   boxSizing: "border-box",
-  borderRadius: 2,
+  borderRadius: 12,
   minHeight: 46,
   WebkitAppearance: "none",
   appearance: "none",
@@ -527,8 +685,8 @@ function TextInput({ answer, onChange, placeholder }) {
     <input
       type="text"
       value={answer.text || ""}
-      onChange={(e) => onChange({ text: e.target.value })}
-      placeholder={placeholder}
+      onChange={(e) => onChange({ text: heOnly(e.target.value) })}
+      placeholder={placeholder || T.hebrew_only}
       style={inputBase}
     />
   );
@@ -553,7 +711,7 @@ function TextareaInput({ answer, onChange }) {
   return (
     <textarea
       value={answer.text || ""}
-      onChange={(e) => onChange({ text: e.target.value })}
+      onChange={(e) => onChange({ text: heOnly(e.target.value) })}
       style={{ ...inputBase, height: 120, resize: "vertical" }}
     />
   );
@@ -562,16 +720,38 @@ function TextareaInput({ answer, onChange }) {
 function DropdownInput({ question, answer, onChange }) {
   const opts = Array.isArray(question.options) ? question.options : [];
   return (
-    <select
-      value={answer.text || ""}
-      onChange={(e) => onChange({ text: e.target.value })}
-      style={{ ...inputBase, fontSize: 16 }}
-    >
-      <option value="">{T.choose}</option>
-      {opts.map((o, i) => (
-        <option key={i} value={String(o)}>{String(o)}</option>
-      ))}
-    </select>
+    <div>
+      <select
+        value={answer.text || ""}
+        onChange={(e) => onChange({ text: e.target.value })}
+        style={{ ...inputBase, fontSize: 16 }}
+      >
+        <option value="">{T.choose}</option>
+        {opts.map((o, i) => (
+          <option key={i} value={String(o)}>{String(o)}</option>
+        ))}
+      </select>
+      {answer.text === "אחר" && <OtherDetail answer={answer} onChange={onChange} />}
+    </div>
+  );
+}
+
+// Manual free-text detail that slides open when "אחר" is picked.
+function OtherDetail({ answer, onChange }) {
+  return (
+    <input
+      type="text"
+      autoFocus
+      value={answer.other || ""}
+      onChange={(e) => onChange({ other: heOnly(e.target.value) })}
+      placeholder={T.other_detail_ph}
+      style={{
+        ...inputBase,
+        marginTop: 8,
+        borderColor: C.borderBright,
+        background: C.cardBg,
+      }}
+    />
   );
 }
 
@@ -615,6 +795,7 @@ function RadioInput({ question, answer, onChange }) {
           </button>
         );
       })}
+      {selected === "אחר" && <OtherDetail answer={answer} onChange={onChange} />}
     </div>
   );
 }
@@ -643,7 +824,7 @@ function LikertInput({ answer, onChange }) {
                 background: active ? C.bright : C.inputBg,
                 color: active ? C.btnActiveColor : C.text,
                 border: `1px solid ${active ? C.bright : C.border}`,
-                borderRadius: 2,
+                borderRadius: 10,
                 fontFamily: FONT_MONO,
                 fontSize: 18,
                 fontWeight: 700,
@@ -688,7 +869,7 @@ function BigButton({ children, onClick, disabled, primary }) {
         letterSpacing: "0.4px",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.55 : 1,
-        borderRadius: 2,
+        borderRadius: 12,
         minHeight: isMobile ? 50 : 46,
         transition: "background 160ms ease-out",
       }}

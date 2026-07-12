@@ -1,5 +1,5 @@
 // Z5 :: shared UI primitives
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { C, S, FONT, FONT_MONO } from "./theme";
 import { useIsMobile } from "./useIsMobile";
 import { useTheme } from "./ThemeContext";
@@ -266,10 +266,15 @@ export function PageHeader({ title, subtitle, action, hero = true }) {
   // small scale, beside the title. Renders only inside a console and
   // can be disabled per-header with hero={false}.
   const consoleMode = useConsoleMaybe()?.consoleMode || null;
-  const [heroOk, setHeroOk] = useState(true);
-  const heroSrc = hero && consoleMode
-    ? `${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`
-    : null;
+  const { mode } = useTheme();
+  const heroChain = hero && consoleMode
+    ? (mode === "light"
+        ? [`${import.meta.env.BASE_URL}hero-${consoleMode}-light.jpg`, `${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`]
+        : [`${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`])
+    : [];
+  const [heroIdx, setHeroIdx] = useState(0);
+  useEffect(() => { setHeroIdx(0); }, [mode, consoleMode]);
+  const heroSrc = heroIdx < heroChain.length ? heroChain[heroIdx] : null;
   const heroSize = isMobile ? 52 : 64;
   return (
     <div style={{
@@ -280,12 +285,13 @@ export function PageHeader({ title, subtitle, action, hero = true }) {
       padding: isMobile ? "2px 2px 4px" : "4px 2px 8px",
       marginBottom: 0,
     }}>
-      {heroSrc && heroOk && (
+      {heroSrc && (
         <img
+          key={heroSrc}
           src={heroSrc}
           alt=""
           aria-hidden
-          onError={() => setHeroOk(false)}
+          onError={() => setHeroIdx((i) => i + 1)}
           style={{
             width: heroSize,
             height: heroSize,

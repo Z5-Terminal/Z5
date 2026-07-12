@@ -28,7 +28,11 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
   const [pressed, setPressed] = useState(false);
-  const [imgOk, setImgOk] = useState(true);
+  // Source fallback chain: light-mode variant (when in light theme) →
+  // dark artwork → console icon. onError simply advances the chain.
+  const sources = isLight ? [heroSrc.replace(".jpg", "-light.jpg"), heroSrc] : [heroSrc];
+  const [srcIdx, setSrcIdx] = useState(0);
+  const activeSrc = srcIdx < sources.length ? sources[srcIdx] : null;
 
   const locked = comingSoon || !enabled;
   const lit = !locked && (hover || pressed);
@@ -70,7 +74,7 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
         borderRadius: 18,
         overflow: "hidden",
         border: `1px solid ${lit ? C.borderBright : C.border}`,
-        background: "#000",
+        background: isLight && srcIdx === 0 ? "#f8f6f0" : "#000",
         padding: 0,
         fontFamily: FONT,
         textAlign: "start",
@@ -83,12 +87,13 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
       }}
     >
       {/* Artwork */}
-      {imgOk && heroSrc ? (
+      {activeSrc ? (
         <img
-          src={heroSrc}
+          key={activeSrc}
+          src={activeSrc}
           alt=""
           aria-hidden
-          onError={() => setImgOk(false)}
+          onError={() => setSrcIdx((i) => i + 1)}
           style={{
             position: "absolute",
             inset: 0,
@@ -122,11 +127,14 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
         </div>
       )}
 
-      {/* Bottom gradient for text legibility */}
+      {/* Bottom gradient for text legibility — flips with the artwork:
+          dark posters get a black fade, white posters a paper fade. */}
       <div aria-hidden style={{
         position: "absolute",
         inset: 0,
-        background: "linear-gradient(to top, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.62) 24%, rgba(0,0,0,0) 52%)",
+        background: isLight && srcIdx === 0
+          ? "linear-gradient(to top, rgba(248,246,240,0.96) 0%, rgba(248,246,240,0.7) 24%, rgba(248,246,240,0) 52%)"
+          : "linear-gradient(to top, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.62) 24%, rgba(0,0,0,0) 52%)",
       }} />
 
       {/* Copy */}
@@ -142,14 +150,14 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
           fontWeight: 800,
           letterSpacing: "3px",
           textTransform: "uppercase",
-          color: "#fff",
+          color: isLight && srcIdx === 0 ? "#141310" : "#fff",
         }}>
           {name}
         </div>
         <div style={{
           fontSize: isMobile ? 12 : 13,
           lineHeight: 1.5,
-          color: "rgba(255,255,255,0.72)",
+          color: isLight && srcIdx === 0 ? "rgba(20,19,16,0.72)" : "rgba(255,255,255,0.72)",
         }}>
           {tagline}
         </div>
@@ -161,7 +169,7 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
             letterSpacing: "1.5px",
             textTransform: "uppercase",
             fontWeight: 600,
-            color: "rgba(255,255,255,0.55)",
+            color: isLight && srcIdx === 0 ? "rgba(20,19,16,0.55)" : "rgba(255,255,255,0.55)",
           }}>
             {comingSoonLabel}
           </div>
@@ -187,7 +195,7 @@ function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAc
             letterSpacing: "2px",
             textTransform: "uppercase",
             fontWeight: 700,
-            color: "#fff",
+            color: isLight && srcIdx === 0 ? "#141310" : "#fff",
             opacity: lit ? 1 : 0.55,
             transition: "opacity 200ms ease-out",
           }}>

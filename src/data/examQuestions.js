@@ -24,6 +24,7 @@ export async function createExamQuestion(cycleId, q) {
       prompt_image_url: q.prompt_image_url || null,
       options: q.options || [],
       correct_option: q.correct_option || null,
+      points: q.points ?? 1,
     })
     .select()
     .single();

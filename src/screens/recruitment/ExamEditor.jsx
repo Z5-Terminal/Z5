@@ -173,6 +173,7 @@ function defaultNewQuestion(existing) {
       { key: "1" }, { key: "2" }, { key: "3" }, { key: "4" },
     ],
     correct_option: null,
+    points: 1,
   };
 }
 
@@ -213,6 +214,7 @@ function QuestionRow({ q, onEdit, onDelete }) {
               ? <Badge tone="ok">{t("rec.exam_editor.keyed_to")} {q.correct_option}</Badge>
               : <Badge tone="warn">{t("rec.exam_editor.no_key")}</Badge>}
             <Badge>{(q.options || []).length} {t("rec.exam_editor.options")}</Badge>
+            <Badge tone="bright">{q.points ?? 1} {t("rec.exam_editor.points_suffix")}</Badge>
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -246,6 +248,7 @@ function QuestionForm({ cycleId, initial, onSave, onCancel }) {
       : [{ key: "1" }, { key: "2" }, { key: "3" }, { key: "4" }]
   );
   const [correct, setCorrect] = useState(initial.correct_option || "");
+  const [points, setPoints] = useState(initial.points ?? 1);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -275,15 +278,21 @@ function QuestionForm({ cycleId, initial, onSave, onCancel }) {
       prompt_image_url: promptImagePath || null,
       options,
       correct_option: correct || null,
+      points: Math.max(1, parseInt(points, 10) || 1),
     });
     setBusy(false);
   }
 
   return (
     <form onSubmit={save}>
-      <Field label={t("rec.exam_editor.ord")}>
-        <Input type="number" value={ord} onChange={(e) => setOrd(e.target.value)} />
-      </Field>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <Field label={t("rec.exam_editor.ord")}>
+          <Input type="number" value={ord} onChange={(e) => setOrd(e.target.value)} style={{ width: 110 }} />
+        </Field>
+        <Field label={t("rec.exam_editor.points")}>
+          <Input type="number" min="1" max="100" value={points} onChange={(e) => setPoints(e.target.value)} style={{ width: 110 }} />
+        </Field>
+      </div>
       <Field label={t("rec.exam_editor.prompt_text")}>
         <Textarea
           value={promptText}
