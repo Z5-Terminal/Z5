@@ -29,7 +29,7 @@ const T = {
   required_missing: "יש לענות על כל שאלות החובה לפני המעבר.",
   invalid_personal_id: "מספר אישי הוא שדה חובה.",
   invalid_team: "יש לבחור צוות.",
-  invalid_name: "שם מלא הוא שדה חובה.",
+  invalid_name: "יש למלא שם פרטי ושם משפחה.",
   thanks_title: "השאלון נשלח. תודה.",
   thanks_body: "תשובותיך נשמרו. המשך לחיכות לעדכון מהמפקדים.",
   page: "שלב",
@@ -652,6 +652,11 @@ function QuestionField({ question, answer, onChange }) {
 
 function QuestionInput({ question, answer, onChange }) {
   const t = question.question_type;
+  // מספר אישי is stored as a text question but is digits-only — give it
+  // the numeric keyboard and digit filtering instead of Hebrew rules.
+  if ((question.question_text || "").includes("מספר אישי")) {
+    return <PersonalIdInput answer={answer} onChange={onChange} />;
+  }
   if (t === "textarea") return <TextareaInput answer={answer} onChange={onChange} />;
   if (t === "number")   return <NumberInput   answer={answer} onChange={onChange} />;
   if (t === "radio" || t === "team_radio") return <RadioInput question={question} answer={answer} onChange={onChange} />;
@@ -686,8 +691,21 @@ function TextInput({ answer, onChange, placeholder }) {
       type="text"
       value={answer.text || ""}
       onChange={(e) => onChange({ text: heOnly(e.target.value) })}
-      placeholder={placeholder || T.hebrew_only}
+      placeholder={placeholder}
       style={inputBase}
+    />
+  );
+}
+
+function PersonalIdInput({ answer, onChange }) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      value={answer.text || ""}
+      onChange={(e) => onChange({ text: e.target.value.replace(/[^0-9]/g, "") })}
+      style={{ ...inputBase, fontFamily: FONT_MONO, letterSpacing: "1px", direction: "ltr", textAlign: "end" }}
     />
   );
 }
