@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuth, roleLabel, canCreateWholeTeamTask } from "../auth";
+import { useAuth, roleLabelT, canCreateWholeTeamTask } from "../auth";
 import { supabase } from "../supabase";
 import { createMission } from "../data/missions";
 import {
@@ -422,7 +422,7 @@ function OperatorRow({ member, selectedRole, onChange, isMobile }) {
         <div style={{ color: C.dim, fontSize: 12 }}>
           {member.full_name || <span style={{ color: C.dimmer }}>—</span>}
           {" · "}
-          <span>{roleLabel(member.role)}</span>
+          <span>{roleLabelT(member.role, t)}</span>
         </div>
       </div>
       <select
@@ -445,6 +445,7 @@ function OperatorRow({ member, selectedRole, onChange, isMobile }) {
 }
 
 function PersonPickRow({ member, selected, onToggle, isMobile }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
@@ -494,7 +495,7 @@ function PersonPickRow({ member, selected, onToggle, isMobile }) {
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
         }}>
-          {member.full_name || "—"} · {roleLabel(member.role)}
+          {member.full_name || "—"} · {roleLabelT(member.role, t)}
         </div>
       </div>
     </button>

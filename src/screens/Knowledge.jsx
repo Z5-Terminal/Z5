@@ -5,7 +5,7 @@ import { Panel, PageHeader, Btn, Input, Textarea, Field, ErrLine, OkLine, Badge 
 import { useIsMobile } from "../useIsMobile";
 import { C, FONT_MONO, S } from "../theme";
 import {
-  listMaterials, listCategories, uploadMaterial,
+  listMaterials, uploadMaterial,
   deleteMaterial, getMaterialUrl, subscribeKnowledge,
   SUBJECTS, SUBJECT_MAP, WEEKS,
 } from "../data/knowledge";
@@ -447,7 +447,7 @@ function UploadPanel({ onUploaded, track, isAdmin }) {
     });
     setBusy(false);
     if (error) { setErr(String(error.message || error)); return; }
-    setOk(`"${title.trim()}" uploaded.`);
+    setOk(t("kn.uploaded", { title: title.trim() }));
     setTitle(""); setDesc(""); setFile(null); setWeek("");
     if (fileRef.current) fileRef.current.value = "";
     onUploaded?.();

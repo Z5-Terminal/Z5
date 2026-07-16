@@ -416,6 +416,8 @@ const EN = {
   "auth.signin": "Sign in",
   "auth.newop": "New operator",
   "auth.footer": "Internal Use Only · No Transmission Outside Operational Net",
+  "auth.profile_error": "Could not load your profile.",
+  "common.retry": "Retry",
   "auth.email": "Email",
   "auth.password": "Password",
   "auth.password_min": "Password (min 6 chars)",
@@ -727,6 +729,12 @@ const EN = {
   "ros.instructor_on": "INSTRUCTOR ON",
   "ros.instructor_off": "INSTRUCTOR OFF",
   "ros.no_squad": "— No squad —",
+  "ros.squad_updated": "Squad \"{name}\" updated.",
+  "ros.squad_deleted": "Squad \"{name}\" deleted.",
+  "ros.role_changed": "{who} → {role}.",
+  "ros.member_removed": "{who} removed from squad.",
+  "ros.member_deleted": "{who} deleted.",
+  "ros.invite_deleted": "Invite {code} deleted.",
 
   // Knowledge
   "kn.title": "Knowledge base",
@@ -1152,6 +1160,8 @@ const HE = {
   "auth.signin": "כניסה",
   "auth.newop": "לוחם חדש",
   "auth.footer": "שימוש פנימי בלבד · אין העברה מחוץ לרשת מבצעית",
+  "auth.profile_error": "לא ניתן לטעון את הפרופיל שלך.",
+  "common.retry": "נסה שוב",
   "auth.email": "אימייל",
   "auth.password": "סיסמה",
   "auth.password_min": "סיסמה (מינימום 6 תווים)",
@@ -1463,6 +1473,12 @@ const HE = {
   "ros.instructor_on": "מדריך פעיל",
   "ros.instructor_off": "מדריך בוטל",
   "ros.no_squad": "— ללא כיתה —",
+  "ros.squad_updated": "כיתה \"{name}\" עודכנה.",
+  "ros.squad_deleted": "כיתה \"{name}\" נמחקה.",
+  "ros.role_changed": "{who} → {role}.",
+  "ros.member_removed": "{who} הוסר מהכיתה.",
+  "ros.member_deleted": "{who} נמחק.",
+  "ros.invite_deleted": "הזמנה {code} נמחקה.",
 
   // Knowledge
   "kn.title": "מאגר ידע",

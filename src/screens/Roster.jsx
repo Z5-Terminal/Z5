@@ -1,19 +1,11 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { useAuth, roleLabel, canManageSquads, canCreateInvites } from "../auth";
+import { useAuth, roleLabelT, canManageSquads, canCreateInvites } from "../auth";
 import { useI18n, fmtWhen } from "../i18n";
 import { supabase } from "../supabase";
 import { Panel, PageHeader, Btn, Input, Field, ErrLine, OkLine, Badge, Mono } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, S } from "../theme";
 
-const SQUAD_STATUS_LABELS = {
-  active:   "ACTIVE",
-  training: "IN BOOTCAMP",
-};
-const SQUAD_STATUS_TONES = {
-  active:   "ok",
-  training: "warn",
-};
 const SQUAD_STATUS_ORDER = { active: 0, training: 1 };
 
 const ROLE_OPTIONS = ["sniper", "squad_leader"];
@@ -72,17 +64,6 @@ export default function Roster() {
     });
   }, [squads]);
 
-  async function changeSquadStatus(squad, nextStatus) {
-    setErr(""); setOk("");
-    const { error } = await supabase
-      .from("squads")
-      .update({ status: nextStatus })
-      .eq("id", squad.id);
-    if (error) { setErr(error.message); return; }
-    setOk(`Squad "${squad.name}" → ${SQUAD_STATUS_LABELS[nextStatus]}.`);
-    load();
-  }
-
   async function updateSquad(squad, updates) {
     setErr(""); setOk("");
     const { error } = await supabase
@@ -90,7 +71,7 @@ export default function Roster() {
       .update(updates)
       .eq("id", squad.id);
     if (error) { setErr(error.message); return; }
-    setOk(`Squad "${updates.name || squad.name}" updated.`);
+    setOk(t("ros.squad_updated", { name: updates.name || squad.name }));
     load();
   }
 
@@ -107,7 +88,7 @@ export default function Roster() {
       .delete()
       .eq("id", squad.id);
     if (e2) { setErr(e2.message); return; }
-    setOk(`Squad "${squad.name}" deleted.`);
+    setOk(t("ros.squad_deleted", { name: squad.name }));
     load();
   }
 
@@ -118,7 +99,7 @@ export default function Roster() {
       .update({ role: newRole })
       .eq("id", member.id);
     if (error) { setErr(error.message); return; }
-    setOk(`${member.callsign || member.email} → ${roleLabel(newRole)}.`);
+    setOk(t("ros.role_changed", { who: member.callsign || member.email, role: roleLabelT(newRole, t) }));
     load();
   }
 
@@ -153,7 +134,7 @@ export default function Roster() {
       .update({ squad_id: null })
       .eq("id", member.id);
     if (error) { setErr(error.message); return; }
-    setOk(`${member.callsign || member.email} removed from squad.`);
+    setOk(t("ros.member_removed", { who: member.callsign || member.email }));
     load();
   }
 
@@ -164,7 +145,7 @@ export default function Roster() {
     });
     if (error) { setErr(error.message); return; }
     const who = data?.deleted || member.callsign || member.email;
-    setOk(`${who} deleted.`);
+    setOk(t("ros.member_deleted", { who }));
     load();
   }
 
@@ -175,7 +156,7 @@ export default function Roster() {
       .delete()
       .eq("id", invite.id);
     if (error) { setErr(error.message); return; }
-    setOk(`Invite ${invite.code} deleted.`);
+    setOk(t("ros.invite_deleted", { code: invite.code }));
     load();
   }
 
@@ -209,7 +190,6 @@ export default function Roster() {
             allSquads={sortedSquads}
             members={members.filter((m) => m.squad_id === sq.id)}
             canManage={isManager}
-            onChangeStatus={changeSquadStatus}
             onUpdateSquad={updateSquad}
             onDeleteSquad={deleteSquad}
             onUpdateMemberRole={updateMemberRole}
@@ -261,7 +241,7 @@ export default function Roster() {
    SQUAD BLOCK — with edit/delete
    ═══════════════════════════════════════════════ */
 function SquadBlock({
-  squad, allSquads = [], members, canManage, onChangeStatus, onUpdateSquad, onDeleteSquad,
+  squad, allSquads = [], members, canManage, onUpdateSquad, onDeleteSquad,
   onUpdateMemberRole, onAssignSquad, onRemoveMember, onDeleteMember, onToggleInstructor, currentUserId, isUnassignedBlock = false,
 }) {
   const { t } = useI18n();
@@ -521,13 +501,13 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
             style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 140 }}
           >
             {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>{roleLabel(r)}</option>
+              <option key={r} value={r}>{roleLabelT(r, t)}</option>
             ))}
           </select>
         ) : (
           <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-            <Badge tone="bright">{roleLabel(member.role)}</Badge>
-            {member.is_instructor && <Badge tone="warn">INSTRUCTOR</Badge>}
+            <Badge tone="bright">{roleLabelT(member.role, t)}</Badge>
+            {member.is_instructor && <Badge tone="warn">{t("prof.instructor_badge")}</Badge>}
           </span>
         )}
       </td>
@@ -621,13 +601,13 @@ function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAs
             style={{ ...S.input, fontSize: 14, padding: "6px 10px", width: 150, minHeight: 36 }}
           >
             {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>{roleLabel(r)}</option>
+              <option key={r} value={r}>{roleLabelT(r, t)}</option>
             ))}
           </select>
         ) : (
           <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-            <Badge tone="bright">{roleLabel(member.role)}</Badge>
-            {member.is_instructor && <Badge tone="warn">INSTRUCTOR</Badge>}
+            <Badge tone="bright">{roleLabelT(member.role, t)}</Badge>
+            {member.is_instructor && <Badge tone="warn">{t("prof.instructor_badge")}</Badge>}
           </span>
         )}
       </div>
@@ -872,7 +852,7 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
                         minHeight: isMobile ? 46 : undefined,
                       }}>
                 {allowedRoles.map((r) => (
-                  <option key={r} value={r}>{roleLabel(r)}</option>
+                  <option key={r} value={r}>{roleLabelT(r, t)}</option>
                 ))}
               </select>
             </Field>
@@ -932,7 +912,7 @@ function InviteRowDesktop({ invite, squads, canDelete, onDelete }) {
         <Mono style={{ color: used ? C.dim : C.bright, fontWeight: 600 }}>{invite.code}</Mono>
       </td>
       <td style={S.td}>{sq?.name || "—"}</td>
-      <td style={S.td}>{roleLabel(invite.role)}</td>
+      <td style={S.td}>{roleLabelT(invite.role, t)}</td>
       <td style={S.td}>
         {used ? <Badge>{t("ros.used")}</Badge> : <Badge tone="ok">{t("ros.available")}</Badge>}
       </td>
@@ -986,7 +966,7 @@ function InviteCardMobile({ invite, squads, canDelete, onDelete }) {
         {used ? <Badge>{t("ros.used")}</Badge> : <Badge tone="ok">{t("ros.available")}</Badge>}
       </div>
       <div style={{ fontSize: 13, color: C.text, marginBottom: 2 }}>
-        {sq?.name || "—"} · {roleLabel(invite.role)}
+        {sq?.name || "—"} · {roleLabelT(invite.role, t)}
       </div>
       <div style={{ fontSize: 11, color: C.dim }}>
         {fmtWhen(invite.created_at, t)}

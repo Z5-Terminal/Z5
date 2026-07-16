@@ -180,8 +180,9 @@ function defaultNewQuestion(existing) {
 // ── Row (collapsed view) ──────────────────────────────────────────
 
 function QuestionRow({ q, onEdit, onDelete }) {
+  const { t } = useI18n();
   const [confirmDel, setConfirmDel] = useState(false);
-  const typeLabel = QUESTION_TYPES.find((t) => t.key === q.question_type)?.label || q.question_type;
+  const typeLabel = QUESTION_TYPES.find((qt) => qt.key === q.question_type)?.label || q.question_type;
   return (
     <div style={{
       display: "flex",
@@ -205,7 +206,7 @@ function QuestionRow({ q, onEdit, onDelete }) {
         }}>{q.question_text}</div>
         <div style={{ display: "flex", gap: 6, fontSize: 11, color: C.dim, flexWrap: "wrap" }}>
           <Badge>{typeLabel}</Badge>
-          {q.required && <Badge tone="warn">required</Badge>}
+          {q.required && <Badge tone="warn">{t("rec.editor.required_label")}</Badge>}
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -216,8 +217,8 @@ function QuestionRow({ q, onEdit, onDelete }) {
           </>
         ) : (
           <>
-            <Btn small onClick={onEdit}>edit</Btn>
-            <Btn small onClick={() => setConfirmDel(true)}>del</Btn>
+            <Btn small onClick={onEdit}>{t("mis.edit")}</Btn>
+            <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
           </>
         )}
       </div>

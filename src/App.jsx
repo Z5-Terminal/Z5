@@ -70,7 +70,7 @@ function Inner() {
             {profileError ? (
               <>
                 <div style={{ color: C.text, fontSize: 14, marginBottom: 12 }}>
-                  Could not load your profile.
+                  {t("auth.profile_error")}
                 </div>
                 <ErrLine>{profileError}</ErrLine>
               </>
@@ -80,7 +80,7 @@ function Inner() {
               </div>
             )}
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <Btn onClick={refreshProfile}>Retry</Btn>
+              <Btn onClick={refreshProfile}>{t("common.retry")}</Btn>
               <Btn onClick={signOut}>{t("nav.logout")}</Btn>
             </div>
           </Panel>

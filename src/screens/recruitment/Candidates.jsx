@@ -1455,7 +1455,7 @@ function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl 
 
       {inProgress && (
         <div style={{
-          padding: "10px 14px", background: C.warnBg || "rgba(255,204,85,0.08)",
+          padding: "10px 14px", background: C.warnBg,
           border: `1px solid ${C.warnBorderFaint}`, color: C.warn,
           borderRadius: 3, fontSize: 13, marginBottom: 14,
         }}>

@@ -685,9 +685,6 @@ function sameDay(a, b) {
 function dayKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-function formatTime(d) {
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 // 24h format: "08:00", "14:30" — consistent, no AM/PM.
 function format24(d) {
   const pad = (n) => String(n).padStart(2, "0");

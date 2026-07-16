@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth, roleLabel, canCreateInvites } from "../auth";
+import { useAuth, roleLabelT, canCreateInvites } from "../auth";
 import { useI18n, fmtWhen } from "../i18n";
 import {
   getMission, getMyChecklistState, toggleChecklistItem,
@@ -245,7 +245,7 @@ export default function Checklist({ missionId, onBack }) {
     );
   }
 
-  const statusLabel = MISSION_STATUS_LABELS[mission.status] || mission.status;
+  const statusLabel = t(`status.${mission.status}`) || MISSION_STATUS_LABELS[mission.status] || mission.status;
   const statusTone = MISSION_STATUS_TONES[mission.status] || "default";
   const opCount = operators.length;
 
@@ -304,12 +304,12 @@ export default function Checklist({ missionId, onBack }) {
               marginBottom: 16,
             }}>
               {mission.location && (<>
-                <span style={infoLabelStyle}>{t("mc.location").replace(" (optional)", "")}</span>
-                <span style={infoValueStyle}>{mission.location}</span>
+                <span style={infoLabelStyle()}>{t("mc.location").replace(" (optional)", "")}</span>
+                <span style={infoValueStyle()}>{mission.location}</span>
               </>)}
               {mission.notes && (<>
-                <span style={infoLabelStyle}>{t("mc.notes")}</span>
-                <span style={{ ...infoValueStyle, whiteSpace: "pre-wrap" }}>{mission.notes}</span>
+                <span style={infoLabelStyle()}>{t("mc.notes")}</span>
+                <span style={{ ...infoValueStyle(), whiteSpace: "pre-wrap" }}>{mission.notes}</span>
               </>)}
             </div>
           )}
@@ -456,19 +456,21 @@ export default function Checklist({ missionId, onBack }) {
 // INFO LABEL/VALUE STYLES
 // ═══════════════════════════════════════════════════════════════════
 
-const infoLabelStyle = {
+// Built per-render so the colors track C after a theme toggle — a
+// module-level object would freeze the palette active at import time.
+const infoLabelStyle = () => ({
   color: C.dim,
   fontSize: 11,
   fontWeight: 600,
   letterSpacing: "0.8px",
   textTransform: "uppercase",
   paddingTop: 2,
-};
-const infoValueStyle = {
+});
+const infoValueStyle = () => ({
   color: C.text,
   fontSize: 14,
   lineHeight: 1.5,
-};
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // COLLAPSIBLE SECTION
@@ -745,7 +747,7 @@ function AdminTaskView({
     reload && reload();
   }
 
-  const statusLabel = MISSION_STATUS_LABELS[mission.status] || mission.status;
+  const statusLabel = t(`status.${mission.status}`) || MISSION_STATUS_LABELS[mission.status] || mission.status;
   const statusTone  = MISSION_STATUS_TONES[mission.status] || "default";
 
   return (
@@ -815,7 +817,7 @@ function AdminTaskView({
                 </div>
                 <div style={{ color: C.dim, fontSize: 12 }}>
                   {o.full_name || "—"}
-                  {o.profile_role && <> · {roleLabel(o.profile_role)}</>}
+                  {o.profile_role && <> · {roleLabelT(o.profile_role, t)}</>}
                 </div>
               </div>
               <Badge tone={o.done ? "ok" : "default"}>

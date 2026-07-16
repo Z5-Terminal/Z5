@@ -100,7 +100,7 @@ export default function ExamEditor({ cycleId, cycleName, onBack }) {
         </div>
         {(missingKey > 0 || missingImages > 0) && (
           <div style={{
-            background: C.warnBg || "rgba(255,204,85,0.08)",
+            background: C.warnBg,
             border: `1px solid ${C.warnBorderFaint}`,
             color: C.warn,
             padding: "10px 14px",
