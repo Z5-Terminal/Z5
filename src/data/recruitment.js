@@ -125,15 +125,92 @@ export async function seedDefaultTemplate(cycleId) {
 
 // ── Candidates (admin-side) ────────────────────────────────────────
 
-export async function listCandidates(cycleId, { team, status } = {}) {
-  let q = supabase
+// The archived_at column comes from candidates_archive_migration.sql
+// (run manually in Supabase). List queries exclude archived rows by
+// default; when the migration hasn't been applied yet the filtered
+// query errors on the unknown column, and we degrade gracefully by
+// retrying without the filter (nothing can be archived then anyway).
+function missingArchivedColumn(error) {
+  return !!error && /archived_at/i.test(error.message || "");
+}
+
+export async function listCandidates(cycleId, { team, status, includeArchived = false } = {}) {
+  const build = (excludeArchived) => {
+    let q = supabase
+      .from("candidates")
+      .select("*")
+      .eq("cycle_id", cycleId)
+      .order("created_at", { ascending: false });
+    if (team)   q = q.eq("team", team);
+    if (status) q = q.eq("status", status);
+    if (excludeArchived) q = q.is("archived_at", null);
+    return q;
+  };
+  let res = await build(!includeArchived);
+  if (res.error && !includeArchived && missingArchivedColumn(res.error)) {
+    res = await build(false);
+  }
+  return res;
+}
+
+// ── Archive (soft delete) ──────────────────────────────────────────
+
+export async function archiveCandidate(id) {
+  return supabase
     .from("candidates")
-    .select("*")
-    .eq("cycle_id", cycleId)
-    .order("created_at", { ascending: false });
-  if (team)   q = q.eq("team", team);
-  if (status) q = q.eq("status", status);
-  return q;
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+}
+
+export async function restoreCandidate(id) {
+  return supabase
+    .from("candidates")
+    .update({ archived_at: null })
+    .eq("id", id)
+    .select()
+    .single();
+}
+
+// ── Bulk operations ────────────────────────────────────────────────
+
+// Apply one patch to many candidates at once (.in on ids).
+export async function bulkUpdateCandidates(ids, patch) {
+  if (!ids || ids.length === 0) return { data: [] };
+  return supabase
+    .from("candidates")
+    .update(patch)
+    .in("id", ids)
+    .select();
+}
+
+export async function bulkArchiveCandidates(ids) {
+  return bulkUpdateCandidates(ids, { archived_at: new Date().toISOString() });
+}
+
+// Hard delete: dependent rows first (no FK cascade assumed), then the
+// candidates themselves. Shared by single + bulk delete.
+async function deleteCandidateDependents(ids) {
+  for (const table of ["survey_responses", "candidate_interviews", "exam_attempts"]) {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .in("candidate_id", ids);
+    if (error) return { error };
+  }
+  return {};
+}
+
+export async function bulkDeleteCandidates(ids) {
+  if (!ids || ids.length === 0) return { data: [] };
+  const dep = await deleteCandidateDependents(ids);
+  if (dep.error) return dep;
+  return supabase.from("candidates").delete().in("id", ids);
+}
+
+export async function deleteCandidate(id) {
+  return bulkDeleteCandidates([id]);
 }
 
 // Fetch the candidate row + parent cycle + every survey question for
@@ -211,11 +288,20 @@ export async function updateCandidate(id, patch) {
 // tags (with frequency), per-interviewer breakdown, and exam attempt
 // (if any). The Candidates screen uses this for both its team-grouped
 // layout and its score-ranked leaderboard layout.
-export async function getCandidatesEnriched(cycleId) {
-  const { data: candidates, error: cErr } = await supabase
-    .from("candidates")
-    .select("*")
-    .eq("cycle_id", cycleId);
+export async function getCandidatesEnriched(cycleId, { includeArchived = false } = {}) {
+  const fetchCandidates = (excludeArchived) => {
+    let q = supabase
+      .from("candidates")
+      .select("*")
+      .eq("cycle_id", cycleId);
+    if (excludeArchived) q = q.is("archived_at", null);
+    return q;
+  };
+  let { data: candidates, error: cErr } = await fetchCandidates(!includeArchived);
+  if (cErr && !includeArchived && missingArchivedColumn(cErr)) {
+    // Migration not applied yet — fall back to the unfiltered query.
+    ({ data: candidates, error: cErr } = await fetchCandidates(false));
+  }
   if (cErr) return { error: cErr };
   if (!candidates || candidates.length === 0) return { data: [] };
 

@@ -10,13 +10,15 @@ import { useI18n, fmtWhen } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
-  SkeletonRows,
+  SkeletonRows, ConfirmDialog, Checkbox, BackButton,
 } from "../../ui";
 import { C, S, FONT_MONO } from "../../theme";
 import {
   listCycles, getCandidatesEnriched, getCandidateWithDetails, updateCandidate,
   getCandidateExam, examUrlFor, surveyUrlForCycle,
   combinedScore, listBootcampSquads, promoteCandidate,
+  archiveCandidate, restoreCandidate, deleteCandidate,
+  bulkUpdateCandidates, bulkArchiveCandidates, bulkDeleteCandidates,
 } from "../../data/recruitment";
 import {
   listCandidateInterviews, upsertInterview,
@@ -41,6 +43,141 @@ const STATUSES = [
 ];
 const SORTS = ["newest", "name", "personal_id", "interview_score", "exam_score", "combined_score"];
 const SECTION_ORDER = ["identity", "self_assessment", "background", "physical"];
+// Statuses offered by the bulk "change status" dropdown.
+const BULK_STATUSES = ["interviewed", "ready_for_exam", "exam_done", "accepted", "rejected"];
+
+// Shared initials computation (list rows, accepted cards, hero).
+function initialsOf(name) {
+  return (name || "?")
+    .trim().split(/\s+/).slice(0, 2)
+    .map((s) => s[0] || "").join("").toUpperCase() || "?";
+}
+
+// ── Photo avatar (signed URL) + lightbox ───────────────────────────
+// Round thumbnail resolving the private-bucket photo via a signed URL
+// (same per-component effect pattern as AcceptedCard). Falls back to
+// initials. When a photo exists and onOpenPhoto is provided, clicking
+// the avatar opens the lightbox instead of triggering the row click.
+function CandidateAvatar({ photoUrl, name, size = 40, onOpenPhoto }) {
+  const { t } = useI18n();
+  const [src, setSrc] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!photoUrl) { setSrc(null); return; }
+    candidatePhotoSignedUrl(photoUrl).then((url) => {
+      if (!cancelled) setSrc(url);
+    });
+    return () => { cancelled = true; };
+  }, [photoUrl]);
+
+  const clickable = !!src && !!onOpenPhoto;
+  return (
+    <span
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      title={clickable ? t("rec.candidate.view_photo") : undefined}
+      onClick={clickable ? (e) => { e.stopPropagation(); onOpenPhoto(src); } : undefined}
+      onKeyDown={clickable ? (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault(); e.stopPropagation(); onOpenPhoto(src);
+        }
+      } : undefined}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        flexShrink: 0,
+        background: C.inputBg,
+        border: `1px solid ${C.border}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        cursor: clickable ? "zoom-in" : undefined,
+      }}
+    >
+      {src ? (
+        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <span style={{
+          fontFamily: FONT_MONO,
+          fontSize: Math.max(11, Math.round(size * 0.32)),
+          fontWeight: 700,
+          color: C.dim,
+          letterSpacing: "1px",
+        }}>{initialsOf(name)}</span>
+      )}
+    </span>
+  );
+}
+
+// Full-screen photo lightbox. Click anywhere (or the X, or Escape)
+// closes it. Token-based scrim so both themes stay legible.
+function Lightbox({ src, onClose }) {
+  const { t } = useI18n();
+  useEffect(() => {
+    if (!src) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [src, onClose]);
+
+  if (!src) return null;
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: C.scrim,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        cursor: "zoom-out",
+      }}
+    >
+      <button
+        type="button"
+        aria-label={t("rec.candidate.close_photo")}
+        onClick={onClose}
+        style={{
+          position: "absolute",
+          top: "calc(14px + var(--safe-top))",
+          insetInlineEnd: 14,
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+          background: C.panel,
+          color: C.text,
+          border: `1px solid ${C.borderBright}`,
+          fontSize: 16,
+          fontWeight: 700,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "inherit",
+        }}
+      >✕</button>
+      <img
+        src={src}
+        alt=""
+        style={{
+          maxWidth: "92vw",
+          maxHeight: "86vh",
+          objectFit: "contain",
+          borderRadius: 10,
+          border: `1px solid ${C.borderBright}`,
+        }}
+      />
+    </div>
+  );
+}
 
 export default function Candidates() {
   const [view, setView] = useState("list");
@@ -77,6 +214,16 @@ function CandidatesList({ onPick }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  // Archived filter + multi-select + bulk-action state
+  const [showArchived, setShowArchived] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkBusy, setBulkBusy] = useState("");
+  const [bulkErr, setBulkErr] = useState("");
+  const [bulkOk, setBulkOk] = useState("");
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   // Load cycles once
   useEffect(() => {
@@ -95,19 +242,27 @@ function CandidatesList({ onPick }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Reload enriched rows whenever cycle changes
+  // Reload enriched rows whenever cycle / archived filter changes, or a
+  // bulk action bumps refreshTick.
   useEffect(() => {
     if (!cycleId) { setRows([]); return; }
     let cancelled = false;
     (async () => {
-      const { data, error } = await getCandidatesEnriched(cycleId);
+      const { data, error } = await getCandidatesEnriched(cycleId, { includeArchived: showArchived });
       if (cancelled) return;
       if (error) { setErr(error.message); return; }
       setErr("");
-      setRows(data || []);
+      const list = data || [];
+      setRows(list);
+      // Prune selection down to ids that still exist in the fresh list.
+      setSelectedIds((prev) => {
+        if (prev.size === 0) return prev;
+        const alive = new Set(list.map((r) => r.candidate.id));
+        return new Set([...prev].filter((id) => alive.has(id)));
+      });
     })();
     return () => { cancelled = true; };
-  }, [cycleId]);
+  }, [cycleId, showArchived, refreshTick]);
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -192,6 +347,88 @@ function CandidatesList({ onPick }) {
   }, [sorted]);
 
   const cycle = cycles.find((c) => c.id === cycleId);
+
+  // ── Multi-select + bulk actions ──────────────────────────────────
+  const [confirmBulk, setConfirmBulk] = useState(null); // "archive" | "delete" | null
+  const selectedCount = selectedIds.size;
+
+  function toggleSelectMode() {
+    setSelectMode((m) => {
+      if (m) setSelectedIds(new Set());
+      return !m;
+    });
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Toggle-select every row in `list` (a panel's rows, or all sorted
+  // rows): select them all, or clear them if all are already selected.
+  function selectAllIn(list) {
+    setSelectedIds((prev) => {
+      const ids = list.map((r) => r.candidate.id);
+      const allIn = ids.length > 0 && ids.every((id) => prev.has(id));
+      const next = new Set(prev);
+      ids.forEach((id) => (allIn ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  }
+
+  async function runBulk(fn, okMsg) {
+    const ids = [...selectedIds];
+    if (ids.length === 0 || bulkBusy) return;
+    setBulkBusy(true); setBulkErr(""); setBulkOk("");
+    const { error } = await fn(ids);
+    setBulkBusy(false);
+    setConfirmBulk(null);
+    if (error) { setBulkErr(error.message || String(error)); return; }
+    setBulkOk(okMsg);
+    setTimeout(() => setBulkOk(""), 2500);
+    setSelectedIds(new Set());
+    setRefreshTick((n) => n + 1);
+  }
+
+  function applyBulkStatus() {
+    if (!bulkStatus) return;
+    runBulk(
+      (ids) => bulkUpdateCandidates(ids, { status: bulkStatus }),
+      t("rec.candidates.bulk_done_ok", { ok: selectedCount })
+    ).then(() => setBulkStatus(""));
+  }
+
+  function bulkExamLock(unlocked) {
+    runBulk(
+      (ids) => bulkUpdateCandidates(ids, { exam_unlocked: unlocked }),
+      t("rec.candidates.bulk_done_ok", { ok: selectedCount })
+    );
+  }
+
+  async function handleRestore(id) {
+    setBulkErr(""); setBulkOk("");
+    const { error } = await restoreCandidate(id);
+    if (error) { setBulkErr(error.message || String(error)); return; }
+    setBulkOk(t("rec.candidates.restored"));
+    setTimeout(() => setBulkOk(""), 2500);
+    setRefreshTick((n) => n + 1);
+  }
+
+  const rowProps = (r) => ({
+    candidate: r.candidate,
+    onClick: () => onPick(r.candidate.id),
+    selectMode,
+    selected: selectedIds.has(r.candidate.id),
+    onToggleSelect: () => toggleSelected(r.candidate.id),
+    onOpenPhoto: (src) => setLightboxSrc(src),
+    onRestore: () => handleRestore(r.candidate.id),
+  });
+
+  const bulkBarVisible = selectMode && selectedCount > 0;
 
   return (
     <>
@@ -302,7 +539,48 @@ function CandidatesList({ onPick }) {
           })}
         </FilterChipRow>
 
-        <ErrLine>{err}</ErrLine>
+        {/* Selection + archive controls */}
+        <div style={{
+          display: "flex",
+          gap: 6,
+          flexWrap: "wrap",
+          alignItems: "center",
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: `1px solid ${C.border}`,
+        }}>
+          <Btn small active={selectMode} onClick={toggleSelectMode}>
+            {selectMode ? t("rec.candidates.select_done") : t("rec.candidates.select_mode")}
+          </Btn>
+          <Btn small active={showArchived} onClick={() => setShowArchived((v) => !v)}>
+            {t("rec.candidates.show_archived")}
+          </Btn>
+          {selectMode && (
+            <>
+              <Btn small onClick={() => selectAllIn(sorted)}>
+                {t("rec.candidates.select_all")}
+              </Btn>
+              {selectedCount > 0 && (
+                <Btn small onClick={() => setSelectedIds(new Set())}>
+                  {t("rec.candidates.clear_selection")}
+                </Btn>
+              )}
+              <span style={{
+                fontFamily: FONT_MONO,
+                fontSize: 12,
+                color: selectedCount > 0 ? C.bright : C.dim,
+                fontWeight: 600,
+                marginInlineStart: 4,
+                whiteSpace: "nowrap",
+              }}>
+                {t("rec.candidates.n_selected", { n: selectedCount })}
+              </span>
+            </>
+          )}
+        </div>
+
+        <ErrLine>{err || bulkErr}</ErrLine>
+        <OkLine>{bulkOk}</OkLine>
       </Panel>
 
       {loading && (
@@ -320,7 +598,14 @@ function CandidatesList({ onPick }) {
       )}
 
       {isScoreSort && sorted.length > 0 && (
-        <Panel title={t(`rec.candidates.sort.${sort}`)}>
+        <Panel
+          title={t(`rec.candidates.sort.${sort}`)}
+          action={selectMode ? (
+            <Btn small compact onClick={() => selectAllIn(sorted)}>
+              {t("rec.candidates.select_all")}
+            </Btn>
+          ) : undefined}
+        >
           {sorted.map((row, idx) => (
             <LeaderboardRow
               key={row.candidate.id}
@@ -332,6 +617,10 @@ function CandidatesList({ onPick }) {
                 expandedId === row.candidate.id ? null : row.candidate.id
               )}
               onOpen={() => onPick(row.candidate.id)}
+              selectMode={selectMode}
+              selected={selectedIds.has(row.candidate.id)}
+              onToggleSelect={() => toggleSelected(row.candidate.id)}
+              onOpenPhoto={(src) => setLightboxSrc(src)}
             />
           ))}
         </Panel>
@@ -340,20 +629,138 @@ function CandidatesList({ onPick }) {
       {!isScoreSort && [...grouped.map.entries()].map(([teamNum, list]) => {
         if (list.length === 0) return null;
         return (
-          <Panel key={teamNum} title={`${t("rec.candidates.team")} ${teamNum} (${list.length})`}>
+          <Panel
+            key={teamNum}
+            title={`${t("rec.candidates.team")} ${teamNum} (${list.length})`}
+            action={selectMode ? (
+              <Btn small compact onClick={() => selectAllIn(list)}>
+                {t("rec.candidates.select_all")}
+              </Btn>
+            ) : undefined}
+          >
             {list.map((r) => (
-              <CandidateRow key={r.candidate.id} candidate={r.candidate} onClick={() => onPick(r.candidate.id)} />
+              <CandidateRow key={r.candidate.id} {...rowProps(r)} />
             ))}
           </Panel>
         );
       })}
       {!isScoreSort && grouped.orphans.length > 0 && (
-        <Panel title={t("rec.candidates.no_team")}>
+        <Panel
+          title={t("rec.candidates.no_team")}
+          action={selectMode ? (
+            <Btn small compact onClick={() => selectAllIn(grouped.orphans)}>
+              {t("rec.candidates.select_all")}
+            </Btn>
+          ) : undefined}
+        >
           {grouped.orphans.map((r) => (
-            <CandidateRow key={r.candidate.id} candidate={r.candidate} onClick={() => onPick(r.candidate.id)} />
+            <CandidateRow key={r.candidate.id} {...rowProps(r)} />
           ))}
         </Panel>
       )}
+
+      {/* Spacer so the fixed bulk bar never covers the last rows */}
+      {bulkBarVisible && <div style={{ height: isMobile ? 230 : 96 }} />}
+
+      {/* Sticky bulk action bar (fixed; above the tab bar on mobile) */}
+      {bulkBarVisible && (
+        <div style={{
+          position: "fixed",
+          insetInlineStart: isMobile ? 0 : 220,
+          insetInlineEnd: 0,
+          bottom: isMobile ? "calc(62px + var(--safe-bottom))" : 0,
+          zIndex: 40,
+          padding: isMobile ? "10px 12px" : "12px 40px",
+          background: C.mobileTabBg,
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          borderTop: `1px solid ${C.borderBright}`,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+          boxSizing: "border-box",
+        }}>
+          <span style={{
+            fontFamily: FONT_MONO,
+            fontSize: 12,
+            fontWeight: 700,
+            color: C.bright,
+            whiteSpace: "nowrap",
+            marginInlineEnd: 4,
+          }}>
+            {t("rec.candidates.n_selected", { n: selectedCount })}
+          </span>
+          <select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value)}
+            aria-label={t("rec.candidates.bulk_status")}
+            style={{
+              ...S.input,
+              width: "auto",
+              fontSize: 13,
+              padding: "8px 10px",
+              minHeight: 44,
+              flex: isMobile ? "1 1 150px" : "0 1 auto",
+            }}
+          >
+            <option value="">{t("rec.candidates.bulk_status_ph")}</option>
+            {BULK_STATUSES.map((s) => (
+              <option key={s} value={s}>{t(`rec.candidate_status.${s}`)}</option>
+            ))}
+          </select>
+          <Btn small={!isMobile} onClick={applyBulkStatus} disabled={!!bulkBusy || !bulkStatus}>
+            {t("rec.candidates.bulk_apply")}
+          </Btn>
+          <Btn small={!isMobile} onClick={() => bulkExamLock(true)} disabled={!!bulkBusy}>
+            {t("rec.candidate.unlock_exam")}
+          </Btn>
+          <Btn small={!isMobile} onClick={() => bulkExamLock(false)} disabled={!!bulkBusy}>
+            {t("rec.candidate.lock_exam")}
+          </Btn>
+          <Btn small={!isMobile} onClick={() => setConfirmBulk("archive")} disabled={!!bulkBusy}>
+            {t("rec.candidates.bulk_archive")}
+          </Btn>
+          <Btn
+            small={!isMobile}
+            onClick={() => setConfirmBulk("delete")}
+            disabled={!!bulkBusy}
+            style={{ color: C.error, borderColor: C.errBorder, background: C.errBg }}
+          >
+            {t("rec.candidates.bulk_delete")}
+          </Btn>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirmBulk === "archive"}
+        title={t("rec.candidates.bulk_archive_title", { n: selectedCount })}
+        message={t("rec.candidates.bulk_archive_body")}
+        confirmLabel={t("rec.candidates.bulk_archive")}
+        cancelLabel={t("common.cancel")}
+        danger={false}
+        busy={!!bulkBusy}
+        onConfirm={() => runBulk(
+          bulkArchiveCandidates,
+          t("rec.candidates.bulk_archived", { n: selectedCount })
+        )}
+        onCancel={() => setConfirmBulk(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulk === "delete"}
+        title={t("rec.candidates.bulk_delete_confirm", { n: selectedCount })}
+        message={t("rec.candidates.bulk_delete_body")}
+        confirmLabel={t("rec.candidates.bulk_delete")}
+        cancelLabel={t("common.cancel")}
+        busy={!!bulkBusy}
+        onConfirm={() => runBulk(
+          bulkDeleteCandidates,
+          t("rec.candidates.bulk_deleted", { n: selectedCount })
+        )}
+        onCancel={() => setConfirmBulk(null)}
+      />
+
+      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </>
   );
 }
@@ -380,29 +787,50 @@ function FilterChipRow({ label, children }) {
   );
 }
 
-function CandidateRow({ candidate, onClick }) {
+// List row. In select mode the whole row toggles selection; otherwise
+// it opens the detail view. Rendered as a div[role=button] (not a
+// <button>) because it nests interactive children (avatar, restore).
+function CandidateRow({
+  candidate, onClick,
+  selectMode, selected, onToggleSelect, onOpenPhoto, onRestore,
+}) {
   const { t } = useI18n();
+  const archived = !!candidate.archived_at;
+  const activate = selectMode ? onToggleSelect : onClick;
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+      }}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 10,
         width: "100%",
-        padding: "13px 8px",
-        border: "none",
+        boxSizing: "border-box",
+        minHeight: 56,
+        padding: "8px 8px",
         borderBottom: `1px solid ${C.border}`,
-        borderRadius: 0,
-        background: "transparent",
+        background: selected ? C.selectedBg : "transparent",
         textAlign: "start",
         cursor: "pointer",
         color: C.text,
         fontFamily: "inherit",
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {selectMode && <Checkbox checked={selected} />}
+      <span style={{ opacity: archived ? 0.55 : 1, display: "flex", flexShrink: 0 }}>
+        <CandidateAvatar
+          photoUrl={candidate.photo_url}
+          name={candidate.full_name}
+          size={40}
+          onOpenPhoto={selectMode ? undefined : onOpenPhoto}
+        />
+      </span>
+      <div style={{ flex: 1, minWidth: 0, opacity: archived ? 0.55 : 1 }}>
         <div style={{
           color: C.bright, fontSize: 14, fontWeight: 600,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -411,10 +839,26 @@ function CandidateRow({ candidate, onClick }) {
           {candidate.personal_id || "—"}
         </div>
       </div>
-      <Badge tone={statusTone(candidate.status)}>
-        {t(`rec.candidate_status.${candidate.status}`)}
-      </Badge>
-    </button>
+      {archived && (
+        <>
+          <Badge tone="warn">{t("rec.candidates.archived")}</Badge>
+          {!selectMode && onRestore && (
+            <Btn
+              small
+              compact
+              onClick={(e) => { e.stopPropagation(); onRestore(); }}
+            >
+              {t("rec.candidates.restore")}
+            </Btn>
+          )}
+        </>
+      )}
+      <span style={{ opacity: archived ? 0.7 : 1, flexShrink: 0 }}>
+        <Badge tone={statusTone(candidate.status)}>
+          {t(`rec.candidate_status.${candidate.status}`)}
+        </Badge>
+      </span>
+    </div>
   );
 }
 
@@ -619,14 +1063,15 @@ function scoreToneFromPct(score, max) {
 
 // ── Leaderboard row (used when sorted by interview / exam score) ────
 
-function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
+function LeaderboardRow({
+  row, rank, sortKey, expanded, onToggle, onOpen,
+  selectMode, selected, onToggleSelect, onOpenPhoto,
+}) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const { candidate, avgScore, interviewCount, scoredCount, minScore, maxScore, tags, examAttempt } = row;
-
-  const initials = (candidate.full_name || "?")
-    .trim().split(/\s+/).slice(0, 2)
-    .map((s) => s[0] || "").join("").toUpperCase() || "?";
+  const archived = !!candidate.archived_at;
+  const activate = selectMode ? onToggleSelect : onToggle;
 
   // Pick which score this sort cares about.
   const isExamSort = sortKey === "exam_score";
@@ -644,14 +1089,18 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
     <div style={{
       borderRadius: 10,
       marginBottom: 10,
-      background: C.cardBg,
+      background: selected ? C.selectedBg : C.cardBg,
       overflow: "hidden",
+      opacity: archived && !selected ? 0.55 : 1,
     }}>
-      <button
-        type="button"
-        onClick={onToggle}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={activate}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
+        }}
         style={{
-          all: "unset",
           boxSizing: "border-box",
           display: "flex",
           alignItems: "center",
@@ -661,6 +1110,7 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
           cursor: "pointer",
         }}
       >
+        {selectMode && <Checkbox checked={selected} />}
         <div style={{
           flexShrink: 0,
           width: isMobile ? 30 : 36,
@@ -673,21 +1123,12 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
           {hasScore ? `#${rank}` : "—"}
         </div>
 
-        <div style={{
-          flexShrink: 0,
-          width: isMobile ? 36 : 42,
-          height: isMobile ? 36 : 42,
-          borderRadius: "50%",
-          background: C.inputBg,
-          border: `1px solid ${C.border}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: FONT_MONO,
-          fontSize: isMobile ? 12 : 13,
-          fontWeight: 700,
-          color: C.dim,
-        }}>{initials}</div>
+        <CandidateAvatar
+          photoUrl={candidate.photo_url}
+          name={candidate.full_name}
+          size={isMobile ? 36 : 42}
+          onOpenPhoto={selectMode ? undefined : onOpenPhoto}
+        />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -746,7 +1187,7 @@ function LeaderboardRow({ row, rank, sortKey, expanded, onToggle, onOpen }) {
           transform: expanded ? "rotate(90deg)" : "none",
           transition: "transform 120ms",
         }}>▶</div>
-      </button>
+      </div>
 
       {expanded && (
         <div style={{
@@ -853,6 +1294,9 @@ function CandidateDetail({ candidateId, onBack }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
 
   async function refresh() {
     const [
@@ -908,7 +1352,7 @@ function CandidateDetail({ candidateId, onBack }) {
   if (!data) {
     return (
       <>
-        <PageHeader title={t("common.loading")} action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>} />
+        <PageHeader title={t("common.loading")} action={<BackButton onClick={onBack} />} />
         <Panel connectTop><div style={{ color: C.dim }}>{t("common.loading")}</div></Panel>
       </>
     );
@@ -928,6 +1372,36 @@ function CandidateDetail({ candidateId, onBack }) {
     await refresh();
   }
 
+  // Archive (soft) or restore, depending on the current state.
+  async function handleArchiveToggle() {
+    setBusy(true); setErr(""); setOk("");
+    const wasArchived = !!candidate.archived_at;
+    const { error } = wasArchived
+      ? await restoreCandidate(candidateId)
+      : await archiveCandidate(candidateId);
+    setBusy(false);
+    setConfirmArchive(false);
+    if (error) { setErr(error.message || String(error)); return; }
+    flash(setOk, wasArchived
+      ? t("rec.candidates.restored")
+      : t("rec.candidate.archived"));
+    await refresh();
+  }
+
+  // PERMANENT delete (incl. survey responses, interviews, exam
+  // attempts) — guarded by ConfirmDialog. Navigates back on success.
+  async function handleDelete() {
+    setBusy(true); setErr("");
+    const { error } = await deleteCandidate(candidateId);
+    setBusy(false);
+    if (error) {
+      setConfirmDelete(false);
+      setErr(error.message || String(error));
+      return;
+    }
+    onBack();
+  }
+
   async function copyExamUrl(url) {
     try {
       await navigator.clipboard.writeText(url);
@@ -942,13 +1416,14 @@ function CandidateDetail({ candidateId, onBack }) {
       <PageHeader
         title={candidate.full_name || "—"}
         subtitle={`${t(`rec.candidate_status.${candidate.status}`)}`}
-        action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>}
+        action={<BackButton onClick={onBack} />}
       />
 
       <CandidateHero
         candidate={candidate}
         photoSrc={photoSrc}
         onUpload={handlePhotoUpload}
+        onOpenPhoto={(src) => setLightboxSrc(src)}
       />
 
       {(err || ok) && (
@@ -1011,6 +1486,74 @@ function CandidateDetail({ candidateId, onBack }) {
           )}
         </div>
       </Panel>
+
+      {/* Danger zone: archive/restore (secondary) + permanent delete */}
+      <Panel title={t("rec.candidate.danger_title")}>
+        {candidate.archived_at ? (
+          <>
+            <div style={{
+              padding: "10px 14px",
+              background: C.warnBg,
+              border: `1px solid ${C.warnBorderFaint}`,
+              color: C.warn,
+              borderRadius: 10,
+              fontSize: 13,
+              lineHeight: 1.6,
+              marginBottom: 12,
+            }}>
+              {t("rec.candidate.archived_note")}
+            </div>
+            <Btn small onClick={handleArchiveToggle} disabled={busy}>
+              {t("rec.candidates.restore")}
+            </Btn>
+          </>
+        ) : (
+          <>
+            <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+              {t("rec.candidate.archive_explainer")}
+            </div>
+            <Btn small onClick={() => setConfirmArchive(true)} disabled={busy}>
+              {t("rec.candidate.archive")}
+            </Btn>
+          </>
+        )}
+        <div style={{ height: 1, background: C.border, margin: "18px 0" }} />
+        <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+          {t("rec.candidate.delete_explainer")}
+        </div>
+        <Btn
+          small
+          onClick={() => setConfirmDelete(true)}
+          disabled={busy}
+          style={{ color: C.error, borderColor: C.errBorder, background: C.errBg }}
+        >
+          {t("rec.candidate.delete")}
+        </Btn>
+      </Panel>
+
+      <ConfirmDialog
+        open={confirmArchive}
+        title={t("rec.candidate.archive_confirm_title")}
+        message={t("rec.candidate.archive_confirm_body", { name: candidate.full_name || "—" })}
+        confirmLabel={t("rec.candidate.archive_confirm")}
+        cancelLabel={t("common.cancel")}
+        danger={false}
+        busy={busy}
+        onConfirm={handleArchiveToggle}
+        onCancel={() => setConfirmArchive(false)}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        title={t("rec.candidate.delete")}
+        message={t("rec.candidate.delete_explainer")}
+        confirmLabel={t("rec.candidate.delete_confirm")}
+        cancelLabel={t("common.cancel")}
+        busy={busy}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
+      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
     </>
   );
 }
@@ -1124,7 +1667,7 @@ function PromotePanel({ candidate, onPromoted, onFlash }) {
 
 // ── Candidate hero (profile-card style) ────────────────────────────
 
-function CandidateHero({ candidate, photoSrc, onUpload }) {
+function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const fileRef = useRef(null);
@@ -1167,9 +1710,16 @@ function CandidateHero({ candidate, photoSrc, onUpload }) {
     }}>
       <button
         type="button"
-        onClick={() => fileRef.current?.click()}
+        // With a photo, clicking the portrait opens the full-size
+        // lightbox; without one it opens the file picker.
+        onClick={() => {
+          if (photoSrc && onOpenPhoto) onOpenPhoto(photoSrc);
+          else fileRef.current?.click();
+        }}
         disabled={uploading}
-        title={t("rec.candidate.upload_photo")}
+        title={photoSrc && onOpenPhoto
+          ? t("rec.candidate.view_photo")
+          : t("rec.candidate.upload_photo")}
         style={{
           all: "unset",
           width: photoSize,
@@ -1182,7 +1732,7 @@ function CandidateHero({ candidate, photoSrc, onUpload }) {
           justifyContent: "center",
           overflow: "hidden",
           flexShrink: 0,
-          cursor: uploading ? "wait" : "pointer",
+          cursor: uploading ? "wait" : (photoSrc && onOpenPhoto ? "zoom-in" : "pointer"),
           position: "relative",
         }}
       >
@@ -1204,9 +1754,9 @@ function CandidateHero({ candidate, photoSrc, onUpload }) {
         {uploading && (
           <div style={{
             position: "absolute", inset: 0,
-            background: "rgba(0,0,0,0.5)",
+            background: `${C.imageShade}0.5)`,
             display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#fff", fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
+            color: C.imageOverlayText, fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
           }}>{t("rec.candidate.uploading")}</div>
         )}
       </button>
@@ -1255,6 +1805,9 @@ function CandidateHero({ candidate, photoSrc, onUpload }) {
         }}>
           {candidate.team && (
             <Badge tone="bright">{t("rec.candidates.team")} {candidate.team}</Badge>
+          )}
+          {candidate.archived_at && (
+            <Badge tone="warn">{t("rec.candidates.archived")}</Badge>
           )}
           <Badge tone={statusTone(candidate.status)}>
             {t(`rec.candidate_status.${candidate.status}`)}
