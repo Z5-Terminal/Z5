@@ -7,7 +7,7 @@ import { useI18n, fmtWhen } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
-  Skeleton, SkeletonRows,
+  Skeleton, SkeletonRows, BackButton, ConfirmDialog,
 } from "../../ui";
 import { C, FONT_MONO } from "../../theme";
 import {
@@ -249,7 +249,7 @@ function CycleCreate({ onCreated, onCancel }) {
       <PageHeader
         title={t("rec.cycles.create")}
         subtitle={t("rec.cycles.create_subtitle")}
-        action={<Btn small onClick={onCancel}>{t("rec.back")}</Btn>}
+        action={<BackButton onClick={onCancel} />}
       />
       <Panel>
         <form onSubmit={save}>
@@ -382,7 +382,7 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
       <PageHeader
         title={cycle.name}
         subtitle={t(`rec.cycle_status.${cycle.status}`)}
-        action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>}
+        action={<BackButton onClick={onBack} />}
       />
 
       {/* Stage first — the cycle's position in the lifecycle is the
@@ -415,16 +415,9 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
                   ← {t("rec.cycle_status.interviewing")}
                 </Btn>
               )}
-              {confirmClose ? (
-                <>
-                  <Btn small onClick={handleClose} disabled={busy}>
-                    {t("rec.cycles.close_confirm")}
-                  </Btn>
-                  <Btn small onClick={() => setConfirmClose(false)}>✕</Btn>
-                </>
-              ) : (
-                <Btn small onClick={() => setConfirmClose(true)}>{t("rec.cycles.close")}</Btn>
-              )}
+              <Btn small onClick={() => setConfirmClose(true)} disabled={busy}>
+                {t("rec.cycles.close")}
+              </Btn>
             </div>
           </>
         )}
@@ -471,16 +464,9 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Btn small onClick={copyUrl}>{t("rec.cycles.copy_url")}</Btn>
               {!isClosed && (
-                confirmRegen ? (
-                  <>
-                    <Btn small onClick={handleRegen} disabled={busy}>
-                      {t("rec.cycles.regen_confirm")}
-                    </Btn>
-                    <Btn small onClick={() => setConfirmRegen(false)}>✕</Btn>
-                  </>
-                ) : (
-                  <Btn small onClick={() => setConfirmRegen(true)}>{t("rec.cycles.regen")}</Btn>
-                )
+                <Btn small onClick={() => setConfirmRegen(true)} disabled={busy}>
+                  {t("rec.cycles.regen")}
+                </Btn>
               )}
             </div>
           </>
@@ -512,17 +498,48 @@ function CycleDetail({ cycleId, onBack, onEditQuestions, onEditExam }) {
         <div style={{ color: C.dim, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
           {t("rec.cycles.delete_explainer")}
         </div>
-        {confirmDelete ? (
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn small onClick={handleDelete} disabled={busy}>
-              {t("rec.cycles.delete_confirm")}
-            </Btn>
-            <Btn small onClick={() => setConfirmDelete(false)}>✕</Btn>
-          </div>
-        ) : (
-          <Btn small onClick={() => setConfirmDelete(true)}>{t("rec.cycles.delete")}</Btn>
-        )}
+        <Btn
+          small
+          onClick={() => setConfirmDelete(true)}
+          disabled={busy}
+          style={{ color: C.error, borderColor: C.errBorder, background: C.errBg }}
+        >
+          {t("rec.cycles.delete")}
+        </Btn>
       </Panel>
+
+      <ConfirmDialog
+        open={confirmClose}
+        title={t("rec.cycles.close")}
+        message={t("rec.cycles.close_body")}
+        confirmLabel={t("rec.cycles.close_confirm")}
+        cancelLabel={t("common.cancel")}
+        danger={false}
+        busy={busy}
+        onConfirm={handleClose}
+        onCancel={() => setConfirmClose(false)}
+      />
+      <ConfirmDialog
+        open={confirmRegen}
+        title={t("rec.cycles.regen")}
+        message={t("rec.cycles.regen_body")}
+        confirmLabel={t("rec.cycles.regen_confirm")}
+        cancelLabel={t("common.cancel")}
+        danger={false}
+        busy={busy}
+        onConfirm={handleRegen}
+        onCancel={() => setConfirmRegen(false)}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        title={t("rec.cycles.delete")}
+        message={t("rec.cycles.delete_explainer")}
+        confirmLabel={t("rec.cycles.delete_confirm")}
+        cancelLabel={t("common.cancel")}
+        busy={busy}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </>
   );
 }

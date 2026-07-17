@@ -4,7 +4,7 @@ import { useI18n } from "../i18n";
 import { useTheme } from "../ThemeContext";
 import { useConsole } from "../console";
 import { supabase } from "../supabase";
-import { Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge } from "../ui";
+import { Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge, BackButton } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { C, FONT, FONT_MONO } from "../theme";
 import { uploadProfileAvatar, profileAvatarPublicUrl } from "../data/avatars";
@@ -164,9 +164,9 @@ function ProfileHero({ profile, onAvatarChanged }) {
           {uploading && (
             <div style={{
               position: "absolute", inset: 0,
-              background: "rgba(0,0,0,0.5)",
+              background: `${C.imageShade}0.5)`,
               display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#fff", fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
+              color: C.imageOverlayText, fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
             }}>{t("prof.uploading")}</div>
           )}
         </button>
@@ -368,7 +368,7 @@ export default function Profile() {
         <PageHeader
           title={t("gear.title")}
           subtitle={t("prof.subtitle")}
-          action={<Btn small onClick={() => setView("main")}>← {t("rec.back")}</Btn>}
+          action={<BackButton onClick={() => setView("main")} />}
         />
         <div style={{ marginTop: isMobile ? 14 : 20 }}>
           <Gear embedded />

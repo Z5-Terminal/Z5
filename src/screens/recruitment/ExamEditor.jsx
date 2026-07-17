@@ -11,6 +11,7 @@ import { useI18n } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
+  BackButton, ConfirmDialog,
 } from "../../ui";
 import { C, S, FONT_MONO } from "../../theme";
 import {
@@ -90,7 +91,7 @@ export default function ExamEditor({ cycleId, cycleName, onBack }) {
       <PageHeader
         title={`${t("rec.exam_editor.title")} — ${cycleName || ""}`}
         subtitle={t("rec.exam_editor.subtitle")}
-        action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>}
+        action={<BackButton onClick={onBack} />}
       />
 
       <Panel>
@@ -218,19 +219,19 @@ function QuestionRow({ q, onEdit, onDelete }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {confirmDel ? (
-            <>
-              <Btn small onClick={onDelete}>✓</Btn>
-              <Btn small onClick={() => setConfirmDel(false)}>✕</Btn>
-            </>
-          ) : (
-            <>
-              <Btn small onClick={onEdit}>{t("rec.exam_editor.edit")}</Btn>
-              <Btn small onClick={() => setConfirmDel(true)}>{t("rec.exam_editor.del")}</Btn>
-            </>
-          )}
+          <Btn small onClick={onEdit}>{t("rec.exam_editor.edit")}</Btn>
+          <Btn small onClick={() => setConfirmDel(true)}>{t("rec.exam_editor.del")}</Btn>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmDel}
+        title={t("rec.exam_editor.delete_title")}
+        message={t("rec.exam_editor.delete_body")}
+        confirmLabel={t("mis.delete")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => { setConfirmDel(false); onDelete(); }}
+        onCancel={() => setConfirmDel(false)}
+      />
     </div>
   );
 }

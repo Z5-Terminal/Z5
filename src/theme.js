@@ -26,6 +26,14 @@ const DARK = {
   // Semantic overlay / surface tokens
   overlay:        "rgba(255,255,255,",   // append "0.xx)" in usage
   overlayInverse: "rgba(0,0,0,",
+  scrim:          "rgba(0,0,0,0.85)",    // full-screen dimmed backdrop (lightbox / dialogs)
+  // Image-context tokens — identical in BOTH palettes. Used over
+  // photos/artwork whose pixels don't change with the theme, so the
+  // overlay must not change either.
+  imageSurface:     "#000000",
+  imageOverlayText: "#ffffff",
+  imageTint:        "rgba(255,255,255,", // append "0.xx)" in usage
+  imageShade:       "rgba(0,0,0,",       // append "0.xx)" in usage
   headerBg:       "#0c0c0c",
   sidebarBg:      "#050505",
   mobileHeaderBg: "rgba(0,0,0,0.92)",
@@ -75,6 +83,12 @@ const LIGHT = {
   // Semantic overlay / surface tokens
   overlay:        "rgba(20,19,16,",
   overlayInverse: "rgba(248,246,240,",
+  scrim:          "rgba(35,32,26,0.55)", // full-screen dimmed backdrop (lightbox / dialogs)
+  // Image-context tokens — identical in BOTH palettes (see DARK).
+  imageSurface:     "#000000",
+  imageOverlayText: "#ffffff",
+  imageTint:        "rgba(255,255,255,", // append "0.xx)" in usage
+  imageShade:       "rgba(0,0,0,",       // append "0.xx)" in usage
   headerBg:       "#f7f6f1",
   sidebarBg:      "#e9e6de",
   mobileHeaderBg: "rgba(238,236,229,0.92)",

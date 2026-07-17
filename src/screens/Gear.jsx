@@ -176,7 +176,7 @@ function WeaponBuild({ rows, onChange, onRemove, t }) {
         position: "relative",
         borderRadius: 14,
         overflow: "hidden",
-        background: "#000",
+        background: C.imageSurface,
         border: `1px solid ${C.border}`,
         marginBottom: 14,
       }}>
@@ -204,15 +204,15 @@ function WeaponBuild({ rows, onChange, onRemove, t }) {
                 width: isMobile ? 22 : 28,
                 height: isMobile ? 22 : 28,
                 borderRadius: "50%",
-                border: `2px solid ${active ? "#fff" : "rgba(255,255,255,0.65)"}`,
-                background: active ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.45)",
-                color: "#fff",
+                border: `2px solid ${active ? C.imageOverlayText : `${C.imageTint}0.65)`}`,
+                background: active ? `${C.imageTint}0.28)` : `${C.imageShade}0.45)`,
+                color: C.imageOverlayText,
                 fontFamily: FONT_MONO,
                 fontSize: isMobile ? 11 : 12.5,
                 fontWeight: 700,
                 cursor: "default",
                 transition: "all 140ms ease-out",
-                boxShadow: active ? "0 0 0 6px rgba(255,255,255,0.12)" : "none",
+                boxShadow: active ? `0 0 0 6px ${C.imageTint}0.12)` : "none",
               }}
             >
               {i + 1}

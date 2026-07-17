@@ -4,6 +4,7 @@ import { C, S, FONT, FONT_MONO } from "./theme";
 import { useIsMobile } from "./useIsMobile";
 import { useTheme } from "./ThemeContext";
 import { useConsoleMaybe } from "./console";
+import { useI18n } from "./i18n";
 
 // Full-viewport page wrapper.
 export function Page({ children }) {
@@ -531,6 +532,7 @@ export function SkeletonRows({ rows = 3 }) {
 }
 
 export function Footer({ text }) {
+  const { t } = useI18n();
   return (
     <div style={{
       borderTop: `1px solid ${C.border}`,
@@ -540,8 +542,159 @@ export function Footer({ text }) {
       marginTop: "auto",
       letterSpacing: "0.3px",
     }}>
-      {text || "Z5 · Internal Use Only · No Transmission Outside Operational Net"}
+      {text || t("common.footer")}
     </div>
+  );
+}
+
+// Back button — shared "← Back" affordance for sub-views. Matches the
+// small Btn used in PageHeader actions; the arrow follows the reading
+// direction (RTL Hebrew points →, like the rest of the app's back
+// labels, e.g. cl.back / kn.back).
+export function BackButton({ onClick, label, ...rest }) {
+  const { t, isRTL } = useI18n();
+  const arrow = isRTL ? "→" : "←";
+  return (
+    <Btn small onClick={onClick} {...rest}>
+      {arrow} {label || t("rec.back")}
+    </Btn>
+  );
+}
+
+// ── Modal / dialog primitives ───────────────────────────────────────
+
+// Centered overlay dialog. Escape and click-outside both close it.
+// Token-based scrim so both themes stay legible.
+export function Modal({ open, onClose, title, children, maxWidth = 460 }) {
+  const isMobile = useIsMobile();
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose && onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 300,
+        background: C.scrim,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: isMobile ? 16 : 24,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth,
+          maxHeight: "85vh",
+          overflowY: "auto",
+          boxSizing: "border-box",
+          background: C.panel,
+          border: `1px solid ${C.borderBright}`,
+          borderRadius: 14,
+          padding: isMobile ? "18px 16px" : "22px 24px",
+          boxShadow: C.shadow,
+        }}
+      >
+        {title && (
+          <div style={{
+            color: C.bright,
+            fontSize: isMobile ? 15 : 16,
+            fontWeight: 700,
+            letterSpacing: "0.3px",
+            marginBottom: 12,
+          }}>{title}</div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Confirmation dialog built on Modal. The confirm button is
+// danger-styled by default (destructive actions); pass danger={false}
+// for benign confirmations (archive, etc.).
+export function ConfirmDialog({
+  open, title, message, confirmLabel, cancelLabel,
+  danger = true, busy = false, onConfirm, onCancel,
+}) {
+  return (
+    <Modal open={open} onClose={onCancel} title={title}>
+      {message && (
+        <div style={{ color: C.text, fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+          {message}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+        <Btn onClick={onCancel} disabled={busy}>{cancelLabel}</Btn>
+        <Btn
+          onClick={onConfirm}
+          disabled={busy}
+          style={danger
+            ? { color: C.error, borderColor: C.errBorder, background: C.errBg }
+            : { color: C.bright, borderColor: C.bright }}
+        >{confirmLabel}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// Checkbox — square tick visual (shared with row multi-select).
+// With onChange it renders as an accessible toggle; without it it's a
+// purely presentational mark (the parent row is the toggle target).
+export function Checkbox({ checked, onChange, label, disabled }) {
+  const mark = (
+    <span aria-hidden style={{
+      width: 18,
+      height: 18,
+      flexShrink: 0,
+      borderRadius: 4,
+      border: `1px solid ${checked ? C.bright : C.borderBright}`,
+      background: checked ? C.bright : "transparent",
+      color: C.btnActiveColor,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 12,
+      fontWeight: 700,
+      lineHeight: 1,
+    }}>{checked ? "✓" : ""}</span>
+  );
+  if (!onChange) return mark;
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={!!checked}
+      disabled={disabled}
+      onClick={(e) => { e.stopPropagation(); onChange(!checked); }}
+      style={{
+        all: "unset",
+        boxSizing: "border-box",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: label ? "flex-start" : "center",
+        gap: 8,
+        minWidth: 24,
+        minHeight: 24,
+        padding: 3,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {mark}
+      {label && <span style={{ fontSize: 13, color: C.text }}>{label}</span>}
+    </button>
   );
 }
 

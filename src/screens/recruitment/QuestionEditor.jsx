@@ -7,6 +7,7 @@ import { useI18n } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
   PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
+  BackButton, ConfirmDialog,
 } from "../../ui";
 import { C, S } from "../../theme";
 import {
@@ -17,23 +18,13 @@ import {
   seedDefaultTemplate,
 } from "../../data/recruitment";
 
-const SECTIONS = [
-  { key: "identity",        label: "Identity" },
-  { key: "self_assessment", label: "Self assessment" },
-  { key: "background",      label: "Background" },
-  { key: "physical",        label: "Physical / motivation" },
-];
+// Labels resolve at render time via t(`rec.section.${key}`) — the same
+// keys the Candidates response viewer uses — and t(`rec.qtype.${key}`).
+const SECTIONS = ["identity", "self_assessment", "background", "physical"];
 
 const QUESTION_TYPES = [
-  { key: "text",            label: "Single-line text" },
-  { key: "textarea",        label: "Multi-line text" },
-  { key: "number",          label: "Number" },
-  { key: "radio",           label: "Single-choice (radio)" },
-  { key: "dropdown",        label: "Dropdown" },
-  { key: "likert_5",        label: "Likert 1-5" },
-  { key: "team_radio",      label: "Team picker (1-4)" },
-  { key: "recommend",       label: "Recommend names" },
-  { key: "dont_recommend",  label: "Don't recommend names" },
+  "text", "textarea", "number", "radio", "dropdown",
+  "likert_5", "team_radio", "recommend", "dont_recommend",
 ];
 
 export default function QuestionEditor({ cycleId, cycleName, onBack }) {
@@ -55,7 +46,7 @@ export default function QuestionEditor({ cycleId, cycleName, onBack }) {
   useEffect(() => { refresh(); }, [cycleId]);
 
   const grouped = useMemo(() => {
-    const map = new Map(SECTIONS.map((s) => [s.key, []]));
+    const map = new Map(SECTIONS.map((s) => [s, []]));
     for (const q of questions) {
       const list = map.get(q.section) || map.set(q.section, []).get(q.section);
       list.push(q);
@@ -108,7 +99,7 @@ export default function QuestionEditor({ cycleId, cycleName, onBack }) {
       <PageHeader
         title={`${t("rec.editor.title")} — ${cycleName || ""}`}
         subtitle={t("rec.editor.subtitle")}
-        action={<Btn small onClick={onBack}>← {t("rec.back")}</Btn>}
+        action={<BackButton onClick={onBack} />}
       />
       <Panel connectTop>
         {questions.length === 0 && !loading && (
@@ -137,10 +128,10 @@ export default function QuestionEditor({ cycleId, cycleName, onBack }) {
       )}
 
       {SECTIONS.map((s) => {
-        const list = grouped.get(s.key) || [];
+        const list = grouped.get(s) || [];
         if (list.length === 0) return null;
         return (
-          <Panel key={s.key} title={`${s.label} (${list.length})`}>
+          <Panel key={s} title={`${t(`rec.section.${s}`)} (${list.length})`}>
             {list.map((q) => (
               editingId === q.id ? (
                 <QuestionForm
@@ -182,7 +173,9 @@ function defaultNewQuestion(existing) {
 function QuestionRow({ q, onEdit, onDelete }) {
   const { t } = useI18n();
   const [confirmDel, setConfirmDel] = useState(false);
-  const typeLabel = QUESTION_TYPES.find((qt) => qt.key === q.question_type)?.label || q.question_type;
+  const typeLabel = QUESTION_TYPES.includes(q.question_type)
+    ? t(`rec.qtype.${q.question_type}`)
+    : q.question_type;
   return (
     <div style={{
       display: "flex",
@@ -210,18 +203,18 @@ function QuestionRow({ q, onEdit, onDelete }) {
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-        {confirmDel ? (
-          <>
-            <Btn small onClick={onDelete}>✓</Btn>
-            <Btn small onClick={() => setConfirmDel(false)}>✕</Btn>
-          </>
-        ) : (
-          <>
-            <Btn small onClick={onEdit}>{t("mis.edit")}</Btn>
-            <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
-          </>
-        )}
+        <Btn small onClick={onEdit}>{t("mis.edit")}</Btn>
+        <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
       </div>
+      <ConfirmDialog
+        open={confirmDel}
+        title={t("rec.editor.delete_title")}
+        message={t("rec.editor.delete_body")}
+        confirmLabel={t("mis.delete")}
+        cancelLabel={t("common.cancel")}
+        onConfirm={() => { setConfirmDel(false); onDelete(); }}
+        onCancel={() => setConfirmDel(false)}
+      />
     </div>
   );
 }
@@ -281,14 +274,14 @@ function QuestionForm({ initial, onSave, onCancel }) {
         <Field label={t("rec.editor.section")}>
           <select value={section} onChange={(e) => setSection(e.target.value)} style={{ ...S.input, fontSize: 14 }}>
             {SECTIONS.map((s) => (
-              <option key={s.key} value={s.key}>{s.label}</option>
+              <option key={s} value={s}>{t(`rec.section.${s}`)}</option>
             ))}
           </select>
         </Field>
         <Field label={t("rec.editor.type")}>
           <select value={type} onChange={(e) => setType(e.target.value)} style={{ ...S.input, fontSize: 14 }}>
             {QUESTION_TYPES.map((qt) => (
-              <option key={qt.key} value={qt.key}>{qt.label}</option>
+              <option key={qt} value={qt}>{t(`rec.qtype.${qt}`)}</option>
             ))}
           </select>
         </Field>

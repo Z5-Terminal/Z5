@@ -197,6 +197,8 @@ const EN = {
   "rec.cycles.delete_explainer": "Deleting a cycle removes all candidates, survey responses and questions for it. This cannot be undone.",
   "rec.cycles.delete": "Delete cycle",
   "rec.cycles.delete_confirm": "Confirm delete",
+  "rec.cycles.regen_body": "A new candidate URL will be generated and the previous link will stop working immediately.",
+  "rec.cycles.close_body": "The candidate URL will stop accepting new survey submissions.",
 
   // Cycle status labels
   "rec.cycle_status.draft": "Draft",
@@ -250,6 +252,37 @@ const EN = {
   "rec.candidates.empty_cycle": "No candidates yet for this cycle.",
   "rec.candidates.empty_filtered": "No candidates match the current filters.",
 
+  // Archive + restore (list)
+  "rec.candidates.show_archived": "Show archived",
+  "rec.candidates.archived": "Archived",
+  "rec.candidates.restore": "Restore",
+  "rec.candidates.restored": "Candidate restored.",
+
+  // Multi-select + bulk actions
+  "rec.candidates.select_mode": "Select",
+  "rec.candidates.select_done": "Done",
+  "rec.candidates.select_all": "Select all",
+  "rec.candidates.clear_selection": "Clear",
+  "rec.candidates.n_selected": "{n} selected",
+  "rec.candidates.bulk_archive": "Archive",
+  "rec.candidates.bulk_archive_title": "Archive {n} candidates?",
+  "rec.candidates.bulk_archive_body": "The selected candidates will be hidden from the list. No data is deleted — you can restore them anytime via \"Show archived\".",
+  "rec.candidates.bulk_status": "Set status",
+  "rec.candidates.bulk_status_ph": "Choose status…",
+  "rec.candidates.bulk_apply": "Apply",
+  "rec.candidates.bulk_exam_copy": "Copy exam links",
+  "rec.candidates.bulk_exam_open": "Open exams",
+  "rec.candidates.bulk_exam_hint": "Copying unlocks the exam for every selected candidate and puts one link per line on the clipboard.",
+  "rec.candidates.bulk_done_ok": "{ok} candidates updated.",
+  "rec.candidates.bulk_done_mixed": "{ok} succeeded · {fail} failed.",
+  "rec.candidates.bulk_links_copied": "{n} exam links copied to clipboard.",
+  "rec.candidates.bulk_links_skipped": "{n} skipped (no exam link available).",
+  "rec.candidates.bulk_delete": "Delete",
+  "rec.candidates.bulk_delete_confirm": "Confirm delete ({n})",
+  "rec.candidates.bulk_delete_body": "The selected candidates will be permanently deleted along with their survey answers, interviews and exam attempts. This cannot be undone.",
+  "rec.candidates.bulk_deleted": "{n} candidates deleted.",
+  "rec.candidates.bulk_archived": "{n} candidates archived.",
+
   // Candidate status labels
   "rec.candidate_status.survey_in_progress": "Survey in progress",
   "rec.candidate_status.survey_done": "Survey done",
@@ -272,6 +305,22 @@ const EN = {
   "rec.candidate.mark_accepted": "Mark accepted",
   "rec.candidate.mark_rejected": "Mark rejected",
   "rec.candidate.status_updated": "Status updated.",
+
+  // Archive (candidate detail)
+  "rec.candidate.archive_title": "Archive",
+  "rec.candidate.archive": "Archive candidate",
+  "rec.candidate.archive_explainer": "Archiving hides this candidate from the list without deleting anything — survey answers, interviews and exam results are kept. Restore anytime via \"Show archived\".",
+  "rec.candidate.archive_confirm_title": "Archive candidate?",
+  "rec.candidate.archive_confirm_body": "{name} will be hidden from the candidates list. No data is deleted and you can restore them anytime.",
+  "rec.candidate.archived_note": "This candidate is archived and hidden from the default list.",
+  "rec.candidate.archived": "Candidate archived.",
+
+  // Danger zone (candidate detail)
+  "rec.candidate.danger_title": "Danger zone",
+  "rec.candidate.archive_confirm": "Confirm archive",
+  "rec.candidate.delete": "Delete permanently",
+  "rec.candidate.delete_explainer": "Permanently deletes this candidate together with their survey answers, interviews and exam attempts. This cannot be undone.",
+  "rec.candidate.delete_confirm": "Confirm delete",
 
   // Promote-to-bootcamp bridge (Phase C5)
   "rec.candidate.promote_title": "Boot camp bridge",
@@ -326,6 +375,8 @@ const EN = {
   "rec.candidate.upload_photo": "Upload photo",
   "rec.candidate.replace_photo": "Replace photo",
   "rec.candidate.uploading": "Uploading…",
+  "rec.candidate.view_photo": "View photo",
+  "rec.candidate.close_photo": "Close photo",
 
   // Predefined interview tags (Phase D)
   "rec.tag.focused":              "Focused",
@@ -367,6 +418,19 @@ const EN = {
   "rec.editor.required_label": "Required answer",
   "rec.editor.save_btn": "Save",
   "rec.editor.cancel_btn": "Cancel",
+  "rec.editor.delete_title": "Delete question?",
+  "rec.editor.delete_body": "The question will be permanently removed from this cycle's survey.",
+
+  // Survey question type labels (question editor)
+  "rec.qtype.text": "Single-line text",
+  "rec.qtype.textarea": "Multi-line text",
+  "rec.qtype.number": "Number",
+  "rec.qtype.radio": "Single-choice (radio)",
+  "rec.qtype.dropdown": "Dropdown",
+  "rec.qtype.likert_5": "Likert 1-5",
+  "rec.qtype.team_radio": "Team picker (1-4)",
+  "rec.qtype.recommend": "Recommend names",
+  "rec.qtype.dont_recommend": "Don't recommend names",
 
   // Exam editor (Phase C4)
   "rec.exam_editor.title": "Exam editor",
@@ -409,6 +473,8 @@ const EN = {
   "rec.exam_editor.correct": "Correct",
   "rec.exam_editor.mark_correct": "Mark correct",
   "rec.exam_editor.save_first": "Save the question first before uploading images.",
+  "rec.exam_editor.delete_title": "Delete question?",
+  "rec.exam_editor.delete_body": "The question will be permanently removed from this cycle's exam.",
 
   // Auth
   "auth.title": "Z5 Terminal",
@@ -818,9 +884,11 @@ const EN = {
 
   // Common
   "common.loading": "Loading…",
+  "common.cancel": "Cancel",
   "common.tbd": "TBD",
   "common.due": "DUE",
   "common.announcement": "ANNOUNCEMENT",
+  "common.footer": "Z5 · Internal Use Only · No Transmission Outside Operational Net",
 };
 
 // ═══════════════════════════════════════════════
@@ -942,6 +1010,8 @@ const HE = {
   "rec.cycles.delete_explainer": "מחיקת מחזור תסיר את כל המועמדים, השאלונים והשאלות שלו. הפעולה אינה ניתנת לביטול.",
   "rec.cycles.delete": "מחק מחזור",
   "rec.cycles.delete_confirm": "אשר מחיקה",
+  "rec.cycles.regen_body": "תיווצר כתובת חדשה למועמדים והקישור הקודם יפסיק לפעול מיידית.",
+  "rec.cycles.close_body": "כתובת המועמדים תפסיק לקבל שאלונים חדשים.",
 
   // Cycle status labels
   "rec.cycle_status.draft": "טיוטה",
@@ -995,6 +1065,37 @@ const HE = {
   "rec.candidates.empty_cycle": "אין עדיין מועמדים במחזור הזה.",
   "rec.candidates.empty_filtered": "אין מועמדים התואמים לסינון.",
 
+  // Archive + restore (list)
+  "rec.candidates.show_archived": "הצג ארכיון",
+  "rec.candidates.archived": "בארכיון",
+  "rec.candidates.restore": "שחזר",
+  "rec.candidates.restored": "המועמד שוחזר.",
+
+  // Multi-select + bulk actions
+  "rec.candidates.select_mode": "בחירה",
+  "rec.candidates.select_done": "סיום",
+  "rec.candidates.select_all": "בחר הכל",
+  "rec.candidates.clear_selection": "נקה",
+  "rec.candidates.n_selected": "{n} נבחרו",
+  "rec.candidates.bulk_archive": "לארכיון",
+  "rec.candidates.bulk_archive_title": "להעביר {n} מועמדים לארכיון?",
+  "rec.candidates.bulk_archive_body": "המועמדים שנבחרו יוסתרו מהרשימה. שום מידע לא נמחק — אפשר לשחזר אותם בכל רגע דרך \"הצג ארכיון\".",
+  "rec.candidates.bulk_status": "עדכון סטטוס",
+  "rec.candidates.bulk_status_ph": "בחר סטטוס…",
+  "rec.candidates.bulk_apply": "החל",
+  "rec.candidates.bulk_exam_copy": "העתק קישורי מבחן",
+  "rec.candidates.bulk_exam_open": "פתח מבחנים",
+  "rec.candidates.bulk_exam_hint": "ההעתקה פותחת את המבחן לכל המועמדים שנבחרו ומעתיקה ללוח קישור אחד בכל שורה.",
+  "rec.candidates.bulk_done_ok": "{ok} מועמדים עודכנו.",
+  "rec.candidates.bulk_done_mixed": "{ok} הצליחו · {fail} נכשלו.",
+  "rec.candidates.bulk_links_copied": "{n} קישורי מבחן הועתקו ללוח.",
+  "rec.candidates.bulk_links_skipped": "{n} דולגו (אין קישור מבחן זמין).",
+  "rec.candidates.bulk_delete": "מחיקה",
+  "rec.candidates.bulk_delete_confirm": "אשר מחיקה ({n})",
+  "rec.candidates.bulk_delete_body": "המועמדים שנבחרו יימחקו לצמיתות יחד עם תשובות השאלון, הראיונות וניסיונות המבחן. לא ניתן לשחזר.",
+  "rec.candidates.bulk_deleted": "{n} מועמדים נמחקו.",
+  "rec.candidates.bulk_archived": "{n} מועמדים הועברו לארכיון.",
+
   // Candidate status labels
   "rec.candidate_status.survey_in_progress": "שאלון במהלך",
   "rec.candidate_status.survey_done": "שאלון הוגש",
@@ -1017,6 +1118,22 @@ const HE = {
   "rec.candidate.mark_accepted": "סמן כהתקבל",
   "rec.candidate.mark_rejected": "סמן כנפסל",
   "rec.candidate.status_updated": "הסטטוס עודכן.",
+
+  // Archive (candidate detail)
+  "rec.candidate.archive_title": "ארכיון",
+  "rec.candidate.archive": "העבר לארכיון",
+  "rec.candidate.archive_explainer": "העברה לארכיון מסתירה את המועמד מהרשימה בלי למחוק דבר — תשובות השאלון, הראיונות ותוצאות המבחן נשמרים. אפשר לשחזר בכל רגע דרך \"הצג ארכיון\".",
+  "rec.candidate.archive_confirm_title": "להעביר לארכיון?",
+  "rec.candidate.archive_confirm_body": "{name} יוסתר מרשימת המועמדים. שום מידע לא נמחק ואפשר לשחזר בכל רגע.",
+  "rec.candidate.archived_note": "המועמד הזה נמצא בארכיון ומוסתר מהרשימה הרגילה.",
+  "rec.candidate.archived": "המועמד הועבר לארכיון.",
+
+  // Danger zone (candidate detail)
+  "rec.candidate.danger_title": "אזור מסוכן",
+  "rec.candidate.archive_confirm": "אשר העברה לארכיון",
+  "rec.candidate.delete": "מחק לצמיתות",
+  "rec.candidate.delete_explainer": "מוחק את המועמד לצמיתות יחד עם תשובות השאלון, הראיונות וניסיונות המבחן. לא ניתן לשחזר.",
+  "rec.candidate.delete_confirm": "אשר מחיקה",
 
   // Promote-to-bootcamp bridge (Phase C5)
   "rec.candidate.promote_title": "מעבר לקורס צלפים",
@@ -1070,6 +1187,8 @@ const HE = {
   "rec.candidate.upload_photo": "העלה תמונה",
   "rec.candidate.replace_photo": "החלף תמונה",
   "rec.candidate.uploading": "מעלה…",
+  "rec.candidate.view_photo": "הצג תמונה",
+  "rec.candidate.close_photo": "סגור תמונה",
 
   // Predefined interview tags (Phase D)
   "rec.tag.focused":              "ממוקד",
@@ -1111,6 +1230,19 @@ const HE = {
   "rec.editor.required_label": "תשובה חובה",
   "rec.editor.save_btn": "שמור",
   "rec.editor.cancel_btn": "ביטול",
+  "rec.editor.delete_title": "למחוק את השאלה?",
+  "rec.editor.delete_body": "השאלה תוסר לצמיתות מהשאלון של המחזור הזה.",
+
+  // Survey question type labels (question editor)
+  "rec.qtype.text": "טקסט קצר",
+  "rec.qtype.textarea": "טקסט ארוך",
+  "rec.qtype.number": "מספר",
+  "rec.qtype.radio": "בחירה יחידה (רדיו)",
+  "rec.qtype.dropdown": "רשימה נפתחת",
+  "rec.qtype.likert_5": "סולם 1–5",
+  "rec.qtype.team_radio": "בחירת צוות (1–4)",
+  "rec.qtype.recommend": "שמות מומלצים",
+  "rec.qtype.dont_recommend": "שמות לא מומלצים",
 
   // Exam editor (Phase C4)
   "rec.exam_editor.title": "עורך המבחן",
@@ -1153,6 +1285,8 @@ const HE = {
   "rec.exam_editor.correct": "תשובה נכונה",
   "rec.exam_editor.mark_correct": "סמן כנכון",
   "rec.exam_editor.save_first": "שמור את השאלה לפני העלאת תמונות.",
+  "rec.exam_editor.delete_title": "למחוק את השאלה?",
+  "rec.exam_editor.delete_body": "השאלה תוסר לצמיתות מהמבחן של המחזור הזה.",
 
   // Auth
   "auth.title": "Z5 טרמינל",
@@ -1562,7 +1696,9 @@ const HE = {
 
   // Common
   "common.loading": "טוען…",
+  "common.cancel": "ביטול",
   "common.tbd": "טרם נקבע",
   "common.due": "יעד",
   "common.announcement": "הודעה",
+  "common.footer": "Z5 · שימוש פנימי בלבד · אין העברה מחוץ לרשת מבצעית",
 };
