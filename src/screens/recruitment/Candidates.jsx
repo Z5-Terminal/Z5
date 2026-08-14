@@ -15,7 +15,7 @@ import {
 import { C, S, FONT_MONO } from "../../theme";
 import {
   listCycles, getCandidatesEnriched, getCandidateWithDetails, updateCandidate,
-  getCandidateExam, examUrlFor, surveyUrlForCycle,
+  getCandidateExam, examUrlFor, surveyUrlForCycle, getRecommendationContext,
   combinedScore, listBootcampSquads, promoteCandidate,
   archiveCandidate, restoreCandidate, deleteCandidate,
   bulkUpdateCandidates, bulkArchiveCandidates, bulkDeleteCandidates,
@@ -41,10 +41,29 @@ const STATUSES = [
   "accepted",
   "rejected",
 ];
-const SORTS = ["newest", "name", "personal_id", "interview_score", "exam_score", "combined_score"];
+const SORTS = ["newest", "name", "personal_id", "interview_score", "exam_score", "combined_score", "recommendations"];
 const SECTION_ORDER = ["identity", "self_assessment", "background", "physical"];
 // Statuses offered by the bulk "change status" dropdown.
 const BULK_STATUSES = ["interviewed", "ready_for_exam", "exam_done", "accepted", "rejected"];
+// Every stage a candidate can be moved to from the detail screen. Unlike
+// the quick-action buttons this is not one-directional — it's how a
+// rejected (or accepted) candidate gets put back into the pipeline.
+const ALL_STATUSES = [
+  "survey_in_progress", "survey_done", "interviewed",
+  "ready_for_exam", "exam_done", "accepted", "rejected",
+];
+// accepted/rejected are the only stages that carry a final decision;
+// moving anywhere else clears it.
+function finalStatusFor(status) {
+  return status === "accepted" || status === "rejected" ? status : null;
+}
+// Recommendation counts have no ceiling to scale against, so they get
+// their own absolute thresholds rather than going through scoreColor.
+function recColor(n) {
+  if (!n) return C.dim;
+  if (n >= 3) return C.ok;
+  return C.bright;
+}
 
 // Shared initials computation (list rows, accepted cards, hero).
 function initialsOf(name) {
@@ -188,6 +207,7 @@ export default function Candidates() {
       <CandidateDetail
         candidateId={activeId}
         onBack={() => { setActiveId(null); setView("list"); }}
+        onOpenCandidate={(id) => setActiveId(id)}
       />
     );
   }
@@ -304,6 +324,13 @@ function CandidatesList({ onPick }) {
       case "combined_score":
         arr.sort((a, b) => (combinedScore(b) ?? -1) - (combinedScore(a) ?? -1));
         break;
+      case "recommendations":
+        // Most-recommended first; interview average breaks ties so the
+        // ordering inside a tier still means something.
+        arr.sort((a, b) =>
+          (b.recommendationCount ?? 0) - (a.recommendationCount ?? 0) ||
+          (b.avgScore ?? -1) - (a.avgScore ?? -1));
+        break;
       case "newest":
       default:
         arr.sort((a, b) =>
@@ -313,7 +340,8 @@ function CandidatesList({ onPick }) {
     return arr;
   }, [filtered, sort]);
 
-  const isScoreSort = sort === "interview_score" || sort === "exam_score" || sort === "combined_score";
+  const isScoreSort = sort === "interview_score" || sort === "exam_score"
+    || sort === "combined_score" || sort === "recommendations";
 
   // Per-status counts within the current cycle + team + search scope
   // (the status filter itself is ignored so every chip stays informative).
@@ -420,6 +448,7 @@ function CandidatesList({ onPick }) {
 
   const rowProps = (r) => ({
     candidate: r.candidate,
+    recommendationCount: r.recommendationCount || 0,
     onClick: () => onPick(r.candidate.id),
     selectMode,
     selected: selectedIds.has(r.candidate.id),
@@ -791,7 +820,7 @@ function FilterChipRow({ label, children }) {
 // it opens the detail view. Rendered as a div[role=button] (not a
 // <button>) because it nests interactive children (avatar, restore).
 function CandidateRow({
-  candidate, onClick,
+  candidate, onClick, recommendationCount = 0,
   selectMode, selected, onToggleSelect, onOpenPhoto, onRestore,
 }) {
   const { t } = useI18n();
@@ -852,6 +881,11 @@ function CandidateRow({
             </Btn>
           )}
         </>
+      )}
+      {recommendationCount > 0 && (
+        <span style={{ flexShrink: 0, opacity: archived ? 0.7 : 1 }}>
+          <RecCountChip n={recommendationCount} />
+        </span>
       )}
       <span style={{ opacity: archived ? 0.7 : 1, flexShrink: 0 }}>
         <Badge tone={statusTone(candidate.status)}>
@@ -1015,6 +1049,71 @@ function AcceptedCard({ row, onClick }) {
   );
 }
 
+// Compact "how many people named this candidate" marker. Used in list
+// rows and the hero, where a full ScoreChip would be too heavy.
+function RecCountChip({ n }) {
+  const { t } = useI18n();
+  return (
+    <span
+      title={t("rec.candidates.recs_title", { n })}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 9px",
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: "0.5px",
+        textTransform: "uppercase",
+        background: n >= 3 ? C.badgeOk : C.badgeBright,
+        color: n >= 3 ? C.ok : C.bright,
+        border: `1px solid ${n >= 3 ? C.badgeOkBorder : C.borderBright}`,
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span style={{ fontFamily: FONT_MONO, fontWeight: 700 }}>{n}</span>
+      {t("rec.candidates.recs_label")}
+    </span>
+  );
+}
+
+// Name chips for a set of candidates, optionally clickable so the reader
+// can jump straight to the profile that was named.
+function RecNameList({ people, emptyLabel, onOpen }) {
+  if (!people || people.length === 0) {
+    return <div style={{ color: C.dim, fontSize: 13 }}>{emptyLabel}</div>;
+  }
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {people.map((person) => {
+        const label = person.full_name || "—";
+        if (!onOpen) return <Badge key={person.id} tone="bright">{label}</Badge>;
+        return (
+          <button
+            key={person.id}
+            type="button"
+            onClick={() => onOpen(person.id)}
+            style={{
+              padding: "3px 10px",
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "0.5px",
+              textTransform: "uppercase",
+              background: C.badgeBright,
+              color: C.bright,
+              border: `1px solid ${C.borderBright}`,
+              borderRadius: 999,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >{label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ScoreChip({ label, value, tone }) {
   const tones = {
     ok:      { fg: C.ok,    border: C.badgeOkBorder,    bg: C.badgeOk },
@@ -1076,13 +1175,19 @@ function LeaderboardRow({
   // Pick which score this sort cares about.
   const isExamSort = sortKey === "exam_score";
   const isCombinedSort = sortKey === "combined_score";
+  const isRecSort = sortKey === "recommendations";
   const combined = isCombinedSort ? combinedScore(row) : null;
-  const score = isCombinedSort ? combined
+  const recCount = row.recommendationCount || 0;
+  const score = isRecSort ? recCount
+    : isCombinedSort ? combined
     : isExamSort ? (examAttempt?.score ?? null)
     : avgScore;
   const scoreMax = isCombinedSort ? 100 : isExamSort ? (examAttempt?.total ?? null) : 10;
   const hasScore = score != null;
-  const hasRange = !isExamSort && !isCombinedSort
+  // A zero recommendation count is a real value, but it shouldn't earn a
+  // rank badge — nobody has named them, so they sit below the ranked set.
+  const ranked = hasScore && (!isRecSort || recCount > 0);
+  const hasRange = !isExamSort && !isCombinedSort && !isRecSort
     && minScore != null && maxScore != null && minScore !== maxScore;
 
   return (
@@ -1118,9 +1223,9 @@ function LeaderboardRow({
           fontFamily: FONT_MONO,
           fontSize: isMobile ? 13 : 15,
           fontWeight: 700,
-          color: !hasScore ? C.dimmer : (rank <= 4 ? C.bright : C.dim),
+          color: !ranked ? C.dimmer : (rank <= 4 ? C.bright : C.dim),
         }}>
-          {hasScore ? `#${rank}` : "—"}
+          {ranked ? `#${rank}` : "—"}
         </div>
 
         <CandidateAvatar
@@ -1156,11 +1261,11 @@ function LeaderboardRow({
             fontFamily: FONT_MONO,
             fontSize: isMobile ? 20 : 26,
             fontWeight: 700,
-            color: scoreColor(score, scoreMax),
+            color: isRecSort ? recColor(recCount) : scoreColor(score, scoreMax),
             lineHeight: 1,
           }}>
             {!hasScore ? "—"
-              : isCombinedSort ? String(score)
+              : isRecSort || isCombinedSort ? String(score)
               : isExamSort ? `${score} / ${scoreMax}`
               : score.toFixed(1)}
           </div>
@@ -1169,6 +1274,7 @@ function LeaderboardRow({
             letterSpacing: "0.5px", textTransform: "uppercase",
           }}>
             {!hasScore ? t("rec.candidates.no_score_short")
+              : isRecSort ? t("rec.candidates.recs_label")
               : isCombinedSort ? t("rec.candidates.combined_label")
               : isExamSort ? t("rec.candidates.exam_label")
               : t("rec.candidates.avg_label")}
@@ -1194,6 +1300,26 @@ function LeaderboardRow({
           borderTop: `1px solid ${C.border}`,
           padding: isMobile ? "12px" : "14px 16px",
         }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ ...S.label, marginBottom: 8 }}>
+              {t("rec.candidate.recommended_by")}
+              <span style={{ fontFamily: FONT_MONO, marginInlineStart: 6, color: recColor(recCount) }}>
+                {recCount}
+              </span>
+            </div>
+            <RecNameList
+              people={row.recommendedBy}
+              emptyLabel={t("rec.candidate.no_recommendations")}
+            />
+            {row.recommends?.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ ...S.label, marginBottom: 8 }}>
+                  {t("rec.candidate.recommends")}
+                </div>
+                <RecNameList people={row.recommends} emptyLabel="" />
+              </div>
+            )}
+          </div>
           <div style={{ ...S.label, marginBottom: 10 }}>
             {interviewCount === 1
               ? t("rec.candidates.one_interview")
@@ -1284,16 +1410,18 @@ function scoreToneBadge(score) {
   return "warn";
 }
 
-function CandidateDetail({ candidateId, onBack }) {
+function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
   const { t } = useI18n();
   const { profile } = useAuth();
   const [data, setData] = useState(null); // { candidate, cycle, questions, responses }
   const [interviews, setInterviews] = useState([]);
   const [examAttempt, setExamAttempt] = useState(null);
+  const [recs, setRecs] = useState({ roster: [], incoming: [] });
   const [photoSrc, setPhotoSrc] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [statusDraft, setStatusDraft] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState(null);
@@ -1313,6 +1441,12 @@ function CandidateDetail({ candidateId, onBack }) {
     if (iErr) setErr(iErr.message);
     else setInterviews(ivs || []);
     setExamAttempt(attempt || null);
+    // Recommendations are cycle-scoped, and the cycle id only arrives with
+    // the candidate row — so this is a second hop, not part of the batch.
+    const { data: recCtx } = await getRecommendationContext(
+      candidateId, details?.candidate?.cycle_id
+    );
+    setRecs(recCtx || { roster: [], incoming: [] });
     // Resolve a 24h signed URL for the candidate photo (private bucket)
     if (details?.candidate?.photo_url) {
       const url = await candidatePhotoSignedUrl(details.candidate.photo_url);
@@ -1322,7 +1456,21 @@ function CandidateDetail({ candidateId, onBack }) {
     }
   }
 
-  useEffect(() => { refresh(); }, [candidateId]);
+  // Jumping profile → profile (via a recommendation chip) reuses this
+  // component, so clear the previous candidate's state instead of showing
+  // it under the new name while the fetch is in flight.
+  useEffect(() => {
+    setData(null);
+    setInterviews([]);
+    setExamAttempt(null);
+    setRecs({ roster: [], incoming: [] });
+    setPhotoSrc(null);
+    setStatusDraft("");
+    setErr(""); setOk("");
+    if (typeof window !== "undefined") window.scrollTo(0, 0);
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateId]);
 
   async function handlePhotoUpload(file) {
     setErr("");
@@ -1338,13 +1486,18 @@ function CandidateDetail({ candidateId, onBack }) {
     setTimeout(() => setter(""), ms);
   }
 
-  async function handleStatus(next, finalStatus) {
+  // final_status is derived from the target stage rather than passed in,
+  // so moving a rejected candidate back into the pipeline can't leave the
+  // old decision badge stuck on their profile.
+  async function handleStatus(next) {
     setBusy(true); setErr(""); setOk("");
-    const patch = { status: next };
-    if (finalStatus !== undefined) patch.final_status = finalStatus;
-    const { error } = await updateCandidate(candidateId, patch);
+    const { error } = await updateCandidate(candidateId, {
+      status: next,
+      final_status: finalStatusFor(next),
+    });
     setBusy(false);
     if (error) { setErr(error.message); return; }
+    setStatusDraft("");
     flash(setOk, t("rec.candidate.status_updated"));
     await refresh();
   }
@@ -1360,6 +1513,21 @@ function CandidateDetail({ candidateId, onBack }) {
 
   const { candidate, cycle, questions, responses } = data;
   const responsesByQ = new Map(responses.map((r) => [r.question_id, r]));
+
+  // Roster minus the candidate themselves — nobody recommends themselves.
+  const pickableRoster = (recs.roster || []).filter((c) => c.id !== candidateId);
+  const namesById = new Map((recs.roster || []).map((c) => [c.id, c.full_name]));
+  // Union of every interviewer's picks for this candidate, deduped.
+  const outgoingIds = [...new Set(
+    interviews.flatMap((iv) => iv.recommended_ids || [])
+  )].filter((id) => id !== candidateId);
+  const outgoing = outgoingIds.map((id) => ({ id, full_name: namesById.get(id) || null }));
+
+  const selectedStatus = statusDraft || candidate.status;
+  const decided = candidate.status === "accepted" || candidate.status === "rejected";
+  // Reopening drops a candidate back where they actually got to, so an
+  // un-rejected candidate doesn't reappear as if they never sat the exam.
+  const reopenTarget = examAttempt?.finished_at ? "exam_done" : "interviewed";
 
   async function handleToggleExamUnlock() {
     setBusy(true); setErr(""); setOk("");
@@ -1421,6 +1589,7 @@ function CandidateDetail({ candidateId, onBack }) {
 
       <CandidateHero
         candidate={candidate}
+        recommendationCount={recs.incoming?.length || 0}
         photoSrc={photoSrc}
         onUpload={handlePhotoUpload}
         onOpenPhoto={(src) => setLightboxSrc(src)}
@@ -1440,7 +1609,15 @@ function CandidateDetail({ candidateId, onBack }) {
         interviews={interviews}
         currentUserId={profile?.id}
         currentUserCallsign={profile?.callsign}
+        roster={pickableRoster}
+        namesById={namesById}
         onSaved={refresh}
+      />
+
+      <RecommendationsPanel
+        incoming={recs.incoming}
+        outgoing={outgoing}
+        onOpenCandidate={onOpenCandidate}
       />
 
       <CycleLinksPanel
@@ -1476,14 +1653,52 @@ function CandidateDetail({ candidateId, onBack }) {
           )}
           {(candidate.status === "exam_done" || candidate.status === "interviewed" || candidate.status === "ready_for_exam") && (
             <>
-              <Btn small onClick={() => handleStatus("accepted", "accepted")} disabled={busy}>
+              <Btn small onClick={() => handleStatus("accepted")} disabled={busy}>
                 {t("rec.candidate.mark_accepted")}
               </Btn>
-              <Btn small onClick={() => handleStatus("rejected", "rejected")} disabled={busy}>
+              <Btn small onClick={() => handleStatus("rejected")} disabled={busy}>
                 {t("rec.candidate.mark_rejected")}
               </Btn>
             </>
           )}
+          {/* One-click undo for a decided candidate — back to whichever
+              stage they actually reached, decision cleared. */}
+          {decided && (
+            <Btn small onClick={() => handleStatus(reopenTarget)} disabled={busy}>
+              ↩ {t("rec.candidate.reopen")} → {t(`rec.candidate_status.${reopenTarget}`)}
+            </Btn>
+          )}
+        </div>
+
+        <div style={{ height: 1, background: C.border, margin: "18px 0" }} />
+
+        {/* Free-form status control. The quick buttons above only move
+            forward; this is how a candidate goes back to any stage. */}
+        <div style={{ ...S.label, marginBottom: 8 }}>
+          {t("rec.candidate.change_status")}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setStatusDraft(e.target.value)}
+            aria-label={t("rec.candidate.change_status")}
+            style={{ ...S.input, fontSize: 14, width: "auto", minWidth: 180 }}
+          >
+            {ALL_STATUSES.map((st) => (
+              <option key={st} value={st}>{t(`rec.candidate_status.${st}`)}</option>
+            ))}
+          </select>
+          <Btn
+            small
+            primary
+            onClick={() => handleStatus(selectedStatus)}
+            disabled={busy || selectedStatus === candidate.status}
+          >
+            {t("rec.candidate.apply_status")}
+          </Btn>
+        </div>
+        <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginTop: 10 }}>
+          {t("rec.candidate.status_help")}
         </div>
       </Panel>
 
@@ -1667,7 +1882,7 @@ function PromotePanel({ candidate, onPromoted, onFlash }) {
 
 // ── Candidate hero (profile-card style) ────────────────────────────
 
-function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto }) {
+function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto, recommendationCount = 0 }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const fileRef = useRef(null);
@@ -1817,6 +2032,7 @@ function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto }) {
               {t(`rec.final_status.${candidate.final_status}`)}
             </Badge>
           )}
+          {recommendationCount > 0 && <RecCountChip n={recommendationCount} />}
         </div>
         <Btn small onClick={() => fileRef.current?.click()} disabled={uploading}>
           {photoSrc ? t("rec.candidate.replace_photo") : t("rec.candidate.upload_photo")}
@@ -2055,7 +2271,15 @@ function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl 
 
 // ── Interview panel ────────────────────────────────────────────────
 
-function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCallsign, onSaved }) {
+// Up to 3 other candidates from the same cycle can be named per interview.
+// The cap is enforced here, in upsertInterview, and by a check constraint
+// on the table.
+const MAX_RECOMMENDATIONS = 3;
+
+function InterviewPanel({
+  candidateId, interviews, currentUserId, currentUserCallsign,
+  roster = [], namesById, onSaved,
+}) {
   const { t } = useI18n();
   const mine = interviews.find((i) => i.interviewer_id === currentUserId);
   const others = interviews.filter((i) => i.interviewer_id !== currentUserId);
@@ -2063,6 +2287,9 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
   const [score, setScore] = useState(mine?.score ?? "");
   const [tags, setTags] = useState(Array.isArray(mine?.tags) ? mine.tags : []);
   const [notes, setNotes] = useState(mine?.notes || "");
+  const [recommended, setRecommended] = useState(
+    Array.isArray(mine?.recommended_ids) ? mine.recommended_ids : []
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
@@ -2072,6 +2299,7 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
     setScore(mine?.score ?? "");
     setTags(Array.isArray(mine?.tags) ? mine.tags : []);
     setNotes(mine?.notes || "");
+    setRecommended(Array.isArray(mine?.recommended_ids) ? mine.recommended_ids : []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mine?.id]);
 
@@ -2083,6 +2311,7 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
       score: score === "" ? null : Number(score),
       tags,
       notes,
+      recommendedIds: recommended,
     });
     setBusy(false);
     if (error) { setErr(error.message); return; }
@@ -2103,6 +2332,16 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
       <Field label={t("rec.interview.tags")}>
         <TagPicker selected={tags} onChange={setTags} />
       </Field>
+      <Field label={`${t("rec.interview.recommendations")} · ${recommended.length}/${MAX_RECOMMENDATIONS}`}>
+        <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+          {t("rec.interview.recommendations_hint")}
+        </div>
+        <RecommendPicker
+          roster={roster}
+          selected={recommended}
+          onChange={setRecommended}
+        />
+      </Field>
       <Field label={t("rec.interview.notes")}>
         <Textarea
           value={notes}
@@ -2121,9 +2360,216 @@ function InterviewPanel({ candidateId, interviews, currentUserId, currentUserCal
           <div style={{ ...S.label, marginBottom: 10 }}>
             {t("rec.interview.others")}
           </div>
-          {others.map((iv) => <OtherInterviewCard key={iv.id} interview={iv} />)}
+          {others.map((iv) => (
+            <OtherInterviewCard key={iv.id} interview={iv} namesById={namesById} />
+          ))}
         </div>
       )}
+    </Panel>
+  );
+}
+
+// Search-and-pick over the cycle roster. The result list only renders once
+// something is typed, so the panel stays short on mobile; picked names sit
+// above as numbered, removable chips.
+function RecommendPicker({ roster, selected, onChange }) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const byId = useMemo(() => new Map(roster.map((c) => [c.id, c])), [roster]);
+  const full = selected.length >= MAX_RECOMMENDATIONS;
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return roster
+      .filter((c) => !selected.includes(c.id))
+      .filter((c) =>
+        (c.full_name || "").toLowerCase().includes(q) ||
+        (c.personal_id || "").toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [roster, selected, query]);
+
+  function pick(id) {
+    if (full || selected.includes(id)) return;
+    onChange([...selected, id]);
+    setQuery("");
+  }
+
+  return (
+    <>
+      {selected.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {selected.map((id, i) => (
+            <span
+              key={id}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                padding: "5px 6px 5px 12px",
+                background: C.badgeBright,
+                color: C.bright,
+                border: `1px solid ${C.borderBright}`,
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              <span style={{ fontFamily: FONT_MONO, color: C.dim, fontSize: 11 }}>
+                {i + 1}
+              </span>
+              {byId.get(id)?.full_name || t("rec.interview.rec_unknown")}
+              <button
+                type="button"
+                onClick={() => onChange(selected.filter((x) => x !== id))}
+                aria-label={t("common.remove")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 20,
+                  height: 20,
+                  background: "transparent",
+                  color: C.dim,
+                  border: "none",
+                  borderRadius: 999,
+                  cursor: "pointer",
+                  fontSize: 15,
+                  lineHeight: 1,
+                  fontFamily: "inherit",
+                }}
+              >×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {full ? (
+        <div style={{ color: C.dim, fontSize: 12 }}>{t("rec.interview.rec_full")}</div>
+      ) : roster.length === 0 ? (
+        <div style={{ color: C.dim, fontSize: 12 }}>{t("rec.interview.rec_empty_roster")}</div>
+      ) : (
+        <>
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("rec.interview.rec_search_ph")}
+          />
+          {query.trim() !== "" && (
+            <div style={{
+              marginTop: 6,
+              border: `1px solid ${C.border}`,
+              borderRadius: 10,
+              maxHeight: 200,
+              overflowY: "auto",
+            }}>
+              {matches.length === 0 && (
+                <div style={{ padding: "12px 14px", color: C.dim, fontSize: 13 }}>
+                  {t("rec.interview.rec_no_matches")}
+                </div>
+              )}
+              {matches.map((c, i) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => pick(c.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    boxSizing: "border-box",
+                    minHeight: 44,
+                    padding: "10px 14px",
+                    background: "transparent",
+                    border: "none",
+                    borderTop: i === 0 ? "none" : `1px solid ${C.border}`,
+                    textAlign: "start",
+                    cursor: "pointer",
+                    color: C.text,
+                    fontFamily: "inherit",
+                    fontSize: 13,
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 0, color: C.bright, fontWeight: 600 }}>
+                    {c.full_name || "—"}
+                  </span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.dim }}>
+                    {c.personal_id || ""}
+                  </span>
+                  {c.team ? (
+                    <span style={{ fontSize: 11, color: C.dim }}>
+                      {t("rec.candidates.team")} {c.team}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+// The names one interviewer recorded, shown read-only on their card and
+// in the leaderboard drill-down.
+function RecommendedNames({ ids, namesById }) {
+  const { t } = useI18n();
+  if (!ids || ids.length === 0) return null;
+  return (
+    <div style={{
+      display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8,
+    }}>
+      <span style={{
+        fontSize: 10, color: C.dim, letterSpacing: "0.7px", textTransform: "uppercase",
+      }}>
+        {t("rec.interview.recommended")}
+      </span>
+      {ids.map((id) => (
+        <Badge key={id} tone="bright">
+          {namesById?.get(id) || t("rec.interview.rec_unknown")}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+// Standing of one candidate in the cycle's recommendation graph: how many
+// people named them (the number the leaderboard ranks on), who those were,
+// and who the candidate named back.
+function RecommendationsPanel({ incoming, outgoing, onOpenCandidate }) {
+  const { t } = useI18n();
+  const count = incoming?.length || 0;
+  return (
+    <Panel title={t("rec.candidate.recommendations_title")}>
+      <div style={{
+        display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16,
+      }}>
+        <span style={{
+          fontFamily: FONT_MONO, fontSize: 32, fontWeight: 700,
+          color: recColor(count), lineHeight: 1,
+        }}>{count}</span>
+        <span style={{
+          color: C.dim, fontSize: 11, letterSpacing: "0.8px", textTransform: "uppercase",
+        }}>{t("rec.candidate.rec_count")}</span>
+      </div>
+
+      <div style={{ ...S.label, marginBottom: 8 }}>{t("rec.candidate.recommended_by")}</div>
+      <RecNameList
+        people={incoming}
+        emptyLabel={t("rec.candidate.no_recommendations")}
+        onOpen={onOpenCandidate}
+      />
+
+      <div style={{ height: 1, background: C.border, margin: "18px 0" }} />
+
+      <div style={{ ...S.label, marginBottom: 8 }}>{t("rec.candidate.recommends")}</div>
+      <RecNameList
+        people={outgoing}
+        emptyLabel={t("rec.candidate.no_recommends")}
+        onOpen={onOpenCandidate}
+      />
     </Panel>
   );
 }
@@ -2160,7 +2606,7 @@ function ScorePicker({ value, onChange }) {
   );
 }
 
-function OtherInterviewCard({ interview }) {
+function OtherInterviewCard({ interview, namesById }) {
   const { t } = useI18n();
   const interviewer = interview.interviewer;
   return (
@@ -2197,6 +2643,7 @@ function OtherInterviewCard({ interview }) {
           ))}
         </div>
       )}
+      <RecommendedNames ids={interview.recommended_ids} namesById={namesById} />
       {interview.notes && (
         <div style={{
           fontSize: 13, color: C.text, lineHeight: 1.6,

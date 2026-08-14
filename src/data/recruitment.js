@@ -134,6 +134,13 @@ function missingArchivedColumn(error) {
   return !!error && /archived_at/i.test(error.message || "");
 }
 
+// Same graceful-degradation trick for the recommendations column, which
+// arrives with interview_recommendations_migration.sql. Queries that name
+// the column explicitly 400 until that has been run in Supabase.
+function missingRecommendedColumn(error) {
+  return !!error && /recommended_ids/i.test(error.message || "");
+}
+
 export async function listCandidates(cycleId, { team, status, includeArchived = false } = {}) {
   const build = (excludeArchived) => {
     let q = supabase
@@ -283,11 +290,86 @@ export async function updateCandidate(id, patch) {
     .single();
 }
 
+// ── Recommendations ───────────────────────────────────────────────
+//
+// During the interview each candidate is asked which OTHER candidates
+// they recommend (up to 3). The picks are stored on the *recommending*
+// candidate's interview row, so "who recommended X" is answered by
+// scanning the cycle's interviews for rows whose recommended_ids contain
+// X. Counted per distinct recommending candidate — two interviewers
+// logging the same person's picks is still one recommendation.
+
+// Roster + incoming recommendations for one candidate. `roster` feeds the
+// interview picker (caller filters out the candidate themselves);
+// `incoming` is the list of candidates who named this one.
+export async function getRecommendationContext(candidateId, cycleId) {
+  if (!cycleId) return { data: { roster: [], incoming: [] } };
+  const { data: roster, error: rErr } = await supabase
+    .from("candidates")
+    .select("id, full_name, personal_id, team, photo_url")
+    .eq("cycle_id", cycleId)
+    .order("full_name");
+  if (rErr) return { error: rErr };
+
+  const list = roster || [];
+  if (list.length === 0) return { data: { roster: [], incoming: [] } };
+
+  // Containment filter rather than .in(every candidate in the cycle) —
+  // it's served by the GIN index and returns only the matching rows, so
+  // the request stays small no matter how big the cycle gets.
+  const { data: ivs, error: iErr } = await supabase
+    .from("candidate_interviews")
+    .select("candidate_id")
+    .contains("recommended_ids", [candidateId]);
+  if (iErr) {
+    // Migration not applied yet — the picker still works, counts read 0.
+    if (missingRecommendedColumn(iErr)) return { data: { roster: list, incoming: [] } };
+    return { error: iErr };
+  }
+
+  const byId = new Map(list.map((c) => [c.id, c]));
+  const sources = new Set();
+  for (const iv of ivs || []) {
+    // Scoped to this cycle (the query isn't) and never a self-recommendation.
+    if (iv.candidate_id === candidateId || !byId.has(iv.candidate_id)) continue;
+    sources.add(iv.candidate_id);
+  }
+  return {
+    data: {
+      roster: list,
+      incoming: [...sources].map((id) => byId.get(id)).filter(Boolean),
+    },
+  };
+}
+
+// Build the directed recommendation graph for a cycle from its interview
+// rows. Returns two id -> Set(id) maps: who named a candidate (incoming)
+// and who a candidate named (outgoing). Self-picks and ids that are no
+// longer in the roster are dropped — array elements can't carry an FK, so
+// deleting a candidate leaves stale ids behind.
+function buildRecommendationGraph(interviews, rosterIds) {
+  const incoming = new Map();
+  const outgoing = new Map();
+  const add = (map, key, value) => {
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key).add(value);
+  };
+  for (const iv of interviews) {
+    for (const targetId of iv.recommended_ids || []) {
+      if (targetId === iv.candidate_id || !rosterIds.has(targetId)) continue;
+      add(incoming, targetId, iv.candidate_id);
+      add(outgoing, iv.candidate_id, targetId);
+    }
+  }
+  return { incoming, outgoing };
+}
+
 // Aggregate every candidate in a cycle with their interview + exam
 // results: avg interview score, scored count, min/max range, union of
-// tags (with frequency), per-interviewer breakdown, and exam attempt
-// (if any). The Candidates screen uses this for both its team-grouped
-// layout and its score-ranked leaderboard layout.
+// tags (with frequency), per-interviewer breakdown, exam attempt (if any)
+// and the recommendation graph (who named them / who they named). The
+// Candidates screen uses this for both its team-grouped layout and its
+// score-ranked leaderboard layout.
 export async function getCandidatesEnriched(cycleId, { includeArchived = false } = {}) {
   const fetchCandidates = (excludeArchived) => {
     let q = supabase
@@ -306,11 +388,26 @@ export async function getCandidatesEnriched(cycleId, { includeArchived = false }
   if (!candidates || candidates.length === 0) return { data: [] };
 
   const candidateIds = candidates.map((c) => c.id);
+
+  // The recommendation graph is resolved against every candidate in the
+  // cycle, archived included — otherwise a candidate's count would drop
+  // just because the "show archived" toggle hid whoever named them.
+  let roster = candidates;
+  if (!includeArchived) {
+    const { data: full, error: rErr } = await supabase
+      .from("candidates")
+      .select("id, full_name")
+      .eq("cycle_id", cycleId);
+    if (rErr) return { error: rErr };
+    if (full) roster = full;
+  }
+  const rosterIds = roster.map((c) => c.id);
+
   const [interviewsRes, examsRes] = await Promise.all([
     supabase
       .from("candidate_interviews")
       .select("*")
-      .in("candidate_id", candidateIds),
+      .in("candidate_id", rosterIds),
     supabase
       .from("exam_attempts")
       .select("*")
@@ -345,6 +442,15 @@ export async function getCandidatesEnriched(cycleId, { includeArchived = false }
   const examByCand = new Map();
   for (const ex of exams) examByCand.set(ex.candidate_id, ex);
 
+  const nameById = new Map(roster.map((c) => [c.id, c.full_name]));
+  const { incoming, outgoing } = buildRecommendationGraph(
+    interviews, new Set(rosterIds)
+  );
+  const resolve = (set) =>
+    [...(set || [])]
+      .map((id) => ({ id, full_name: nameById.get(id) || null }))
+      .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""));
+
   const rows = candidates.map((candidate) => {
     const ivs = interviewsByCand.get(candidate.id) || [];
     const scored = ivs.filter((i) => i.score != null);
@@ -371,6 +477,11 @@ export async function getCandidatesEnriched(cycleId, { includeArchived = false }
       tags: Object.keys(tagCounts),
       tagCounts,
       examAttempt: examByCand.get(candidate.id) || null,
+      // recommendedBy = candidates who named this one (the count that
+      // ranks the leaderboard); recommends = this candidate's own picks.
+      recommendedBy: resolve(incoming.get(candidate.id)),
+      recommends: resolve(outgoing.get(candidate.id)),
+      recommendationCount: (incoming.get(candidate.id) || new Set()).size,
     };
   });
 
