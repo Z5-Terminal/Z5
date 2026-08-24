@@ -123,10 +123,12 @@ export default function Knowledge({ isBootcamp, canSquadEditKnowledge }) {
             <Btn onClick={() => { setViewingUrl(null); setViewingTitle(""); setViewingFileName(""); }}>
               {t("kn.back")}
             </Btn>
-            <Btn small onClick={() => window.open(viewingUrl, "_blank")}>
-              {t("kn.download")}
-            </Btn>
-            {!isPdf && !isImage && (
+            {isAdmin && (
+              <Btn small onClick={() => window.open(viewingUrl, "_blank")}>
+                {t("kn.download")}
+              </Btn>
+            )}
+            {isAdmin && !isPdf && !isImage && (
               <Btn small onClick={() => window.open(embedUrl, "_blank")}>
                 {t("kn.google_viewer")}
               </Btn>
