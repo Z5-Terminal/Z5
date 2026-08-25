@@ -70,8 +70,11 @@ export default function Knowledge({ isBootcamp, canSquadEditKnowledge }) {
 
   const showUpload = canUpload(profile?.role, canSquadEditKnowledge, profile) && track !== null;
 
-  function openViewer(m) {
-    setViewingUrl(getMaterialUrl(m.file_path));
+  async function openViewer(m) {
+    setErr("");
+    const url = await getMaterialUrl(m.file_path);
+    if (!url) { setErr(t("kn.open_failed")); return; }
+    setViewingUrl(url);
     setViewingTitle(m.title || m.file_name);
     setViewingFileName(m.file_name || "");
   }

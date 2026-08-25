@@ -86,9 +86,19 @@ export async function deleteMaterial(material) {
   return { error };
 }
 
-export function getMaterialUrl(filePath) {
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(filePath);
-  return data?.publicUrl || "";
+// The knowledge bucket is PRIVATE — files are not reachable without a
+// signed URL. One hour is long enough for a viewing session without leaving
+// a durable public link lying around.
+export async function getMaterialUrl(filePath) {
+  if (!filePath) return "";
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(filePath, 60 * 60);
+  if (error) {
+    console.warn("knowledge signed-url failed", error);
+    return "";
+  }
+  return data?.signedUrl || "";
 }
 
 export function subscribeKnowledge(onChange) {

@@ -78,10 +78,9 @@ export default function Roster() {
   async function deleteSquad(squad) {
     setErr(""); setOk("");
     // Unassign members first
-    const { error: e1 } = await supabase
-      .from("profiles")
-      .update({ squad_id: null })
-      .eq("squad_id", squad.id);
+    const { error: e1 } = await supabase.rpc("admin_clear_squad_members", {
+      p_squad_id: squad.id,
+    });
     if (e1) { setErr(e1.message); return; }
     const { error: e2 } = await supabase
       .from("squads")
@@ -94,10 +93,9 @@ export default function Roster() {
 
   async function updateMemberRole(member, newRole) {
     setErr(""); setOk("");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role: newRole })
-      .eq("id", member.id);
+    const { error } = await supabase.rpc("admin_set_member_role", {
+      p_user_id: member.id, p_role: newRole,
+    });
     if (error) { setErr(error.message); return; }
     setOk(t("ros.role_changed", { who: member.callsign || member.email, role: roleLabelT(newRole, t) }));
     load();
@@ -105,10 +103,9 @@ export default function Roster() {
 
   async function assignMemberToSquad(member, squadId) {
     setErr(""); setOk("");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ squad_id: squadId })
-      .eq("id", member.id);
+    const { error } = await supabase.rpc("admin_set_member_squad", {
+      p_user_id: member.id, p_squad_id: squadId,
+    });
     if (error) { setErr(error.message); return; }
     const sq = squads.find((s) => s.id === squadId);
     setOk(t("ros.member_assigned", { who: member.callsign || member.email, squad: sq?.name || "—" }));
@@ -118,10 +115,9 @@ export default function Roster() {
   async function toggleInstructor(member) {
     setErr(""); setOk("");
     const newVal = !member.is_instructor;
-    const { error } = await supabase
-      .from("profiles")
-      .update({ is_instructor: newVal })
-      .eq("id", member.id);
+    const { error } = await supabase.rpc("admin_set_member_instructor", {
+      p_user_id: member.id, p_is_instructor: newVal,
+    });
     if (error) { setErr(error.message); return; }
     setOk(`${member.callsign || member.email} → ${newVal ? t("ros.instructor_on") : t("ros.instructor_off")}`);
     load();
@@ -129,10 +125,9 @@ export default function Roster() {
 
   async function removeMemberFromSquad(member) {
     setErr(""); setOk("");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ squad_id: null })
-      .eq("id", member.id);
+    const { error } = await supabase.rpc("admin_set_member_squad", {
+      p_user_id: member.id, p_squad_id: null,
+    });
     if (error) { setErr(error.message); return; }
     setOk(t("ros.member_removed", { who: member.callsign || member.email }));
     load();

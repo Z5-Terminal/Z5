@@ -76,10 +76,9 @@ function ProfileHero({ profile, onAvatarChanged }) {
       setUploading(false);
       return;
     }
-    const { error: updErr } = await supabase
-      .from("profiles")
-      .update({ avatar_url: path })
-      .eq("id", profile.id);
+    // Direct UPDATE on profiles is revoked; the RPC validates that the
+    // path lives under the caller's own folder.
+    const { error: updErr } = await supabase.rpc("update_my_avatar", { p_path: path });
     setUploading(false);
     if (updErr) { setErr(updErr.message); return; }
     onAvatarChanged && onAvatarChanged();

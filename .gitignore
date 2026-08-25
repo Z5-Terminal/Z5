@@ -10,3 +10,6 @@ dist
 ChatGPT Image*.png
 Hero dark+light.png
 Personal gear inventory - Gun.png
+
+# security audit reports — never commit
+SECURITY-AUDIT-*.md

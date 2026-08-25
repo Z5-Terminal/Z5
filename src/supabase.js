@@ -23,5 +23,3 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
   realtime: { params: { eventsPerSecond: 10 } },
 });
-
-export const ADMIN_BOOTSTRAP_EMAIL = "benjaminaidinov@gmail.com";

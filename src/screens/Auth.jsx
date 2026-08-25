@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase, ADMIN_BOOTSTRAP_EMAIL } from "../supabase";
+import { supabase } from "../supabase";
 import { useI18n } from "../i18n";
 import { Page, CenteredColumn, Field, Btn, Input, ErrLine, OkLine } from "../ui";
 import { useIsMobile } from "../useIsMobile";
@@ -127,15 +127,13 @@ function SignupForm() {
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
 
-  const isBootstrapAdmin = email.trim().toLowerCase() === ADMIN_BOOTSTRAP_EMAIL;
-
   async function go(e) {
     e.preventDefault();
     setBusy(true); setErr(""); setOk("");
     try {
       const csUp = callsign.trim().toUpperCase();
       if (!csUp) throw new Error(t("auth.err_callsign"));
-      if (!isBootstrapAdmin && !code.trim()) throw new Error(t("auth.err_invite"));
+      if (!code.trim()) throw new Error(t("auth.err_invite"));
 
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -151,12 +149,10 @@ function SignupForm() {
       });
       if (e2) throw e2;
 
-      if (!isBootstrapAdmin) {
-        const { error: e3 } = await supabase.rpc("redeem_invite", {
-          invite_code: code.trim().toUpperCase(),
-        });
-        if (e3) throw e3;
-      }
+      const { error: e3 } = await supabase.rpc("redeem_invite", {
+        invite_code: code.trim().toUpperCase(),
+      });
+      if (e3) throw e3;
 
       setOk(t("auth.registered"));
     } catch (e) {
@@ -179,23 +175,10 @@ function SignupForm() {
       <Field label={t("auth.fullname")}>
         <Input value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      {!isBootstrapAdmin && (
-        <Field label={t("auth.invitecode")}>
-          <Input mono value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
-                 placeholder={t("auth.invitecode_ph")} required />
-        </Field>
-      )}
-      {isBootstrapAdmin && (
-        <div style={{
-          color: C.bright, fontSize: 13, marginBottom: 16,
-          padding: "8px 12px",
-          background: C.progressTrack,
-          border: `1px solid ${C.border}`,
-          borderRadius: 2,
-        }}>
-          {t("auth.bootstrap")}
-        </div>
-      )}
+      <Field label={t("auth.invitecode")}>
+        <Input mono value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
+               placeholder={t("auth.invitecode_ph")} required />
+      </Field>
       <Btn primary type="submit" disabled={busy}>
         {busy ? t("auth.registering") : t("auth.register")}
       </Btn>
