@@ -1,71 +1,41 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth, roleLabelT } from "../auth";
 import { useI18n } from "../i18n";
 import { useTheme } from "../ThemeContext";
 import { useConsole } from "../console";
 import { supabase } from "../supabase";
-import { Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge, BackButton } from "../ui";
+import {
+  Panel, PageHeader, Field, Btn, Input, ErrLine, OkLine, Badge, Avatar, Mono,
+  Row, List, Segmented, Skeleton, Spinner, ViewTransition, ELLIPSIS, IconTile,
+} from "../ui";
 import { useIsMobile } from "../useIsMobile";
-import { C, FONT, FONT_MONO } from "../theme";
+import { C, R, T } from "../theme";
 import { uploadProfileAvatar, profileAvatarPublicUrl } from "../data/avatars";
 import Gear from "./Gear";
 
-// ── Segmented control ────────────────────────────────────────────────
-// Small pill switch used for the theme / language quick-preferences on
-// the hero card. Instant effect, no accordion, no save button.
-function Segmented({ value, options, onChange, ariaLabel }) {
-  return (
-    <div role="group" aria-label={ariaLabel} style={{
-      display: "inline-flex",
-      background: C.progressTrack,
-      borderRadius: 999,
-      padding: 3,
-      gap: 2,
-    }}>
-      {options.map((o) => {
-        const active = value === o.value;
-        return (
-          <button
-            key={o.value}
-            type="button"
-            onClick={() => !active && onChange(o.value)}
-            style={{
-              all: "unset",
-              cursor: active ? "default" : "pointer",
-              padding: "5px 14px",
-              borderRadius: 999,
-              fontSize: 12.5,
-              fontWeight: 600,
-              fontFamily: FONT,
-              background: active ? C.bgElevated : "transparent",
-              color: active ? C.bright : C.dim,
-              boxShadow: active ? C.shadow : "none",
-              transition: "all 140ms ease-out",
-              whiteSpace: "nowrap",
-            }}
-          >{o.label}</button>
-        );
-      })}
-    </div>
-  );
+// Panels that hold nothing but list rows sit tighter than content panels,
+// so the rows don't float inside the card.
+function listPanelPadding(isMobile) {
+  return { padding: isMobile ? "6px 16px" : "8px 22px" };
 }
 
-// ── Profile card hero ─────────────────────────────────────────────
-// Avatar + callsign + name + role badges, with the theme / language
-// quick-switches living directly on the card.
+// ── Profile hero ─────────────────────────────────────────────────────
+// The page identity: avatar (tap to upload), callsign, name and role.
 function ProfileHero({ profile, onAvatarChanged }) {
-  const { t, lang, setLang } = useI18n();
-  const { mode, toggle: toggleTheme } = useTheme();
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
-
-  const avatarSrc = profileAvatarPublicUrl(profile?.avatar_url);
-  const initials = (profile?.callsign || profile?.full_name || profile?.email || "?")
-    .trim()
-    .slice(0, 2)
-    .toUpperCase();
+  // The public URL carries a cache-busting timestamp, so derive it once
+  // per stored path / upload instead of on every render (which made the
+  // photo reload on each keystroke elsewhere on the page).
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  const avatarSrc = useMemo(
+    () => profileAvatarPublicUrl(profile?.avatar_url),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [profile?.avatar_url, avatarVersion],
+  );
 
   async function handleFile(file) {
     if (!file || !profile?.id) return;
@@ -81,39 +51,22 @@ function ProfileHero({ profile, onAvatarChanged }) {
     const { error: updErr } = await supabase.rpc("update_my_avatar", { p_path: path });
     setUploading(false);
     if (updErr) { setErr(updErr.message); return; }
+    setAvatarVersion((v) => v + 1);
     onAvatarChanged && onAvatarChanged();
   }
 
-  const avatarSize = isMobile ? 96 : 104;
+  const pick = () => { if (!uploading) fileRef.current?.click(); };
+  const avatarSize = isMobile ? 92 : 88;
+  const uploadLabel = avatarSrc ? t("prof.replace_avatar") : t("prof.upload_avatar");
+  const displayName = profile?.callsign || profile?.full_name || profile?.email || "";
+  const secondary = [profile?.full_name || profile?.email, roleLabelT(profile?.role, t)]
+    .filter(Boolean);
+  const hasFlags = !!(profile?.is_instructor || profile?.is_recruiter);
 
-  const prefs = (
-    <div style={{
-      display: "flex",
-      flexDirection: isMobile ? "row" : "column",
-      alignItems: isMobile ? "center" : "stretch",
-      justifyContent: "center",
-      gap: isMobile ? 10 : 12,
-      flexWrap: "wrap",
-    }}>
-      <Segmented
-        ariaLabel={t("prof.theme")}
-        value={mode}
-        onChange={() => toggleTheme()}
-        options={[
-          { value: "light", label: t("prof.theme_light") },
-          { value: "dark",  label: t("prof.theme_dark") },
-        ]}
-      />
-      <Segmented
-        ariaLabel={t("prof.language")}
-        value={lang}
-        onChange={(l) => setLang(l)}
-        options={[
-          { value: "he", label: "עברית" },
-          { value: "en", label: "English" },
-        ]}
-      />
-    </div>
+  const uploadBtn = (
+    <Btn small type="button" icon="camera" onClick={pick} disabled={uploading} busy={uploading}>
+      {uploadLabel}
+    </Btn>
   );
 
   return (
@@ -122,52 +75,43 @@ function ProfileHero({ profile, onAvatarChanged }) {
         display: "flex",
         flexDirection: isMobile ? "column" : "row",
         alignItems: "center",
-        gap: isMobile ? 14 : 24,
+        gap: isMobile ? 12 : 20,
       }}>
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          title={t("prof.upload_avatar")}
+          data-press="scale"
+          onClick={pick}
+          aria-busy={uploading || undefined}
+          aria-label={uploadLabel}
+          title={uploadLabel}
           style={{
             all: "unset",
-            width: avatarSize,
-            height: avatarSize,
-            borderRadius: "50%",
-            background: C.inputBg,
-            border: `1px solid ${C.borderBright}`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            overflow: "hidden",
+            boxSizing: "border-box",
             flexShrink: 0,
-            cursor: uploading ? "wait" : "pointer",
-            position: "relative",
+            display: "flex",
+            borderRadius: R.pill,
+            cursor: uploading ? "default" : "pointer",
           }}
         >
-          {avatarSrc ? (
-            <img
-              src={avatarSrc}
-              alt=""
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          ) : (
-            <div style={{
-              fontSize: avatarSize * 0.36,
-              color: C.dim,
-              fontFamily: FONT_MONO,
-              fontWeight: 700,
-              letterSpacing: "1.5px",
-            }}>{initials}</div>
-          )}
-          {uploading && (
-            <div style={{
-              position: "absolute", inset: 0,
-              background: `${C.imageShade}0.5)`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: C.imageOverlayText, fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
-            }}>{t("prof.uploading")}</div>
-          )}
+          <Avatar src={avatarSrc} name={displayName} size={avatarSize}>
+            {uploading && (
+              <span style={{
+                position: "absolute",
+                inset: 0,
+                background: `${C.imageShade}0.5)`,
+                color: C.imageOverlayText,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                ...T.caption2,
+              }}>
+                <Spinner size={18} />
+                <span>{t("prof.uploading")}</span>
+              </span>
+            )}
+          </Avatar>
         </button>
 
         <input
@@ -185,59 +129,58 @@ function ProfileHero({ profile, onAvatarChanged }) {
         <div style={{
           flex: 1,
           minWidth: 0,
+          width: isMobile ? "100%" : "auto",
           textAlign: isMobile ? "center" : "start",
-          width: "100%",
         }}>
-          <div style={{
-            fontFamily: FONT_MONO,
-            fontSize: isMobile ? 22 : 26,
-            color: C.bright,
-            fontWeight: 700,
-            letterSpacing: "2px",
-            marginBottom: 4,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>{profile?.callsign || "—"}</div>
-          <div style={{
-            color: C.dim,
-            fontSize: 14,
-            marginBottom: 12,
-          }}>{profile?.full_name || profile?.email || ""}</div>
-          <div style={{
-            display: "flex",
-            gap: 6,
-            flexWrap: "wrap",
-            justifyContent: isMobile ? "center" : "flex-start",
-            marginBottom: 14,
-          }}>
-            <Badge tone="bright">{roleLabelT(profile?.role, t)}</Badge>
-            {profile?.is_instructor && <Badge tone="ok">{t("prof.instructor_badge")}</Badge>}
-            {profile?.is_recruiter && <Badge tone="ok">{t("prof.recruiter_badge")}</Badge>}
+          <div style={{ color: C.bright, ...ELLIPSIS }}>
+            <Mono style={{
+              fontSize: isMobile ? T.title2.fontSize : T.title1.fontSize,
+              lineHeight: T.title2.lineHeight,
+              fontWeight: 700,
+              direction: "ltr",
+              unicodeBidi: "isolate",
+            }}>{profile?.callsign || "—"}</Mono>
           </div>
-          <Btn small onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {avatarSrc ? t("prof.replace_avatar") : t("prof.upload_avatar")}
-          </Btn>
-          <ErrLine>{err}</ErrLine>
+          {secondary.length > 0 && (
+            <div style={{ ...T.callout, color: C.dim, marginTop: 3, overflowWrap: "anywhere" }}>
+              {secondary.map((part, i) => (
+                <span key={i}>
+                  {i > 0 && <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>}
+                  <span style={{ unicodeBidi: "isolate" }}>{part}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {hasFlags && (
+            <div style={{
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+              justifyContent: isMobile ? "center" : "flex-start",
+              marginTop: 10,
+            }}>
+              {profile?.is_instructor && <Badge tone="ok">{t("prof.instructor_badge")}</Badge>}
+              {profile?.is_recruiter && <Badge tone="ok">{t("prof.recruiter_badge")}</Badge>}
+            </div>
+          )}
+          {isMobile && <div style={{ marginTop: 14 }}>{uploadBtn}</div>}
         </div>
 
-        {/* Quick preferences — theme + language, instant effect */}
-        <div style={{ flexShrink: 0 }}>
-          {prefs}
-        </div>
+        {!isMobile && <div style={{ flexShrink: 0 }}>{uploadBtn}</div>}
       </div>
+      <ErrLine>{err}</ErrLine>
     </Panel>
   );
 }
 
-// ── Gear summary card ────────────────────────────────────────────────
-// Compact teaser for the personal gear inventory; opens the full Gear
+// ── Gear summary ─────────────────────────────────────────────────────
+// Navigation row for the personal gear inventory; opens the full Gear
 // screen as a sub-view.
 function GearSummaryCard({ profile, onOpen }) {
   const { t } = useI18n();
   const { mode } = useTheme();
+  const isMobile = useIsMobile();
   const [count, setCount] = useState(null);
-  const [hover, setHover] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -254,84 +197,116 @@ function GearSummaryCard({ profile, onOpen }) {
 
   const isLight = mode === "light";
 
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        all: "unset",
-        boxSizing: "border-box",
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        width: "100%",
-        cursor: "pointer",
-        border: `1px solid ${hover ? C.borderBright : C.border}`,
-        borderRadius: 14,
-        background: hover ? C.panelHover : C.panel,
-        boxShadow: C.shadow,
-        padding: "18px 22px",
-        marginBottom: 24,
-        transition: "background 140ms ease-out, border-color 140ms ease-out",
-      }}
-    >
+  const artwork = (
+    <div aria-hidden style={{
+      width: isMobile ? 76 : 88,
+      height: 46,
+      borderRadius: R.sm,
+      background: C.fill,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}>
       <img
         src={`${import.meta.env.BASE_URL}${isLight ? "GunLogo-LightMode.png" : "GunLogo.png"}`}
         alt=""
         style={{
-          height: 26,
-          maxWidth: 90,
+          height: 24,
+          maxWidth: "86%",
           width: "auto",
           objectFit: "contain",
-          opacity: 0.85,
+          opacity: 0.9,
           mixBlendMode: isLight ? "multiply" : "screen",
-          flexShrink: 0,
+          // The artwork's backdrop is not quite pure white / black; push
+          // it to the extreme so the blend mode drops it completely.
+          filter: "contrast(1.4)",
         }}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          color: C.bright, fontSize: 14, fontWeight: 700,
-          letterSpacing: "1px", textTransform: "uppercase", marginBottom: 3,
-        }}>{t("gear.title")}</div>
-        <div style={{ color: C.dim, fontSize: 12.5 }}>
-          {count == null ? "…" : t("prof.gear_count", { n: count })}
+    </div>
+  );
+
+  return (
+    <Panel style={listPanelPadding(isMobile)}>
+      <Row
+        onClick={onOpen}
+        chevron
+        leading={artwork}
+        aria-label={`${t("prof.gear_open")}: ${t("gear.title")}`}
+        style={{ minHeight: 64 }}
+      >
+        <div style={{ ...T.headline, color: C.bright, ...ELLIPSIS }}>{t("gear.title")}</div>
+        <div style={{ ...T.footnote, color: C.dim, marginTop: 1, minHeight: 18, display: "flex", alignItems: "center" }}>
+          {count == null
+            ? <Skeleton width={104} height={10} />
+            : <span style={ELLIPSIS}>{t("prof.gear_count", { n: count })}</span>}
         </div>
-      </div>
-      <span style={{ color: C.dim, fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-        {t("prof.gear_open")}
-      </span>
-    </button>
+      </Row>
+    </Panel>
+  );
+}
+
+// One quick preference: label on the leading side, control on the
+// trailing side (the control drops under the label if space runs out).
+function SettingRow({ label, children }) {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{
+      display: "flex",
+      flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "8px 16px",
+      padding: "8px 0",
+      minHeight: isMobile ? 50 : 46,
+      boxSizing: "border-box",
+    }}>
+      <div style={{ ...T.body, fontWeight: 600, color: C.bright }}>{label}</div>
+      {children}
+    </div>
   );
 }
 
 export default function Profile() {
   const { profile, refreshProfile, signOut } = useAuth();
-  const { t } = useI18n();
+  const { t, lang, setLang, isRTL } = useI18n();
+  const { mode, toggle: toggleTheme } = useTheme();
   const { consoleMode, clearConsole } = useConsole();
   const isMobile = useIsMobile();
-  const [view, setView] = useState("main"); // 'main' | 'gear'
+  // 'main' | 'gear' — `kind` is the direction of the last move (none on
+  // first paint: the shell already animates the tab change).
+  const [nav, setNav] = useState({ view: "main", kind: null });
   const [callsign, setCallsign] = useState(profile?.callsign || "");
   const [name, setName] = useState(profile?.full_name || "");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Which form is saving: null | 'id' | 'pw'. Either one locks both.
+  const [busy, setBusy] = useState(null);
   const [errId, setErrId] = useState("");
   const [okId, setOkId] = useState("");
   const [errPw, setErrPw] = useState("");
   const [okPw, setOkPw] = useState("");
-  const [confirmSwitch, setConfirmSwitch] = useState(false);
 
-  function handleSwitchConsole() {
-    if (!confirmSwitch) { setConfirmSwitch(true); return; }
-    setConfirmSwitch(false);
+  const view = nav.view;
+  const openGear = () => setNav({ view: "gear", kind: "push" });
+  const closeGear = () => setNav({ view: "main", kind: "pop" });
+
+  // Back to the Hub, which should open at its top rather than at this
+  // page's scroll offset.
+  function switchConsole() {
+    if (typeof window !== "undefined") window.scrollTo(0, 0);
     clearConsole();
   }
 
+  // Each view starts at its top.
+  const firstPaint = useRef(true);
+  useLayoutEffect(() => {
+    if (firstPaint.current) { firstPaint.current = false; return; }
+    if (typeof window !== "undefined") window.scrollTo(0, 0);
+  }, [view]);
+
   async function saveProfile(e) {
     e.preventDefault();
-    setBusy(true); setErrId(""); setOkId("");
+    setBusy("id"); setErrId(""); setOkId("");
     try {
       const { error } = await supabase.rpc("update_my_profile", {
         p_callsign: callsign.trim().toUpperCase(),
@@ -342,12 +317,12 @@ export default function Profile() {
       setOkId(t("prof.updated"));
     } catch (e) {
       setErrId(String(e.message || e));
-    } finally { setBusy(false); }
+    } finally { setBusy(null); }
   }
 
   async function changePassword(e) {
     e.preventDefault();
-    setBusy(true); setErrPw(""); setOkPw("");
+    setBusy("pw"); setErrPw(""); setOkPw("");
     try {
       if (pw.length < 6) throw new Error(t("prof.err_pw_short"));
       if (pw !== pw2) throw new Error(t("prof.err_pw_mismatch"));
@@ -357,119 +332,185 @@ export default function Profile() {
       setOkPw(t("prof.pw_updated"));
     } catch (e) {
       setErrPw(String(e.message || e));
-    } finally { setBusy(false); }
+    } finally { setBusy(null); }
   }
 
-  // ── Gear sub-view ──────────────────────────────────────────────────
+  const fieldGrid = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)",
+    columnGap: 16,
+  };
+  // Read-only facts look like values, not like fields waiting for input.
+  const readOnlyStyle = { background: C.cardBg, borderColor: "transparent", color: C.dim };
+  // Codes are typed left-to-right in either language; keep them on the
+  // reading edge of the field.
+  const codeInput = { dir: "ltr", style: { textAlign: isRTL ? "end" : "start" } };
+
+  let body;
   if (view === "gear") {
-    return (
+    // ── Gear sub-view ────────────────────────────────────────────────
+    body = (
       <>
         <PageHeader
           title={t("gear.title")}
-          subtitle={t("prof.subtitle")}
-          action={<BackButton onClick={() => setView("main")} />}
+          subtitle={t("gear.subtitle")}
+          back={{ onClick: closeGear, label: t("prof.title") }}
         />
-        <div style={{ marginTop: isMobile ? 14 : 20 }}>
-          <Gear embedded />
-        </div>
+        <Gear embedded />
       </>
     );
-  }
-
-  return (
-    <>
-      {/* No page title here — the hero card IS the page identity. */}
-      <div>
-
-        {/* Hero: identity + quick prefs (theme / language) */}
+  } else {
+    body = (
+      <>
+        {/* No page title here — the hero card IS the page identity. */}
         <ProfileHero profile={profile} onAvatarChanged={refreshProfile} />
 
-        {/* Gear — summary card opening the full inventory */}
-        <GearSummaryCard profile={profile} onOpen={() => setView("gear")} />
+        {/* Gear — opens the full inventory */}
+        <GearSummaryCard profile={profile} onOpen={openGear} />
 
-        {/* Identity — open panel, no accordion */}
+        {/* Quick preferences: instant effect, no save button */}
+        <Panel style={listPanelPadding(isMobile)}>
+          <List>
+            <SettingRow label={t("prof.theme")}>
+              <Segmented
+                ariaLabel={t("prof.theme")}
+                value={mode}
+                onChange={() => toggleTheme()}
+                options={[
+                  { value: "light", label: t("prof.theme_light"), icon: "sun" },
+                  { value: "dark", label: t("prof.theme_dark"), icon: "moon" },
+                ]}
+              />
+            </SettingRow>
+            <SettingRow label={t("prof.language")}>
+              <Segmented
+                ariaLabel={t("prof.language")}
+                value={lang}
+                onChange={(l) => setLang(l)}
+                options={[
+                  { value: "he", label: "עברית" },
+                  { value: "en", label: "English" },
+                ]}
+              />
+            </SettingRow>
+          </List>
+        </Panel>
+
+        {/* Identity */}
         <Panel title={t("prof.identity")}>
           <form onSubmit={saveProfile}>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-              columnGap: 16,
-            }}>
-              <Field label={t("prof.email")}>
-                <Input value={profile?.email || ""} readOnly />
-              </Field>
-              <Field label={t("prof.role")}>
-                <Input value={roleLabelT(profile?.role, t)} readOnly />
-              </Field>
+            <div style={fieldGrid}>
               <Field label={t("prof.callsign")}>
-                <Input mono value={callsign} onChange={(e) => setCallsign(e.target.value)} />
+                <Input
+                  mono
+                  {...codeInput}
+                  aria-label={t("prof.callsign")}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={callsign}
+                  onChange={(e) => setCallsign(e.target.value)}
+                />
               </Field>
               <Field label={t("prof.fullname")}>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Input
+                  aria-label={t("prof.fullname")}
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </Field>
+              <Field label={t("prof.email")}>
+                <Input
+                  {...codeInput}
+                  aria-label={t("prof.email")}
+                  value={profile?.email || ""}
+                  readOnly
+                  style={{ ...codeInput.style, ...readOnlyStyle }}
+                />
+              </Field>
+              <Field label={t("prof.role")}>
+                <Input
+                  aria-label={t("prof.role")}
+                  value={roleLabelT(profile?.role, t)}
+                  readOnly
+                  style={readOnlyStyle}
+                />
               </Field>
             </div>
-            <Btn primary type="submit" disabled={busy}>
-              {busy ? t("prof.saving") : t("prof.save")}
+            <Btn primary type="submit" fullWidth={isMobile} disabled={!!busy} busy={busy === "id"}>
+              {busy === "id" ? t("prof.saving") : t("prof.save")}
             </Btn>
             <ErrLine>{errId}</ErrLine>
             <OkLine>{okId}</OkLine>
           </form>
         </Panel>
 
-        {/* Security */}
+        {/* Password */}
         <Panel title={t("prof.password")}>
           <form onSubmit={changePassword}>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-              columnGap: 16,
-            }}>
+            <div style={fieldGrid}>
               <Field label={t("prof.newpw")}>
-                <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
+                <Input
+                  type="password"
+                  aria-label={t("prof.newpw")}
+                  autoComplete="new-password"
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                />
               </Field>
               <Field label={t("prof.confirmpw")}>
-                <Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} />
+                <Input
+                  type="password"
+                  aria-label={t("prof.confirmpw")}
+                  autoComplete="new-password"
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                />
               </Field>
             </div>
-            <Btn primary type="submit" disabled={busy}>{t("prof.changepw")}</Btn>
+            <div style={{ ...T.caption, color: C.dim, marginTop: -4, marginBottom: 14 }}>
+              {t("prof.pw_note")}
+            </div>
+            <Btn primary type="submit" fullWidth={isMobile} disabled={!!busy} busy={busy === "pw"}>
+              {t("prof.changepw")}
+            </Btn>
             <ErrLine>{errPw}</ErrLine>
             <OkLine>{okPw}</OkLine>
           </form>
-          <div style={{ color: C.dim, fontSize: 12, marginTop: 14 }}>
-            {t("prof.pw_note")}
-          </div>
         </Panel>
 
-        {/* Session: console switch + sign out, together at the bottom */}
-        <Panel title={t("prof.session_title")}>
-          <div style={{
-            display: "flex",
-            alignItems: isMobile ? "stretch" : "center",
-            flexDirection: isMobile ? "column" : "row",
-            gap: 12,
-          }}>
-            <div style={{ fontSize: 13, color: C.dim, flex: 1 }}>
-              {t("console.current")}:{" "}
-              <span style={{ color: C.bright, fontWeight: 600, letterSpacing: "0.5px" }}>
-                {t(`console.${consoleMode || "terminal"}`)}
-              </span>
-            </div>
-            {confirmSwitch ? (
-              <div style={{ display: "flex", gap: 8 }}>
-                <Btn small onClick={handleSwitchConsole}>{t("console.switch_confirm")}</Btn>
-                <Btn small onClick={() => setConfirmSwitch(false)}>✕</Btn>
-              </div>
-            ) : (
-              <Btn small onClick={handleSwitchConsole}>{t("console.switch")}</Btn>
-            )}
-            <Btn small onClick={signOut} style={{
-              color: C.error,
-              borderColor: C.errBorderFaint,
-            }}>{t("prof.logout")}</Btn>
-          </div>
+        {/* Console — back to the Hub; nothing is lost, so no confirm */}
+        <Panel style={listPanelPadding(isMobile)}>
+          <Row
+            onClick={switchConsole}
+            chevron
+            leading={<IconTile icon="swap" />}
+            title={t("console.switch")}
+            subtitle={`${t("console.current")}: ${t(`console.${consoleMode || "terminal"}`)}`}
+          />
         </Panel>
 
-      </div>
-    </>
+        {/* Sign out — last thing on the page */}
+        <Btn
+          danger
+          fullWidth
+          type="button"
+          icon="logout"
+          iconFlip
+          onClick={signOut}
+          style={{ marginTop: isMobile ? 4 : 8 }}
+        >
+          {t("prof.logout")}
+        </Btn>
+      </>
+    );
+  }
+
+  if (!nav.kind) return body;
+  return (
+    <ViewTransition viewKey={view} kind={nav.kind}>
+      {body}
+    </ViewTransition>
   );
 }

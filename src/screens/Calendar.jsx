@@ -9,10 +9,13 @@ import {
 import { useAuth, canCreateInvites, canCreateWholeTeamTask } from "../auth";
 import { useI18n } from "../i18n";
 import {
-  Panel, PageHeader, Btn, Input, Textarea, Field, ErrLine, OkLine,
+  Panel, PageHeader, Btn, IconButton, Input, Textarea, Select, Field,
+  ErrLine, OkLine, List, Row, Tile, Menu, ConfirmDialog, EmptyState, Spinner,
+  Num, ViewTransition, ELLIPSIS,
 } from "../ui";
 import { useIsMobile } from "../useIsMobile";
-import { C, FONT_MONO, S } from "../theme";
+import { C, NUM, R, T } from "../theme";
+import { DURATION, MOTION } from "../motion";
 import { supabase } from "../supabase";
 
 // Calendar tab: month grid + day view.
@@ -21,9 +24,11 @@ import { supabase } from "../supabase";
 //   • schedule_events.starts_at (calendar-only entries)
 // Schedule events never appear on Home or Missions — they are calendar-only.
 
+const RISE = `z5-rise ${DURATION.move}ms var(--z5-spring) backwards`;
+
 export default function Calendar() {
   const { profile } = useAuth();
-  const { t, dir, lang } = useI18n();
+  const { t, lang } = useI18n();
   const locale = lang === "he" ? "he-IL" : "en-US";
   const isMobile = useIsMobile();
   const showCreate = canCreateInvites(profile?.role) || !!profile?.is_instructor;
@@ -32,6 +37,9 @@ export default function Calendar() {
   const [selectedDay, setSelectedDay] = useState(null); // Date | null
   const [events, setEvents] = useState([]);          // unified events (missions + schedule)
   const [loading, setLoading] = useState(true);
+  // Which way the month grid enters: "pop" when going back in time,
+  // "push" when going forward ("tab" for the very first render).
+  const [navKind, setNavKind] = useState("tab");
 
   // Inline schedule composer state (null = closed, "new" = create form,
   // or a schedule-event object = edit form).
@@ -93,11 +101,14 @@ export default function Calendar() {
     return map;
   }, [events]);
 
-  function prevMonth() { setCursor(addMonths(cursor, -1)); setSelectedDay(null); setScheduleEditing(null); }
-  function nextMonth() { setCursor(addMonths(cursor,  1)); setSelectedDay(null); setScheduleEditing(null); }
+  function prevMonth() { setNavKind("pop");  setCursor(addMonths(cursor, -1)); setSelectedDay(null); setScheduleEditing(null); }
+  function nextMonth() { setNavKind("push"); setCursor(addMonths(cursor,  1)); setSelectedDay(null); setScheduleEditing(null); }
   function goToday()   {
-    const t = startOfMonth(new Date());
-    setCursor(t);
+    const target = startOfMonth(new Date());
+    if (target.getTime() !== cursor.getTime()) {
+      setNavKind(target.getTime() < cursor.getTime() ? "pop" : "push");
+    }
+    setCursor(target);
     setSelectedDay(startOfDay(new Date()));
     setScheduleEditing(null);
   }
@@ -107,134 +118,153 @@ export default function Calendar() {
     setScheduleEditing(null);
   }
 
-  const monthLabel = (() => {
-    const s = cursor.toLocaleString(locale, { month: "long", year: "numeric" });
-    return lang === "he" ? s : s.toUpperCase();
-  })();
+  const monthLabel = cursor.toLocaleString(locale, { month: "long", year: "numeric" });
+  const monthKey = `${cursor.getFullYear()}-${cursor.getMonth()}`;
+  const navSize = isMobile ? 40 : 32;
 
-  // Let the page flow naturally — the month grid has its own minHeight so it
-  // won't collapse when a day with many events is selected.
-  const rootStyle = { display: "flex", flexDirection: "column", minHeight: 0 };
+  const dayList = selectedDay ? (eventsByDay.get(dayKey(selectedDay)) || []) : [];
+  const scheduleEvents = dayList.filter((e) => e.source === "schedule");
 
   return (
-    <div style={rootStyle}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
       <PageHeader
         title={t("cal.title")}
         subtitle={t("cal.subtitle")}
-        action={<Btn small onClick={goToday}>{t("cal.today")}</Btn>}
+        action={<Btn small type="button" onClick={goToday}>{t("cal.today")}</Btn>}
       />
 
-      <div style={{
-        ...S.panel,
-        marginTop: isMobile ? 12 : 16,
-        marginBottom: selectedDay ? 16 : 0,
+      {/* Month card. Its own min-height keeps the page from jumping while
+          months load or a busy day is selected. */}
+      <Panel style={{
         display: "flex",
         flexDirection: "column",
-        padding: isMobile ? "12px 10px" : "18px 22px",
         minHeight: isMobile ? 360 : 520,
+        padding: isMobile ? "14px 10px 12px" : "18px 22px 16px",
       }}>
         <div style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          marginBottom: 10,
+          gap: isMobile ? 6 : 8,
+          marginBottom: isMobile ? 8 : 12,
+          paddingInline: isMobile ? 6 : 0,
           flexShrink: 0,
-          direction: dir,
         }}>
-          <Btn small onClick={prevMonth}>{t("cal.prev")}</Btn>
-          <div style={{
-            fontFamily: FONT_MONO,
-            color: C.bright,
-            fontSize: 14,
-            fontWeight: 700,
-            letterSpacing: "1.5px",
-          }}>
-            {monthLabel}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+            <h2 style={{ margin: 0, minWidth: 0, ...T.title2, color: C.bright, ...ELLIPSIS }}>
+              {monthLabel}
+            </h2>
+            {loading && <Spinner size={14} style={{ color: C.dimmer }} />}
           </div>
-          <Btn small onClick={nextMonth}>{t("cal.next")}</Btn>
+          <IconButton
+            icon="chevronBack"
+            flip
+            size={navSize}
+            label={t("cal.prev_month")}
+            onClick={prevMonth}
+          />
+          <IconButton
+            icon="chevronForward"
+            flip
+            size={navSize}
+            label={t("cal.next_month")}
+            onClick={nextMonth}
+          />
         </div>
 
         <MonthGrid
           cursor={cursor}
+          monthKey={monthKey}
+          navKind={navKind}
           today={today}
           selectedDay={selectedDay}
           eventsByDay={eventsByDay}
           onSelect={handleSelectDay}
+          locale={locale}
           t={t}
         />
 
-        {loading && (
-          <div style={{ color: C.dim, fontSize: 11, marginTop: 6, flexShrink: 0 }}>{t("cal.loading")}</div>
-        )}
-      </div>
+        <Legend t={t} />
+      </Panel>
 
-      {selectedDay && (() => {
-        const list = eventsByDay.get(dayKey(selectedDay)) || [];
-        const scheduleEvents = list.filter((e) => e.source === "schedule");
+      {selectedDay && (
+        <Panel
+          key={dayKey(selectedDay)}
+          title={(
+            // Same row height with or without the action, so opening the
+            // composer doesn't nudge everything below.
+            <span style={{ display: "flex", alignItems: "center", minHeight: isMobile ? 34 : 30, textWrap: "balance" }}>
+              {dayHeader(selectedDay, locale)}
+            </span>
+          )}
+          action={showCreate && scheduleEditing !== "new" && (
+            <Btn
+              small
+              primary
+              type="button"
+              icon="plus"
+              onClick={() => setScheduleEditing("new")}
+            >
+              {t("cal.new_schedule")}
+            </Btn>
+          )}
+          style={{ animation: RISE }}
+        >
+          {scheduleEditing === "new" && (
+            <ScheduleComposer
+              mode="create"
+              selectedDay={selectedDay}
+              profile={profile}
+              t={t}
+              onDone={() => { setScheduleEditing(null); load(); }}
+              onCancel={() => setScheduleEditing(null)}
+            />
+          )}
 
-        return (
-          <Panel
-            title={dayHeader(selectedDay, locale, lang)}
-            action={showCreate && (
-              <Btn small primary onClick={() => setScheduleEditing("new")}>
-                {t("cal.new_schedule")}
-              </Btn>
-            )}
-          >
-            {scheduleEditing === "new" && (
-              <ScheduleComposer
-                mode="create"
-                selectedDay={selectedDay}
-                profile={profile}
-                t={t}
-                onDone={() => { setScheduleEditing(null); load(); }}
-                onCancel={() => setScheduleEditing(null)}
-              />
-            )}
+          {scheduleEvents.length === 0 && scheduleEditing !== "new" && (
+            <EmptyState compact icon="calendar" title={t("cal.schedule_empty")} />
+          )}
 
-            {scheduleEvents.length === 0 && scheduleEditing !== "new" && (
-              <div style={{ color: C.dim, fontSize: 13 }}>{t("cal.schedule_empty")}</div>
-            )}
-
-            {scheduleEvents.map((e) => {
-              const isEditing = scheduleEditing && typeof scheduleEditing === "object"
-                && scheduleEditing.id === e.schedule.id;
-              if (isEditing) {
+          {scheduleEvents.length > 0 && (
+            <List>
+              {scheduleEvents.map((e) => {
+                const isEditing = scheduleEditing && typeof scheduleEditing === "object"
+                  && scheduleEditing.id === e.schedule.id;
+                if (isEditing) {
+                  return (
+                    <ScheduleComposer
+                      key={e.key}
+                      mode="edit"
+                      initial={e.schedule}
+                      selectedDay={selectedDay}
+                      profile={profile}
+                      t={t}
+                      onDone={() => { setScheduleEditing(null); load(); }}
+                      onCancel={() => setScheduleEditing(null)}
+                    />
+                  );
+                }
                 return (
-                  <ScheduleComposer
+                  <ScheduleRow
                     key={e.key}
-                    mode="edit"
-                    initial={e.schedule}
-                    selectedDay={selectedDay}
-                    profile={profile}
+                    event={e}
+                    canManage={canManageScheduleEvent(profile, e.schedule)}
+                    onEdit={() => setScheduleEditing(e.schedule)}
+                    onDeleted={load}
                     t={t}
-                    onDone={() => { setScheduleEditing(null); load(); }}
-                    onCancel={() => setScheduleEditing(null)}
                   />
                 );
-              }
-              return (
-                <ScheduleRow
-                  key={e.key}
-                  event={e}
-                  canManage={canManageScheduleEvent(profile, e.schedule)}
-                  onEdit={() => setScheduleEditing(e.schedule)}
-                  onDeleted={load}
-                  t={t}
-                />
-              );
-            })}
-          </Panel>
-        );
-      })()}
+              })}
+            </List>
+          )}
+        </Panel>
+      )}
     </div>
   );
 }
 
 // ---------- Month grid ------------------------------------------------
 
-function MonthGrid({ cursor, today, selectedDay, eventsByDay, onSelect, t }) {
+function MonthGrid({ cursor, monthKey, navKind, today, selectedDay, eventsByDay, onSelect, locale, t }) {
   const isMobile = useIsMobile();
   const first = startOfMonth(cursor);
   // Grid starts on Sunday of the week containing the 1st.
@@ -258,17 +288,16 @@ function MonthGrid({ cursor, today, selectedDay, eventsByDay, onSelect, t }) {
     }}>
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(7, 1fr)",
+        gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
         gap: 2,
-        marginBottom: 4,
+        marginBottom: 2,
         flexShrink: 0,
       }}>
         {dayNames.map((d) => (
           <div key={d} style={{
+            ...T.caption,
+            fontWeight: 500,
             color: C.dimmer,
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.8px",
             textAlign: "center",
             padding: "4px 0",
           }}>
@@ -276,103 +305,132 @@ function MonthGrid({ cursor, today, selectedDay, eventsByDay, onSelect, t }) {
           </div>
         ))}
       </div>
+      {/* The month slides in from the side it was asked for. The clip
+          keeps that travel inside the card; the small bleed leaves room
+          for focus rings on the edge cells. */}
       <div style={{
         flex: 1,
         minHeight: 0,
-        display: "grid",
-        gridTemplateColumns: "repeat(7, 1fr)",
-        gridTemplateRows: "repeat(6, minmax(0, 1fr))",
-        gap: 2,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        margin: -5,
+        padding: 5,
       }}>
-        {cells.map((d) => {
-          const inMonth = d.getMonth() === first.getMonth();
-          const isToday = sameDay(d, today);
-          const isSelected = selectedDay && sameDay(d, selectedDay);
-          const dayEvents = eventsByDay.get(dayKey(d)) || [];
-          return (
-            <DayCell
-              key={d.toISOString()}
-              date={d}
-              inMonth={inMonth}
-              isToday={isToday}
-              isSelected={isSelected}
-              events={dayEvents}
-              onClick={() => onSelect(startOfDay(d))}
-              isMobile={isMobile}
-            />
-          );
-        })}
+        <ViewTransition
+          viewKey={monthKey}
+          kind={navKind}
+          style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+        >
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            display: "grid",
+            gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+            gridTemplateRows: `repeat(6, minmax(${isMobile ? 48 : 54}px, 1fr))`,
+            gap: 2,
+          }}>
+            {cells.map((d) => {
+              const inMonth = d.getMonth() === first.getMonth();
+              const isToday = sameDay(d, today);
+              const isSelected = selectedDay && sameDay(d, selectedDay);
+              const dayEvents = eventsByDay.get(dayKey(d)) || [];
+              return (
+                <DayCell
+                  key={d.toISOString()}
+                  date={d}
+                  label={d.toLocaleDateString(locale, { weekday: "long", month: "long", day: "numeric" })}
+                  inMonth={inMonth}
+                  isToday={isToday}
+                  isSelected={!!isSelected}
+                  events={dayEvents}
+                  onClick={() => onSelect(startOfDay(d))}
+                  isMobile={isMobile}
+                />
+              );
+            })}
+          </div>
+        </ViewTransition>
       </div>
     </div>
   );
 }
 
-function DayCell({ date, inMonth, isToday, isSelected, events, onClick, isMobile }) {
-  const hasEvents = events.length > 0;
-  const bg = isSelected
-    ? C.navActiveBg
-    : isToday
-      ? C.progressTrack
-      : "transparent";
+// One day: the date in a round mark (today = filled ink, selected = soft
+// fill) with up to three event dots underneath.
+function DayCell({ date, label, inMonth, isToday, isSelected, events, onClick, isMobile }) {
+  const size = isMobile ? 34 : 30;
+  const mark = isToday
+    ? { background: C.tint, color: C.onTint, fontWeight: 700 }
+    : isSelected
+      ? { background: C.fill, color: C.bright, fontWeight: 600 }
+      : { background: "transparent", color: inMonth ? C.text : C.dimmer, fontWeight: 400 };
   return (
     <button
       type="button"
+      data-press="scale"
+      aria-label={label}
+      aria-pressed={isSelected}
+      aria-current={isToday ? "date" : undefined}
       onClick={onClick}
       style={{
         all: "unset",
+        boxSizing: "border-box",
         cursor: "pointer",
-        padding: isMobile ? 4 : 6,
-        background: bg,
-        border: `1px solid ${isSelected ? C.bright : isToday ? C.borderBright : C.border}`,
-        borderRadius: 3,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
         minHeight: 0,
         minWidth: 0,
-        overflow: "hidden",
-        opacity: inMonth ? 1 : 0.35,
+        borderRadius: R.md,
       }}
     >
-      <div style={{
-        color: isToday ? C.bright : C.text,
-        fontSize: isMobile ? 12 : 13,
-        fontWeight: isToday ? 700 : 500,
+      <span style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        borderRadius: R.pill,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        ...T.callout,
         lineHeight: 1,
-        textAlign: "end",
+        ...NUM,
+        ...mark,
+        // Today that is also the selected day gets a ring, so selection
+        // stays visible on the filled mark.
+        boxShadow: isToday && isSelected ? `0 0 0 2px ${C.panel}, 0 0 0 3.5px ${C.tint}` : "none",
+        transition: `background-color ${MOTION.quick}, color ${MOTION.quick}`,
       }}>
         {date.getDate()}
-      </div>
-      {hasEvents && (
-        <div style={{
-          display: "flex",
-          gap: 2,
-          justifyContent: "center",
-          flexWrap: "wrap",
-        }}>
-          {events.slice(0, 3).map((e, i) => (
-            <span
-              key={i}
-              aria-hidden
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: dotColor(e),
-              }}
-            />
-          ))}
-          {events.length > 3 && (
-            <span style={{
-              color: C.dim,
-              fontSize: 9,
-              lineHeight: 1,
-            }}>
-              +{events.length - 3}
-            </span>
-          )}
-        </div>
-      )}
+      </span>
+      <span aria-hidden style={{
+        height: 8,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 3,
+        opacity: inMonth ? 1 : 0.45,
+      }}>
+        {events.slice(0, 3).map((e, i) => (
+          <span
+            key={i}
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: dotColor(e),
+            }}
+          />
+        ))}
+        {events.length > 3 && (
+          <Num style={{ ...T.caption2, fontSize: 10, lineHeight: 1, color: C.dim }}>
+            +{events.length - 3}
+          </Num>
+        )}
+      </span>
     </button>
   );
 }
@@ -383,6 +441,41 @@ function dotColor(e) {
   return C.ok;
 }
 
+// What the three dot colors mean.
+function Legend({ t }) {
+  const items = [
+    { color: C.ok,       label: t("kind.operational") },
+    { color: C.warn,     label: t("kind.admin") },
+    { color: C.schedule, label: t("cal.schedule_section") },
+  ];
+  return (
+    <div style={{
+      display: "flex",
+      flexWrap: "wrap",
+      justifyContent: "center",
+      columnGap: 16,
+      rowGap: 4,
+      marginTop: 10,
+      flexShrink: 0,
+      ...T.caption,
+      color: C.dim,
+    }}>
+      {items.map((it) => (
+        <span key={it.label} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <span aria-hidden style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: it.color,
+            flexShrink: 0,
+          }} />
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ---------- Schedule row -----------------------------------------------
 
 function ScheduleRow({ event, canManage, onEdit, onDeleted, t }) {
@@ -390,108 +483,79 @@ function ScheduleRow({ event, canManage, onEdit, onDeleted, t }) {
   const s = event.schedule;
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   async function handleDelete() {
     if (busy) return;
-    setBusy(true);
+    setBusy(true); setErr("");
     const { error } = await deleteScheduleEvent(s.id);
     setBusy(false);
-    if (!error) { setConfirming(false); onDeleted && onDeleted(); }
+    setConfirming(false);
+    if (error) { setErr(String(error.message || error)); return; }
+    onDeleted && onDeleted();
   }
 
   const timeStr = format24(event.when);
   const endStr  = event.ends ? format24(event.ends) : null;
 
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      width: "100%",
-      boxSizing: "border-box",
-      padding: "10px 4px",
-      borderBottom: `1px solid ${C.border}`,
-    }}>
-      {/* Time */}
-      <div style={{
-        fontFamily: FONT_MONO,
-        color: C.schedule,
-        fontSize: 13,
-        fontWeight: 700,
-        flexShrink: 0,
-        lineHeight: 1.3,
-        textAlign: "end",
-      }}>
-        {timeStr}
-        {endStr && (
-          <div style={{ color: C.dim, fontWeight: 600, fontSize: 11 }}>
-            {endStr}
+    <>
+      <Row
+        as="div"
+        leading={(
+          <div style={{ minWidth: 44, textAlign: "start" }}>
+            <Num style={{ display: "block", ...T.callout, fontWeight: 600, color: C.schedule }}>
+              {timeStr}
+            </Num>
+            {endStr && (
+              <Num style={{ display: "block", ...T.caption, color: C.dim }}>
+                {endStr}
+              </Num>
+            )}
           </div>
         )}
-      </div>
-
-      {/* Title + details */}
-      <div style={{
-        flex: 1,
-        minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
-        gap: 1,
-      }}>
-        <div style={{
-          color: C.bright,
-          fontWeight: 600,
-          fontSize: 14,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
+        trailing={canManage ? (
+          <Menu
+            items={[
+              { key: "edit", label: t("sch.edit"), icon: "pencil", onSelect: onEdit },
+              { key: "delete", label: t("sch.delete"), icon: "trash", danger: true, onSelect: () => setConfirming(true) },
+            ]}
+            trigger={(p) => (
+              <IconButton icon="ellipsis" label={t("common.more")} size={isMobile ? 34 : 28} {...p} />
+            )}
+          />
+        ) : null}
+      >
+        <div style={{ ...T.body, fontWeight: 600, color: C.bright, overflowWrap: "anywhere" }}>
           {s.title || "—"}
         </div>
         {(s.location || s.notes) && (
-          <div style={{
-            color: C.dim,
-            fontSize: 11,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
+          <div style={{ ...T.footnote, color: C.dim, marginTop: 1, overflowWrap: "anywhere" }}>
             {s.location && <>{s.location}</>}
-            {s.location && s.notes && <> · </>}
+            {s.location && s.notes && <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>}
             {s.notes && <>{s.notes}</>}
           </div>
         )}
-      </div>
-
-      {/* Actions — compact, right-aligned */}
-      {canManage && (
-        <div style={{
-          display: "flex",
-          gap: 4,
-          flexShrink: 0,
-        }}>
-          {confirming ? (
-            <>
-              <Btn small onClick={() => setConfirming(false)}>✕</Btn>
-              <Btn small primary onClick={handleDelete} disabled={busy}>
-                {t("sch.confirm_delete")}
-              </Btn>
-            </>
-          ) : (
-            <>
-              <Btn small onClick={onEdit}>✎</Btn>
-              <Btn small onClick={() => setConfirming(true)}>✕</Btn>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+        <ErrLine>{err}</ErrLine>
+      </Row>
+      <ConfirmDialog
+        open={confirming}
+        title={t("sch.delete_title")}
+        message={t("sch.delete_body")}
+        confirmLabel={t("sch.delete")}
+        cancelLabel={t("sch.cancel")}
+        busy={busy}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirming(false)}
+      />
+    </>
   );
 }
 
 // ---------- Schedule composer (inline) ---------------------------------
 
 function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCancel }) {
+  const isMobile = useIsMobile();
   const isAdminOfficer = canCreateWholeTeamTask(profile?.role);
   const isInstr = !!profile?.is_instructor;
 
@@ -582,51 +646,59 @@ function ScheduleComposer({ mode, initial, selectedDay, profile, t, onDone, onCa
 
   return (
     <div style={{
-      padding: "8px 4px 12px",
-      borderBottom: `1px solid ${C.border}`,
-      marginBottom: 8,
-      maxWidth: "100%",
-      boxSizing: "border-box",
+      // In edit mode the form stands in for its row inside the list; a
+      // new entry sits above the list.
+      padding: mode === "edit" ? "10px 0" : "2px 0 12px",
+      animation: RISE,
     }}>
-      <Field label={t("sch.title")}>
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("sch.title_ph")} />
-      </Field>
-      <Field label={t("sch.starts_at")}>
-        <Input type="datetime-local" value={startsAt} onChange={(e) => handleStartChange(e.target.value)} />
-      </Field>
-      <Field label={t("sch.ends_at")}>
-        <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-      </Field>
-      <Field label={t("sch.location")}>
-        <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("sch.location_ph")} />
-      </Field>
-      <Field label={t("sch.notes")}>
-        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("sch.notes_ph")} />
-      </Field>
-      {squads.length > 0 && (
-        <Field label={t("sch.squad")}>
-          <select
-            value={squadId}
-            onChange={(e) => setSquadId(e.target.value)}
-            style={{ ...S.input, fontSize: 15 }}
-          >
-            {isAdminOfficer && <option value="">{t("sch.whole_team")}</option>}
-            {squads.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+      <Tile padding={isMobile ? "14px 12px 12px" : "16px 16px 14px"}>
+        <Field label={t("sch.title")}>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("sch.title_ph")} />
         </Field>
-      )}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))",
+          columnGap: 14,
+        }}>
+          <Field label={t("sch.starts_at")}>
+            <Input type="datetime-local" value={startsAt} onChange={(e) => handleStartChange(e.target.value)} />
+          </Field>
+          <Field label={t("sch.ends_at")}>
+            <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+          </Field>
+        </div>
+        <Field label={t("sch.location")}>
+          <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder={t("sch.location_ph")} />
+        </Field>
+        <Field label={t("sch.notes")}>
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={t("sch.notes_ph")}
+            style={{ height: 88 }}
+          />
+        </Field>
+        {squads.length > 0 && (
+          <Field label={t("sch.squad")}>
+            <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
+              {isAdminOfficer && <option value="">{t("sch.whole_team")}</option>}
+              {squads.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </Select>
+          </Field>
+        )}
 
-      {err && <ErrLine>{err}</ErrLine>}
-      {ok  && <OkLine>{ok}</OkLine>}
+        <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+          <Btn small primary type="button" onClick={save} disabled={busy} busy={busy}>
+            {busy ? t("sch.saving") : t("sch.save")}
+          </Btn>
+          <Btn small type="button" onClick={onCancel} disabled={busy}>{t("sch.cancel")}</Btn>
+        </div>
 
-      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        <Btn small primary onClick={save} disabled={busy}>
-          {busy ? t("sch.saving") : t("sch.save")}
-        </Btn>
-        <Btn small onClick={onCancel} disabled={busy}>{t("sch.cancel")}</Btn>
-      </div>
+        <ErrLine>{err}</ErrLine>
+        <OkLine>{ok}</OkLine>
+      </Tile>
     </div>
   );
 }
@@ -690,11 +762,10 @@ function format24(d) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-function dayHeader(d, locale = "en-US", lang = "en") {
-  const s = d.toLocaleDateString(locale, {
+function dayHeader(d, locale = "en-US") {
+  return d.toLocaleDateString(locale, {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
   });
-  return lang === "he" ? s : s.toUpperCase();
 }
 // Build a "YYYY-MM-DDTHH:MM" string for <input type="datetime-local"> from a Date + hour.
 function dateToLocalInput(date, hour = 9) {

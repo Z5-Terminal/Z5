@@ -3,14 +3,17 @@ import { useAuth, roleLabelT, canCreateWholeTeamTask } from "../auth";
 import { supabase } from "../supabase";
 import { createMission } from "../data/missions";
 import {
-  Panel, PageHeader, Btn, Input, Textarea, Field, ErrLine, OkLine, Badge,
+  Panel, PageHeader, Btn, Input, Textarea, Select, Field, ErrLine, OkLine, Badge,
+  Row, List, Disclosure, Segmented, Checkbox, IconButton, Notice, EmptyState,
+  Mono, Num, ViewTransition,
 } from "../ui";
 import { useIsMobile } from "../useIsMobile";
 import { useI18n } from "../i18n";
-import { C, S, FONT_MONO } from "../theme";
+import { C, T } from "../theme";
 import {
   DEFAULT_ITEMS, SECTIONS, SECTION_LABELS, OPERATOR_ROLES,
 } from "../missionTemplate";
+import { SECTION_ICONS } from "./Checklist";
 
 export default function MissionCreate({ onCreated, onCancel, prefillDate, initialKind }) {
   const { profile } = useAuth();
@@ -188,21 +191,44 @@ export default function MissionCreate({ onCreated, onCancel, prefillDate, initia
     ? allTeamMembers
     : members;
 
+  const assignedCount = Object.values(assigned).filter(Boolean).length;
+  const twoCol = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr)",
+    columnGap: 14,
+  };
+
+  // The native date control is a touch taller than its neighbours; pin
+  // it to the field height so the two-column row lines up.
+  const dateStyle = { height: isMobile ? 46 : 40 };
+
+  const squadSelect = (
+    <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
+      {squads.length === 0 && <option value="">{t("mc.nosquads")}</option>}
+      {squads.map((s) => (
+        <option key={s.id} value={s.id}>{s.name}</option>
+      ))}
+    </Select>
+  );
+
+  const scopeOptions = [
+    canWholeTeam ? { value: "team", label: t("mc.scope_team") } : null,
+    { value: "squad", label: t("mc.scope_squad") },
+    { value: "people", label: t("mc.scope_people") },
+  ].filter(Boolean);
+
   return (
     <>
       <PageHeader
+        back={{ onClick: onCancel }}
         title={kind === "admin" ? t("mc.admin_title") : t("mc.op_title")}
         subtitle={kind === "admin"
           ? t("mc.admin_sub")
           : t("mc.op_sub")}
-        action={
-          <div style={{ display: "flex", gap: 10 }}>
-            <Btn onClick={onCancel} fullWidth={isMobile}>{t("mc.cancel")}</Btn>
-          </div>
-        }
       />
 
       <form onSubmit={submit}>
+        {/* ── Details ──────────────────────────────────────────────── */}
         <Panel title={kind === "admin" ? t("mc.task_details") : t("mc.mission_details")}>
           <Field label={kind === "admin" ? t("mc.title") : t("mc.name")}>
             <Input value={name} onChange={(e) => setName(e.target.value)}
@@ -212,159 +238,169 @@ export default function MissionCreate({ onCreated, onCancel, prefillDate, initia
           </Field>
 
           {kind === "operational" && (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-              gap: 14,
-            }}>
+            <div style={twoCol}>
               <Field label={t("mc.datetime")}>
                 <Input type="datetime-local" value={scheduledAt}
-                       onChange={(e) => setScheduledAt(e.target.value)} />
+                       onChange={(e) => setScheduledAt(e.target.value)}
+                       style={dateStyle} />
               </Field>
               <Field label={t("mc.squad")}>
-                <select value={squadId}
-                        onChange={(e) => setSquadId(e.target.value)}
-                        style={selectStyle(isMobile)}>
-                  {squads.length === 0 && <option value="">{t("mc.nosquads")}</option>}
-                  {squads.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
+                {squadSelect}
               </Field>
             </div>
           )}
 
-          {kind === "admin" && (
-            <Field label={t("mc.duedate")}>
-              <Input type="datetime-local" value={dueAt}
-                     onChange={(e) => setDueAt(e.target.value)} />
+          {kind === "admin" ? (
+            <div style={twoCol}>
+              <Field label={t("mc.duedate")}>
+                <Input type="datetime-local" value={dueAt}
+                       onChange={(e) => setDueAt(e.target.value)}
+                       style={dateStyle} />
+              </Field>
+              <Field label={t("mc.location")}>
+                <Input value={location} onChange={(e) => setLocation(e.target.value)}
+                       placeholder={t("mc.location_ph")} />
+              </Field>
+            </div>
+          ) : (
+            <Field label={t("mc.location")}>
+              <Input value={location} onChange={(e) => setLocation(e.target.value)}
+                     placeholder={t("mc.location_ph")} />
             </Field>
           )}
 
-          <Field label={kind === "admin" ? t("mc.location") : t("mc.location")}>
-            <Input value={location} onChange={(e) => setLocation(e.target.value)}
-                   placeholder={t("mc.location_ph")} />
-          </Field>
-          <Field label={kind === "admin" ? t("mc.body") : t("mc.notes")}>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                      placeholder={kind === "admin"
-                        ? t("mc.body_ph")
-                        : t("mc.notes_ph")} />
-          </Field>
+          <div style={{ marginBottom: -14 }}>
+            <Field label={kind === "admin" ? t("mc.body") : t("mc.notes")}>
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+                        placeholder={kind === "admin"
+                          ? t("mc.body_ph")
+                          : t("mc.notes_ph")} />
+            </Field>
+          </div>
         </Panel>
 
-        {/* Assignees */}
+        {/* ── Operators — operational only ─────────────────────────── */}
         {kind === "operational" && (
-          <Panel title={`${t("mc.operators")} (${Object.values(assigned).filter(Boolean).length} ${t("mc.assigned")})`}>
+          <Panel
+            title={t("mc.operators")}
+            action={(
+              <Badge tone={assignedCount > 0 ? "bright" : "default"}>
+                <Num>{assignedCount}</Num> {t("mc.assigned")}
+              </Badge>
+            )}
+          >
             {members.length === 0 && (
-              <div style={{ color: C.dim, fontSize: 13 }}>
-                {t("mc.noMembers")}
-              </div>
+              <EmptyState compact icon="people">{t("mc.noMembers")}</EmptyState>
             )}
-            {members.map((m) => (
-              <OperatorRow
-                key={m.id}
-                member={m}
-                selectedRole={assigned[m.id] || ""}
-                onChange={(role) => toggleOperator(m.id, role)}
-                isMobile={isMobile}
-              />
-            ))}
+            <List>
+              {members.map((m) => (
+                <OperatorRow
+                  key={m.id}
+                  member={m}
+                  selectedRole={assigned[m.id] || ""}
+                  onChange={(role) => toggleOperator(m.id, role)}
+                  isMobile={isMobile}
+                />
+              ))}
+            </List>
           </Panel>
         )}
 
+        {/* ── Assignees — admin tasks ──────────────────────────────── */}
         {kind === "admin" && (
-          <Panel title={t("mc.assignees")}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-              {canWholeTeam && (
-                <Btn type="button" active={scope === "team"} onClick={() => changeScope("team")}>
-                  {t("mc.wholeteam")}
-                </Btn>
+          <Panel
+            title={t("mc.assignees")}
+            action={scope === "people" && (
+              <Badge tone={assignedCount > 0 ? "bright" : "default"}>
+                <Num>{assignedCount}</Num> {t("mc.selected")}
+              </Badge>
+            )}
+          >
+            <Segmented
+              ariaLabel={t("mc.scope_label")}
+              options={scopeOptions}
+              value={scope}
+              onChange={changeScope}
+              fullWidth={isMobile}
+            />
+
+            <ViewTransition viewKey={scope} kind="tab" style={{ marginTop: 14 }}>
+              {scope === "team" && (
+                <Notice icon="people">
+                  {t("mc.wholeteam_desc")} (<Num>{allTeamMembers.length}</Num> {t("mc.people")}).
+                </Notice>
               )}
-              <Btn type="button" active={scope === "squad"} onClick={() => changeScope("squad")}>
-                {t("mc.picksquad")}
-              </Btn>
-              <Btn type="button" active={scope === "people"} onClick={() => changeScope("people")}>
-                {t("mc.pickpeople")}
-              </Btn>
-            </div>
 
-            {scope === "team" && (
-              <div style={{ color: C.dim, fontSize: 13 }}>
-                {t("mc.wholeteam_desc")} ({allTeamMembers.length} {t("mc.people")}).
-              </div>
-            )}
+              {scope === "squad" && (
+                <>
+                  <div style={{ maxWidth: isMobile ? "none" : 340, marginBottom: -4 }}>
+                    <Field label={t("mc.squad")}>
+                      {squadSelect}
+                    </Field>
+                  </div>
+                  <div style={{ ...T.footnote, color: C.dim }}>
+                    <Num>{members.length}</Num> {members.length === 1 ? t("mc.member") : t("mc.members")} {t("mc.insquad")}
+                  </div>
+                </>
+              )}
 
-            {scope === "squad" && (
-              <>
-                <Field label={t("mc.squad")}>
-                  <select value={squadId}
-                          onChange={(e) => setSquadId(e.target.value)}
-                          style={selectStyle(isMobile)}>
-                    {squads.length === 0 && <option value="">{t("mc.nosquads")}</option>}
-                    {squads.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+              {scope === "people" && (
+                <>
+                  <div style={{ ...T.footnote, color: C.dim, marginBottom: 4 }}>
+                    {t("mc.tap_toggle")}
+                  </div>
+                  {individualsPool.length === 0 && (
+                    <EmptyState compact icon="people">{t("mc.no_ops")}</EmptyState>
+                  )}
+                  <List inset={34}>
+                    {individualsPool.map((m) => (
+                      <PersonPickRow
+                        key={m.id}
+                        member={m}
+                        selected={!!assigned[m.id]}
+                        onToggle={() => togglePerson(m.id)}
+                      />
                     ))}
-                  </select>
-                </Field>
-                <div style={{ color: C.dim, fontSize: 12 }}>
-                  {members.length} {members.length === 1 ? t("mc.member") : t("mc.members")} {t("mc.insquad")}
-                </div>
-              </>
-            )}
-
-            {scope === "people" && (
-              <>
-                <div style={{ color: C.dim, fontSize: 12, marginBottom: 8 }}>
-                  {t("mc.tap_toggle")}
-                </div>
-                {individualsPool.length === 0 && (
-                  <div style={{ color: C.dim, fontSize: 13 }}>{t("mc.no_ops")}</div>
-                )}
-                {individualsPool.map((m) => (
-                  <PersonPickRow
-                    key={m.id}
-                    member={m}
-                    selected={!!assigned[m.id]}
-                    onToggle={() => togglePerson(m.id)}
-                    isMobile={isMobile}
-                  />
-                ))}
-              </>
-            )}
+                  </List>
+                </>
+              )}
+            </ViewTransition>
           </Panel>
         )}
 
-        {/* Checklist — operational only */}
+        {/* ── Checklist editor — operational only ──────────────────── */}
         {kind === "operational" && (
           <Panel
             title={t("mc.checklist")}
             action={
-              <Btn small onClick={(e) => { e.preventDefault(); setItems(DEFAULT_ITEMS); }}>
+              <Btn small type="button" icon="undo" onClick={(e) => { e.preventDefault(); setItems(DEFAULT_ITEMS); }}>
                 {t("mc.reset")}
               </Btn>
             }
           >
-            <div style={{ color: C.dim, fontSize: 12, marginBottom: 14 }}>
+            <div style={{ ...T.footnote, color: C.dim, marginBottom: 8 }}>
               {t("mc.checklist_help")}
             </div>
-            {SECTIONS.map((sec) => (
-              <SectionEditor
-                key={sec.key}
-                section={sec}
-                items={items.filter((it) => it.section === sec.key)}
-                onItemsChange={(sectionItems) => {
-                  setItems((all) => [
-                    ...all.filter((it) => it.section !== sec.key),
-                    ...sectionItems.map((it, idx) => ({
-                      ...it,
-                      section: sec.key,
-                      order_no: idx + 1,
-                    })),
-                  ]);
-                }}
-              />
-            ))}
+            <List>
+              {SECTIONS.map((sec) => (
+                <SectionEditor
+                  key={sec.key}
+                  section={sec}
+                  isMobile={isMobile}
+                  items={items.filter((it) => it.section === sec.key)}
+                  onItemsChange={(sectionItems) => {
+                    setItems((all) => [
+                      ...all.filter((it) => it.section !== sec.key),
+                      ...sectionItems.map((it, idx) => ({
+                        ...it,
+                        section: sec.key,
+                        order_no: idx + 1,
+                      })),
+                    ]);
+                  }}
+                />
+              ))}
+            </List>
           </Panel>
         )}
 
@@ -374,10 +410,11 @@ export default function MissionCreate({ onCreated, onCancel, prefillDate, initia
         <div style={{
           display: "flex",
           gap: 10,
-          marginTop: 10,
+          marginTop: 16,
           flexDirection: isMobile ? "column" : "row",
+          alignItems: isMobile ? "stretch" : "center",
         }}>
-          <Btn primary type="submit" disabled={busy} fullWidth={isMobile}>
+          <Btn primary type="submit" disabled={busy} busy={busy} fullWidth={isMobile}>
             {busy ? (kind === "admin" ? t("mc.posting") : t("mc.creating"))
                   : (kind === "admin" ? t("mc.post_task") : t("mc.create_mission"))}
           </Btn>
@@ -390,120 +427,72 @@ export default function MissionCreate({ onCreated, onCancel, prefillDate, initia
   );
 }
 
-function selectStyle(isMobile) {
-  return {
-    ...S.input,
-    fontSize: isMobile ? 16 : S.input.fontSize,
-    minHeight: isMobile ? 46 : undefined,
-  };
+// Callsign + name/role, shared by the operator and people rows.
+function memberSubtitle(member, t) {
+  return (
+    <>
+      {member.full_name || "—"}
+      <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+      {roleLabelT(member.role, t)}
+    </>
+  );
 }
 
+// One squad member with the role they take on this mission. An empty
+// value means "not assigned".
 function OperatorRow({ member, selectedRole, onChange, isMobile }) {
   const { t } = useI18n();
-  return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      padding: "10px 0",
-      borderBottom: `1px solid ${C.border}`,
-      flexWrap: "wrap",
-    }}>
-      <div style={{ flex: 1, minWidth: 140 }}>
-        <div style={{
-          fontFamily: FONT_MONO,
-          color: C.bright,
-          fontWeight: 600,
-          fontSize: 14,
-          letterSpacing: "0.3px",
-        }}>
-          {member.callsign || "—"}
-        </div>
-        <div style={{ color: C.dim, fontSize: 12 }}>
-          {member.full_name || <span style={{ color: C.dimmer }}>—</span>}
-          {" · "}
-          <span>{roleLabelT(member.role, t)}</span>
-        </div>
-      </div>
-      <select
-        value={selectedRole}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          ...S.input,
-          width: isMobile ? "100%" : 200,
-          fontSize: isMobile ? 16 : S.input.fontSize,
-          minHeight: isMobile ? 46 : undefined,
-        }}
-      >
-        <option value="">{t("mc.notassigned")}</option>
-        {OPERATOR_ROLES.map((r) => (
-          <option key={r.key} value={r.key}>{r.label}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function PersonPickRow({ member, selected, onToggle, isMobile }) {
-  const { t } = useI18n();
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
+  const picker = (
+    <Select
+      small
+      value={selectedRole}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={`${t("mc.operators")}: ${member.callsign || member.full_name || ""}`}
+      wrapStyle={{ width: isMobile ? "100%" : 200 }}
       style={{
-        all: "unset",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        width: "100%",
-        boxSizing: "border-box",
-        padding: isMobile ? "12px 4px" : "10px 4px",
-        minHeight: isMobile ? 48 : 40,
-        borderBottom: `1px solid ${C.border}`,
-        cursor: "pointer",
+        color: selectedRole ? C.bright : C.dim,
+        fontWeight: selectedRole ? 600 : 400,
+        // 16px keeps iOS from zooming the page when the picker opens.
+        ...(isMobile ? { fontSize: 16, minHeight: 44 } : null),
       }}
     >
-      <span style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: 22,
-        height: 22,
-        flexShrink: 0,
-        border: `1px solid ${selected ? C.ok : C.borderBright}`,
-        background: selected ? C.selectedBg : "transparent",
-        color: selected ? C.ok : "transparent",
-        fontSize: 16,
-        fontWeight: 700,
-        borderRadius: 2,
-      }}>
-        ✓
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: FONT_MONO,
-          color: C.bright,
-          fontWeight: 600,
-          fontSize: 14,
-        }}>
-          {member.callsign || "—"}
-        </div>
-        <div style={{
-          color: C.dim,
-          fontSize: 12,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
-          {member.full_name || "—"} · {roleLabelT(member.role, t)}
-        </div>
-      </div>
-    </button>
+      <option value="">{t("mc.notassigned")}</option>
+      {OPERATOR_ROLES.map((r) => (
+        <option key={r.key} value={r.key}>{r.label}</option>
+      ))}
+    </Select>
+  );
+  // Phones: the picker sits under the name at full width, so neither the
+  // name nor the chosen role is ever cut short.
+  return (
+    <Row
+      as="div"
+      title={<Mono>{member.callsign || "—"}</Mono>}
+      subtitle={memberSubtitle(member, t)}
+      trailing={isMobile ? null : picker}
+      style={isMobile ? { paddingBlock: 12 } : undefined}
+    >
+      {isMobile && <div style={{ marginTop: 8 }}>{picker}</div>}
+    </Row>
   );
 }
 
-function SectionEditor({ section, items, onItemsChange }) {
-  const [collapsed, setCollapsed] = useState(false);
+// The whole row toggles; the check mark is presentational.
+function PersonPickRow({ member, selected, onToggle }) {
+  const { t } = useI18n();
+  return (
+    <Row
+      onClick={onToggle}
+      role="checkbox"
+      aria-checked={selected}
+      leading={<Checkbox checked={selected} />}
+      title={<Mono>{member.callsign || "—"}</Mono>}
+      subtitle={memberSubtitle(member, t)}
+    />
+  );
+}
+
+function SectionEditor({ section, items, onItemsChange, isMobile }) {
   const { t } = useI18n();
 
   function updateItem(idx, label) {
@@ -518,64 +507,40 @@ function SectionEditor({ section, items, onItemsChange }) {
   }
 
   return (
-    <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 4,
-      padding: "10px 12px",
-      marginBottom: 10,
-      background: C.cardBg,
-    }}>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        cursor: "pointer",
-      }} onClick={() => setCollapsed((c) => !c)}>
-        <span style={{
-          color: C.dimmer,
-          fontSize: 12,
-          transform: collapsed ? "none" : "rotate(90deg)",
-          transition: "transform 120ms",
-          display: "inline-block",
-          width: 10,
-        }}>▶</span>
-        <div style={{
-          color: C.bright,
-          fontSize: 12,
-          fontWeight: 700,
-          letterSpacing: "1px",
-          textTransform: "uppercase",
-          flex: 1,
-        }}>
-          {SECTION_LABELS[section.key]}
-        </div>
-        <Badge>{items.length}</Badge>
-      </div>
-
-      {!collapsed && (
-        <div style={{ marginTop: 10 }}>
-          {items.map((it, idx) => (
-            <div key={idx} style={{
-              display: "flex",
-              gap: 8,
-              marginBottom: 6,
-              alignItems: "center",
-            }}>
-              <Input value={it.label}
-                     onChange={(e) => updateItem(idx, e.target.value)} />
-              <Btn small onClick={(e) => { e.preventDefault(); removeItem(idx); }}>
-                ×
-              </Btn>
-            </div>
-          ))}
-          <div style={{ marginTop: 6 }}>
-            <Btn small onClick={(e) => { e.preventDefault(); addItem(); }}>
-              {t("mc.add_item")}
-            </Btn>
+    <Disclosure
+      defaultOpen
+      title={SECTION_LABELS[section.key]}
+      icon={SECTION_ICONS[section.key]}
+      count={items.length}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 2 }}>
+        {items.map((it, idx) => (
+          <div key={idx} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Input
+              value={it.label}
+              aria-label={`${t("mc.item_label")} ${idx + 1}`}
+              onChange={(e) => updateItem(idx, e.target.value)}
+              // Enter while editing the checklist must not create the
+              // mission by accident.
+              onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault(); }}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <IconButton
+              icon="trash"
+              label={t("mc.remove_item")}
+              size={isMobile ? 44 : 36}
+              onClick={(e) => { e.preventDefault(); removeItem(idx); }}
+              style={{ background: "transparent", color: C.dim }}
+            />
           </div>
+        ))}
+        <div>
+          <Btn small plain type="button" icon="plus" onClick={(e) => { e.preventDefault(); addItem(); }}>
+            {t("mc.add_item")}
+          </Btn>
         </div>
-      )}
-    </div>
+      </div>
+    </Disclosure>
   );
 }
 

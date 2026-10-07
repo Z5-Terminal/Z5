@@ -3,8 +3,7 @@
 // instructor notes once the course schema lands.
 
 import { useI18n } from "../i18n";
-import { PageHeader, Panel } from "../ui";
-import { C } from "../theme";
+import { PageHeader, Panel, EmptyState } from "../ui";
 
 export default function CourseProgress() {
   const { t } = useI18n();
@@ -14,10 +13,10 @@ export default function CourseProgress() {
         title={t("prog.title")}
         subtitle={t("prog.subtitle")}
       />
-      <Panel connectTop>
-        <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
+      <Panel>
+        <EmptyState icon="graduation" title={t("console.coming_soon")}>
           {t("prog.placeholder")}
-        </div>
+        </EmptyState>
       </Panel>
     </>
   );

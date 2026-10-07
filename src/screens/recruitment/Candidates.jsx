@@ -9,10 +9,14 @@ import { useAuth } from "../../auth";
 import { useI18n, fmtWhen } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
-  PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
-  SkeletonRows, ConfirmDialog, Checkbox, BackButton,
+  PageHeader, Panel, Tile, Divider, List, Row, Disclosure,
+  Btn, IconButton, Input, Textarea, Select, Field, Chip, ChipRow, Switch, Checkbox,
+  Badge, Mono, Num, Stat, Avatar, CopyField, Notice, ErrLine, OkLine,
+  EmptyState, Skeleton, SkeletonRows, Spinner, ConfirmDialog, Menu, Lightbox,
+  ViewTransition, Icon, ELLIPSIS, ABOVE_TABBAR, SIDEBAR_WIDTH,
 } from "../../ui";
-import { C, S, FONT_MONO } from "../../theme";
+import { C, S, T, R, Z, FONT, MATERIAL, NUM } from "../../theme";
+import { MOTION, DURATION } from "../../motion";
 import {
   listCycles, getCandidatesEnriched, getCandidateWithDetails, updateCandidate,
   getCandidateExam, examUrlFor, surveyUrlForCycle, getRecommendationContext,
@@ -57,26 +61,183 @@ const ALL_STATUSES = [
 function finalStatusFor(status) {
   return status === "accepted" || status === "rejected" ? status : null;
 }
+
+// New content that appears in place rises in.
+const RISE = `z5-rise ${DURATION.move}ms var(--z5-spring) backwards`;
+
+// ── Score-to-tone helpers ───────────────────────────────────────────
+// Tones are "ok" | "bright" | "warn" | "dim" and feed <Stat tone> and
+// <Badge tone> ("bright"/"dim" fall back to the neutral ink / default).
+
+// `max` is the score scale (10 for interviews, total for exam) — we tone
+// by percentage so an 8/17 exam reads "low" the same way a 2/10 interview
+// does.
+function scoreTone(score, max) {
+  if (score == null) return "dim";
+  const pct = max ? score / max : score / 10;
+  if (pct >= 0.8) return "ok";
+  if (pct >= 0.5) return "bright";
+  return "warn";
+}
+
+function scoreToneFromPct(score, max) {
+  if (score == null || !max) return "dim";
+  const pct = score / max;
+  if (pct >= 0.8) return "ok";
+  if (pct >= 0.5) return "bright";
+  return "warn";
+}
+
+function scoreToneBadge(score) {
+  if (score == null) return "default";
+  if (score >= 8) return "ok";
+  if (score >= 5) return "bright";
+  return "warn";
+}
+
 // Recommendation counts have no ceiling to scale against, so they get
-// their own absolute thresholds rather than going through scoreColor.
-function recColor(n) {
-  if (!n) return C.dim;
-  if (n >= 3) return C.ok;
+// their own absolute thresholds rather than going through scoreTone.
+function recTone(n) {
+  if (!n) return "dim";
+  if (n >= 3) return "ok";
+  return "bright";
+}
+
+function toneColor(tone) {
+  if (tone === "ok") return C.ok;
+  if (tone === "warn") return C.warn;
+  if (tone === "dim") return C.dim;
   return C.bright;
 }
 
-// Shared initials computation (list rows, accepted cards, hero).
-function initialsOf(name) {
-  return (name || "?")
-    .trim().split(/\s+/).slice(0, 2)
-    .map((s) => s[0] || "").join("").toUpperCase() || "?";
+function statusTone(s) {
+  if (s === "accepted") return "ok";
+  if (s === "rejected") return "error";
+  if (s === "exam_done" || s === "interviewed" || s === "ready_for_exam") return "bright";
+  if (s === "survey_done") return "warn";
+  return "default";
 }
 
-// ── Photo avatar (signed URL) + lightbox ───────────────────────────
+// ── Small shared atoms ─────────────────────────────────────────────
+
+// Quiet micro-label above a group of controls or chips.
+function Label({ children, style }) {
+  return <div style={{ ...S.label, ...style }}>{children}</div>;
+}
+
+// A labelled control; the <label> gives the field its accessible name.
+function LabeledControl({ label, children }) {
+  return (
+    <label style={{ display: "block", minWidth: 0 }}>
+      <div style={S.label}>{label}</div>
+      {children}
+    </label>
+  );
+}
+
+// Panel title followed by a count capsule ("Team 1 (4)" without the
+// parentheses; the capsule also keeps the two numbers apart in RTL).
+function TitleCount({ label, n }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, maxWidth: "100%" }}>
+      <span style={{ minWidth: 0, ...ELLIPSIS }}>{label}</span>
+      <Badge><Num>{n}</Num></Badge>
+    </span>
+  );
+}
+
+// Free text someone typed (notes, survey answers). It may be in the other
+// language, so it is isolated with its own detected direction: its
+// punctuation lands on the right side while the block keeps the page's
+// alignment.
+function UserText({ children }) {
+  return <span dir="auto" style={{ unicodeBidi: "isolate" }}>{children}</span>;
+}
+
+// Disclosure chevron for hand-built expandable rows: points along the
+// reading direction when closed, down when open (same as <Disclosure>).
+function ExpandChevron({ open }) {
+  const { isRTL } = useI18n();
+  return (
+    <Icon
+      name="chevronForward"
+      size={14}
+      strokeWidth={2.4}
+      style={{
+        flexShrink: 0,
+        color: C.dimmer,
+        transform: `rotate(${open ? 90 : (isRTL ? 180 : 0)}deg)`,
+        transition: `transform ${MOTION.snap}`,
+      }}
+    />
+  );
+}
+
+// Floating confirmation / error capsule. Sits where the bulk bar sits
+// (above the tab bar on phones) so feedback is visible wherever the
+// page happens to be scrolled.
+function Toast({ tone = "ok", children, onDismiss }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
+  if (!children) return null;
+  const isError = tone === "error";
+  return (
+    <div style={{
+      position: "fixed",
+      insetInlineStart: isMobile ? 12 : SIDEBAR_WIDTH,
+      insetInlineEnd: isMobile ? 12 : 0,
+      bottom: isMobile ? ABOVE_TABBAR : 24,
+      zIndex: Z.toast,
+      display: "flex",
+      justifyContent: "center",
+      paddingInline: isMobile ? 0 : 40,
+      boxSizing: "border-box",
+      pointerEvents: "none",
+    }}>
+      <div
+        role={isError ? "alert" : "status"}
+        data-material=""
+        style={{
+          pointerEvents: "auto",
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          maxWidth: "min(100%, 520px)",
+          minHeight: 44,
+          paddingBlock: 8,
+          paddingInline: onDismiss ? "14px 8px" : "14px 18px",
+          borderRadius: R.xl,
+          background: C.materialThick,
+          ...MATERIAL.thick,
+          border: `1px solid ${C.materialBorder}`,
+          boxShadow: C.shadowLg,
+          color: C.bright,
+          ...T.callout,
+          fontWeight: 600,
+          animation: RISE,
+        }}
+      >
+        <Icon
+          name={isError ? "xCircle" : "checkCircle"}
+          size={18}
+          strokeWidth={2}
+          style={{ flexShrink: 0, color: isError ? C.error : C.ok }}
+        />
+        <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{children}</span>
+        {onDismiss && (
+          <IconButton icon="xmark" label={t("common.close")} size={28} onClick={onDismiss} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Photo avatar (signed URL) ──────────────────────────────────────
 // Round thumbnail resolving the private-bucket photo via a signed URL
-// (same per-component effect pattern as AcceptedCard). Falls back to
-// initials. When a photo exists and onOpenPhoto is provided, clicking
-// the avatar opens the lightbox instead of triggering the row click.
+// (one cancellable effect per avatar). Falls back to initials. When a
+// photo exists and onOpenPhoto is provided, tapping the avatar opens the
+// lightbox instead of triggering the surrounding row.
 function CandidateAvatar({ photoUrl, name, size = 40, onOpenPhoto }) {
   const { t } = useI18n();
   const [src, setSrc] = useState(null);
@@ -91,130 +252,54 @@ function CandidateAvatar({ photoUrl, name, size = 40, onOpenPhoto }) {
   }, [photoUrl]);
 
   const clickable = !!src && !!onOpenPhoto;
+  if (!clickable) return <Avatar src={src} name={name} size={size} />;
   return (
-    <span
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      title={clickable ? t("rec.candidate.view_photo") : undefined}
-      onClick={clickable ? (e) => { e.stopPropagation(); onOpenPhoto(src); } : undefined}
-      onKeyDown={clickable ? (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault(); e.stopPropagation(); onOpenPhoto(src);
-        }
-      } : undefined}
+    <button
+      type="button"
+      data-press="scale"
+      aria-label={t("rec.candidate.view_photo")}
+      title={t("rec.candidate.view_photo")}
+      onClick={(e) => { e.stopPropagation(); onOpenPhoto(src); }}
       style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
+        all: "unset",
+        display: "flex",
         flexShrink: 0,
-        background: C.inputBg,
-        border: `1px solid ${C.border}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        cursor: clickable ? "zoom-in" : undefined,
+        borderRadius: R.pill,
+        cursor: "zoom-in",
       }}
     >
-      {src ? (
-        <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      ) : (
-        <span style={{
-          fontFamily: FONT_MONO,
-          fontSize: Math.max(11, Math.round(size * 0.32)),
-          fontWeight: 700,
-          color: C.dim,
-          letterSpacing: "1px",
-        }}>{initialsOf(name)}</span>
-      )}
-    </span>
-  );
-}
-
-// Full-screen photo lightbox. Click anywhere (or the X, or Escape)
-// closes it. Token-based scrim so both themes stay legible.
-function Lightbox({ src, onClose }) {
-  const { t } = useI18n();
-  useEffect(() => {
-    if (!src) return;
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [src, onClose]);
-
-  if (!src) return null;
-  return (
-    <div
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 200,
-        background: C.scrim,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        cursor: "zoom-out",
-      }}
-    >
-      <button
-        type="button"
-        aria-label={t("rec.candidate.close_photo")}
-        onClick={onClose}
-        style={{
-          position: "absolute",
-          top: "calc(14px + var(--safe-top))",
-          insetInlineEnd: 14,
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          background: C.panel,
-          color: C.text,
-          border: `1px solid ${C.borderBright}`,
-          fontSize: 16,
-          fontWeight: 700,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "inherit",
-        }}
-      >✕</button>
-      <img
-        src={src}
-        alt=""
-        style={{
-          maxWidth: "92vw",
-          maxHeight: "86vh",
-          objectFit: "contain",
-          borderRadius: 10,
-          border: `1px solid ${C.borderBright}`,
-        }}
-      />
-    </div>
+      <Avatar src={src} name={name} size={size} />
+    </button>
   );
 }
 
 export default function Candidates() {
   const [view, setView] = useState("list");
   const [activeId, setActiveId] = useState(null);
+  // Direction of the last navigation: deeper = push, back = pop. Null
+  // until the first one so the screen doesn't animate on top of the
+  // shell's own tab transition.
+  const [kind, setKind] = useState(null);
 
-  if (view === "detail" && activeId) {
-    return (
-      <CandidateDetail
-        candidateId={activeId}
-        onBack={() => { setActiveId(null); setView("list"); }}
-        onOpenCandidate={(id) => setActiveId(id)}
-      />
-    );
-  }
+  const inDetail = view === "detail" && !!activeId;
   return (
-    <CandidatesList
-      onPick={(id) => { setActiveId(id); setView("detail"); }}
-    />
+    <ViewTransition
+      viewKey={inDetail ? `detail:${activeId}` : "list"}
+      kind={kind || "tab"}
+      style={kind ? undefined : { animation: "none" }}
+    >
+      {inDetail ? (
+        <CandidateDetail
+          candidateId={activeId}
+          onBack={() => { setKind("pop"); setActiveId(null); setView("list"); }}
+          onOpenCandidate={(id) => { setKind("push"); setActiveId(id); }}
+        />
+      ) : (
+        <CandidatesList
+          onPick={(id) => { setKind("push"); setActiveId(id); setView("detail"); }}
+        />
+      )}
+    </ViewTransition>
   );
 }
 
@@ -226,6 +311,9 @@ function CandidatesList({ onPick }) {
   const [cycles, setCycles] = useState([]);
   const [cycleId, setCycleId] = useState("");
   const [rows, setRows] = useState([]);          // enriched: { candidate, interviews, avgScore, examAttempt, ... }
+  // Cycle whose rows have arrived — lets the first load of a cycle show a
+  // skeleton instead of a flash of "no candidates".
+  const [loadedCycleId, setLoadedCycleId] = useState("");
   const [team, setTeam] = useState("all");
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
@@ -270,6 +358,7 @@ function CandidatesList({ onPick }) {
     (async () => {
       const { data, error } = await getCandidatesEnriched(cycleId, { includeArchived: showArchived });
       if (cancelled) return;
+      setLoadedCycleId(cycleId);
       if (error) { setErr(error.message); return; }
       setErr("");
       const list = data || [];
@@ -446,6 +535,10 @@ function CandidatesList({ onPick }) {
     setRefreshTick((n) => n + 1);
   }
 
+  function clearFilters() {
+    setTeam("all"); setStatus("all"); setSearch(""); setMinCombined("");
+  }
+
   const rowProps = (r) => ({
     candidate: r.candidate,
     recommendationCount: r.recommendationCount || 0,
@@ -459,27 +552,58 @@ function CandidatesList({ onPick }) {
 
   const bulkBarVisible = selectMode && selectedCount > 0;
 
+  // The bar is fixed, so the page reserves exactly its height below the
+  // last rows (it grows when its buttons wrap on a narrow window).
+  const barRef = useRef(null);
+  const [barHeight, setBarHeight] = useState(60);
+  useEffect(() => {
+    if (!bulkBarVisible) return;
+    const el = barRef.current;
+    if (!el) return;
+    const measure = () => setBarHeight(el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [bulkBarVisible]);
+
+  const rowsPending = !!cycleId && loadedCycleId !== cycleId;
+  const showSkeleton = loading || (rowsPending && rows.length === 0);
+  const showEmpty = !loading && !rowsPending && filtered.length === 0;
+  const showMinCombined = sort === "combined_score";
+
+  const selectAllAction = (list) => (selectMode ? (
+    <Btn small type="button" onClick={() => selectAllIn(list)}>
+      {t("rec.candidates.select_all")}
+    </Btn>
+  ) : undefined);
+
   return (
     <>
       <PageHeader
         title={t("rec.candidates.title")}
-        subtitle={cycle
-          ? `${cycle.name} — ${filtered.length} / ${rows.length}`
-          : t("rec.candidates.subtitle")}
-        action={
+        subtitle={cycle ? (
+          <>
+            <UserText>{cycle.name}</UserText>
+            {!rowsPending && (
+              <>
+                <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+                <Num>{`${filtered.length} / ${rows.length}`}</Num>
+              </>
+            )}
+          </>
+        ) : t("rec.candidates.subtitle")}
+        action={cycles.length > 0 && (
           // Cycle = context switcher for the whole screen, so it lives in
           // the header rather than among the filters.
-          <select
+          <Select
+            small={!isMobile}
             value={cycleId}
             onChange={(e) => setCycleId(e.target.value)}
             aria-label={t("rec.candidates.cycle")}
-            style={{
-              ...S.input,
-              fontSize: 13,
-              width: "auto",
-              maxWidth: isMobile ? 150 : 230,
-              padding: "8px 12px",
-            }}
+            wrapStyle={{ width: "auto", maxWidth: isMobile ? "calc(100vw - 36px)" : 280 }}
+            style={{ width: "auto", maxWidth: "100%" }}
           >
             <option value="">—</option>
             {cycles.map((c) => (
@@ -487,37 +611,38 @@ function CandidatesList({ onPick }) {
                 {c.name} · {t(`rec.cycle_status.${c.status}`)}
               </option>
             ))}
-          </select>
-        }
+          </Select>
+        )}
       />
       <AcceptedCohortPanel rows={rows} onPick={onPick} />
 
-      {/* Compact filter toolbar: search + sort in one row, chip rows below. */}
+      {/* Filters: search + sort on one line, chip rows below, then the
+          selection / archive toggles. */}
       <Panel>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 240px", minWidth: 200 }}>
-            <div style={S.label}>{t("rec.candidates.search")}</div>
-            <Input
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile
+            ? "minmax(0, 1fr)"
+            : `minmax(0, 1fr) 220px${showMinCombined ? " 220px" : ""}`,
+          gap: isMobile ? 12 : 14,
+          alignItems: "end",
+        }}>
+          <LabeledControl label={t("rec.candidates.search")}>
+            <SearchInput
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("rec.candidates.search_ph")}
             />
-          </div>
-          <div style={{ flex: "0 1 210px", minWidth: 170 }}>
-            <div style={S.label}>{t("rec.candidates.sort")}</div>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              style={{ ...S.input, fontSize: 14 }}
-            >
+          </LabeledControl>
+          <LabeledControl label={t("rec.candidates.sort")}>
+            <Select value={sort} onChange={(e) => setSort(e.target.value)}>
               {SORTS.map((s) => (
                 <option key={s} value={s}>{t(`rec.candidates.sort.${s}`)}</option>
               ))}
-            </select>
-          </div>
-          {sort === "combined_score" && (
-            <div style={{ flex: "0 1 170px", minWidth: 130 }}>
-              <div style={S.label}>{t("rec.candidates.min_combined")}</div>
+            </Select>
+          </LabeledControl>
+          {showMinCombined && (
+            <LabeledControl label={t("rec.candidates.min_combined")}>
               <Input
                 type="number"
                 min="0"
@@ -525,133 +650,136 @@ function CandidatesList({ onPick }) {
                 value={minCombined}
                 onChange={(e) => setMinCombined(e.target.value)}
                 placeholder={t("rec.candidates.min_combined_ph")}
-                style={{ fontFamily: FONT_MONO }}
+                style={NUM}
               />
-            </div>
+            </LabeledControl>
           )}
         </div>
 
-        <FilterChipRow label={t("rec.candidates.team_filter")}>
-          <Btn small active={team === "all"} onClick={() => setTeam("all")} style={{ whiteSpace: "nowrap" }}>
+        <ChipRow label={t("rec.candidates.team_filter")} style={{ marginTop: 16 }}>
+          <Chip active={team === "all"} onClick={() => setTeam("all")}>
             {t("rec.candidates.all_teams")}
-          </Btn>
+          </Chip>
           {TEAMS.map((tt) => (
-            <Btn key={tt} small active={team === String(tt)} onClick={() => setTeam(String(tt))} style={{ whiteSpace: "nowrap" }}>
+            <Chip key={tt} active={team === String(tt)} onClick={() => setTeam(String(tt))}>
               {t("rec.candidates.team")} {tt}
-            </Btn>
+            </Chip>
           ))}
-        </FilterChipRow>
+        </ChipRow>
 
-        <FilterChipRow label={t("rec.candidates.status_filter")}>
+        <ChipRow label={t("rec.candidates.status_filter")} style={{ marginTop: 14 }}>
           {STATUSES.map((s) => {
             const n = s === "all" ? (statusCounts.all || 0) : (statusCounts[s] || 0);
             const empty = s !== "all" && n === 0;
             return (
-              <Btn
+              <Chip
                 key={s}
-                small
                 active={status === s}
                 onClick={() => setStatus(s)}
-                style={{ whiteSpace: "nowrap", opacity: empty ? 0.45 : 1 }}
+                count={n}
+                style={empty && status !== s ? { opacity: 0.45 } : undefined}
               >
                 {s === "all"
                   ? t("rec.candidates.all_status")
                   : t(`rec.candidate_status.${s}`)}
-                <span style={{
-                  fontFamily: FONT_MONO,
-                  fontSize: 11,
-                  marginInlineStart: 6,
-                  opacity: 0.75,
-                }}>{n}</span>
-              </Btn>
+              </Chip>
             );
           })}
-        </FilterChipRow>
+        </ChipRow>
+
+        <Divider style={{ margin: "16px 0 12px" }} />
 
         {/* Selection + archive controls */}
         <div style={{
           display: "flex",
-          gap: 6,
+          gap: 8,
           flexWrap: "wrap",
           alignItems: "center",
-          marginTop: 14,
-          paddingTop: 12,
-          borderTop: `1px solid ${C.border}`,
         }}>
-          <Btn small active={selectMode} onClick={toggleSelectMode}>
+          <Chip
+            active={selectMode}
+            icon={selectMode ? "check" : "checkCircle"}
+            onClick={toggleSelectMode}
+          >
             {selectMode ? t("rec.candidates.select_done") : t("rec.candidates.select_mode")}
-          </Btn>
-          <Btn small active={showArchived} onClick={() => setShowArchived((v) => !v)}>
-            {t("rec.candidates.show_archived")}
-          </Btn>
+          </Chip>
           {selectMode && (
             <>
-              <Btn small onClick={() => selectAllIn(sorted)}>
+              <Btn small type="button" onClick={() => selectAllIn(sorted)}>
                 {t("rec.candidates.select_all")}
               </Btn>
               {selectedCount > 0 && (
-                <Btn small onClick={() => setSelectedIds(new Set())}>
+                <Btn small plain type="button" onClick={() => setSelectedIds(new Set())}>
                   {t("rec.candidates.clear_selection")}
                 </Btn>
               )}
               <span style={{
-                fontFamily: FONT_MONO,
-                fontSize: 12,
-                color: selectedCount > 0 ? C.bright : C.dim,
+                ...T.footnote,
                 fontWeight: 600,
-                marginInlineStart: 4,
+                color: selectedCount > 0 ? C.bright : C.dim,
                 whiteSpace: "nowrap",
               }}>
-                {t("rec.candidates.n_selected", { n: selectedCount })}
+                <Num>{t("rec.candidates.n_selected", { n: selectedCount })}</Num>
               </span>
             </>
           )}
+          <span style={{ flex: 1 }} />
+          <Switch
+            checked={showArchived}
+            onChange={(v) => setShowArchived(v)}
+            label={t("rec.candidates.show_archived")}
+          />
         </div>
 
         <ErrLine>{err || bulkErr}</ErrLine>
-        <OkLine>{bulkOk}</OkLine>
       </Panel>
 
-      {loading && (
+      {showSkeleton && (
         <Panel><SkeletonRows rows={4} /></Panel>
       )}
 
-      {!loading && filtered.length === 0 && (
+      {showEmpty && (
         <Panel>
-          <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
-            {rows.length === 0
-              ? t("rec.candidates.empty_cycle")
-              : t("rec.candidates.empty_filtered")}
-          </div>
+          {rows.length === 0 ? (
+            <EmptyState icon="people" title={t("rec.candidates.empty_cycle")} />
+          ) : (
+            <EmptyState
+              icon="filter"
+              title={t("rec.candidates.empty_filtered")}
+              action={
+                <Btn small type="button" onClick={clearFilters}>
+                  {t("rec.candidates.clear_filters")}
+                </Btn>
+              }
+            />
+          )}
         </Panel>
       )}
 
       {isScoreSort && sorted.length > 0 && (
         <Panel
           title={t(`rec.candidates.sort.${sort}`)}
-          action={selectMode ? (
-            <Btn small compact onClick={() => selectAllIn(sorted)}>
-              {t("rec.candidates.select_all")}
-            </Btn>
-          ) : undefined}
+          action={selectAllAction(sorted)}
         >
-          {sorted.map((row, idx) => (
-            <LeaderboardRow
-              key={row.candidate.id}
-              row={row}
-              rank={idx + 1}
-              sortKey={sort}
-              expanded={expandedId === row.candidate.id}
-              onToggle={() => setExpandedId(
-                expandedId === row.candidate.id ? null : row.candidate.id
-              )}
-              onOpen={() => onPick(row.candidate.id)}
-              selectMode={selectMode}
-              selected={selectedIds.has(row.candidate.id)}
-              onToggleSelect={() => toggleSelected(row.candidate.id)}
-              onOpenPhoto={(src) => setLightboxSrc(src)}
-            />
-          ))}
+          <List>
+            {sorted.map((row, idx) => (
+              <LeaderboardRow
+                key={row.candidate.id}
+                row={row}
+                rank={idx + 1}
+                sortKey={sort}
+                expanded={expandedId === row.candidate.id}
+                onToggle={() => setExpandedId(
+                  expandedId === row.candidate.id ? null : row.candidate.id
+                )}
+                onOpen={() => onPick(row.candidate.id)}
+                selectMode={selectMode}
+                selected={selectedIds.has(row.candidate.id)}
+                onToggleSelect={() => toggleSelected(row.candidate.id)}
+                onOpenPhoto={(src) => setLightboxSrc(src)}
+              />
+            ))}
+          </List>
         </Panel>
       )}
 
@@ -660,106 +788,152 @@ function CandidatesList({ onPick }) {
         return (
           <Panel
             key={teamNum}
-            title={`${t("rec.candidates.team")} ${teamNum} (${list.length})`}
-            action={selectMode ? (
-              <Btn small compact onClick={() => selectAllIn(list)}>
-                {t("rec.candidates.select_all")}
-              </Btn>
-            ) : undefined}
+            title={<TitleCount label={`${t("rec.candidates.team")} ${teamNum}`} n={list.length} />}
+            action={selectAllAction(list)}
           >
-            {list.map((r) => (
-              <CandidateRow key={r.candidate.id} {...rowProps(r)} />
-            ))}
+            <List>
+              {list.map((r) => (
+                <CandidateRow key={r.candidate.id} {...rowProps(r)} />
+              ))}
+            </List>
           </Panel>
         );
       })}
       {!isScoreSort && grouped.orphans.length > 0 && (
         <Panel
-          title={t("rec.candidates.no_team")}
-          action={selectMode ? (
-            <Btn small compact onClick={() => selectAllIn(grouped.orphans)}>
-              {t("rec.candidates.select_all")}
-            </Btn>
-          ) : undefined}
+          title={<TitleCount label={t("rec.candidates.no_team")} n={grouped.orphans.length} />}
+          action={selectAllAction(grouped.orphans)}
         >
-          {grouped.orphans.map((r) => (
-            <CandidateRow key={r.candidate.id} {...rowProps(r)} />
-          ))}
+          <List>
+            {grouped.orphans.map((r) => (
+              <CandidateRow key={r.candidate.id} {...rowProps(r)} />
+            ))}
+          </List>
         </Panel>
       )}
 
       {/* Spacer so the fixed bulk bar never covers the last rows */}
-      {bulkBarVisible && <div style={{ height: isMobile ? 230 : 96 }} />}
+      {bulkBarVisible && <div aria-hidden style={{ height: barHeight }} />}
 
-      {/* Sticky bulk action bar (fixed; above the tab bar on mobile) */}
+      {/* Bulk action bar: a floating capsule over the list (above the
+          tab bar on phones, clear of the sidebar on desktop). */}
       {bulkBarVisible && (
         <div style={{
           position: "fixed",
-          insetInlineStart: isMobile ? 0 : 220,
-          insetInlineEnd: 0,
-          bottom: isMobile ? "calc(62px + var(--safe-bottom))" : 0,
-          zIndex: 40,
-          padding: isMobile ? "10px 12px" : "12px 40px",
-          background: C.mobileTabBg,
-          backdropFilter: "blur(10px)",
-          WebkitBackdropFilter: "blur(10px)",
-          borderTop: `1px solid ${C.borderBright}`,
+          insetInlineStart: isMobile ? 12 : SIDEBAR_WIDTH,
+          insetInlineEnd: isMobile ? 12 : 0,
+          bottom: isMobile ? ABOVE_TABBAR : 20,
+          zIndex: Z.floating,
           display: "flex",
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
+          justifyContent: "center",
+          paddingInline: isMobile ? 0 : 40,
           boxSizing: "border-box",
+          pointerEvents: "none",
         }}>
-          <span style={{
-            fontFamily: FONT_MONO,
-            fontSize: 12,
-            fontWeight: 700,
-            color: C.bright,
-            whiteSpace: "nowrap",
-            marginInlineEnd: 4,
-          }}>
-            {t("rec.candidates.n_selected", { n: selectedCount })}
-          </span>
-          <select
-            value={bulkStatus}
-            onChange={(e) => setBulkStatus(e.target.value)}
-            aria-label={t("rec.candidates.bulk_status")}
+          <div
+            ref={barRef}
+            role="toolbar"
+            aria-label={t("rec.candidates.n_selected", { n: selectedCount })}
+            data-material=""
             style={{
-              ...S.input,
-              width: "auto",
-              fontSize: 13,
-              padding: "8px 10px",
-              minHeight: 44,
-              flex: isMobile ? "1 1 150px" : "0 1 auto",
+              pointerEvents: "auto",
+              boxSizing: "border-box",
+              width: isMobile ? "100%" : "auto",
+              maxWidth: "100%",
+              padding: isMobile ? 8 : "10px 12px",
+              background: C.materialThick,
+              ...MATERIAL.thick,
+              border: `1px solid ${C.materialBorder}`,
+              borderRadius: R.xl,
+              boxShadow: C.shadowLg,
+              animation: RISE,
             }}
           >
-            <option value="">{t("rec.candidates.bulk_status_ph")}</option>
-            {BULK_STATUSES.map((s) => (
-              <option key={s} value={s}>{t(`rec.candidate_status.${s}`)}</option>
-            ))}
-          </select>
-          <Btn small={!isMobile} onClick={applyBulkStatus} disabled={!!bulkBusy || !bulkStatus}>
-            {t("rec.candidates.bulk_apply")}
-          </Btn>
-          <Btn small={!isMobile} onClick={() => bulkExamLock(true)} disabled={!!bulkBusy}>
-            {t("rec.candidate.unlock_exam")}
-          </Btn>
-          <Btn small={!isMobile} onClick={() => bulkExamLock(false)} disabled={!!bulkBusy}>
-            {t("rec.candidate.lock_exam")}
-          </Btn>
-          <Btn small={!isMobile} onClick={() => setConfirmBulk("archive")} disabled={!!bulkBusy}>
-            {t("rec.candidates.bulk_archive")}
-          </Btn>
-          <Btn
-            small={!isMobile}
-            onClick={() => setConfirmBulk("delete")}
-            disabled={!!bulkBusy}
-            style={{ color: C.error, borderColor: C.errBorder, background: C.errBg }}
-          >
-            {t("rec.candidates.bulk_delete")}
-          </Btn>
+            {bulkErr && (
+              <Notice tone="error" style={{ marginBottom: 8 }}>{bulkErr}</Notice>
+            )}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: isMobile ? "nowrap" : "wrap",
+              justifyContent: "center",
+            }}>
+              <span style={{
+                ...T.callout,
+                fontWeight: 600,
+                color: C.bright,
+                whiteSpace: "nowrap",
+                paddingInline: isMobile ? 6 : 8,
+              }}>
+                <Num>{t("rec.candidates.n_selected", { n: selectedCount })}</Num>
+              </span>
+              <Select
+                small
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                aria-label={t("rec.candidates.bulk_status")}
+                wrapStyle={isMobile ? { flex: 1, minWidth: 0 } : undefined}
+                style={isMobile ? { minHeight: 44, width: "100%" } : { width: "auto", minWidth: 150 }}
+              >
+                <option value="">{t("rec.candidates.bulk_status_ph")}</option>
+                {BULK_STATUSES.map((s) => (
+                  <option key={s} value={s}>{t(`rec.candidate_status.${s}`)}</option>
+                ))}
+              </Select>
+              <Btn
+                small={!isMobile}
+                compact
+                type="button"
+                onClick={applyBulkStatus}
+                disabled={!!bulkBusy || !bulkStatus}
+                style={isMobile ? { minHeight: 44, paddingInline: 14, flexShrink: 0 } : undefined}
+              >
+                {t("rec.candidates.bulk_apply")}
+              </Btn>
+              {isMobile ? (
+                // 390px has room for one row only: the rest go in a menu.
+                <Menu
+                  items={[
+                    { key: "unlock", label: t("rec.candidate.unlock_exam"), icon: "unlock", disabled: !!bulkBusy, onSelect: () => bulkExamLock(true) },
+                    { key: "lock", label: t("rec.candidate.lock_exam"), icon: "lock", disabled: !!bulkBusy, onSelect: () => bulkExamLock(false) },
+                    { key: "archive", label: t("rec.candidates.bulk_archive"), icon: "folder", disabled: !!bulkBusy, onSelect: () => setConfirmBulk("archive") },
+                    { key: "delete", label: t("rec.candidates.bulk_delete"), icon: "trash", danger: true, disabled: !!bulkBusy, onSelect: () => setConfirmBulk("delete") },
+                    "divider",
+                    { key: "clear", label: t("rec.candidates.clear_selection"), icon: "xmark", onSelect: () => setSelectedIds(new Set()) },
+                  ]}
+                  trigger={(p) => <IconButton icon="ellipsis" label={t("common.more")} size={44} {...p} />}
+                />
+              ) : (
+                <>
+                  <span aria-hidden style={{ width: 1, height: 20, background: C.separator, marginInline: 4 }} />
+                  <Btn small type="button" icon="unlock" onClick={() => bulkExamLock(true)} disabled={!!bulkBusy}>
+                    {t("rec.candidate.unlock_exam")}
+                  </Btn>
+                  <Btn small type="button" icon="lock" onClick={() => bulkExamLock(false)} disabled={!!bulkBusy}>
+                    {t("rec.candidate.lock_exam")}
+                  </Btn>
+                  <Btn small type="button" icon="folder" onClick={() => setConfirmBulk("archive")} disabled={!!bulkBusy}>
+                    {t("rec.candidates.bulk_archive")}
+                  </Btn>
+                  <Btn small danger type="button" icon="trash" onClick={() => setConfirmBulk("delete")} disabled={!!bulkBusy}>
+                    {t("rec.candidates.bulk_delete")}
+                  </Btn>
+                  <IconButton
+                    icon="xmark"
+                    label={t("rec.candidates.clear_selection")}
+                    size={30}
+                    onClick={() => setSelectedIds(new Set())}
+                    style={{ marginInlineStart: 4 }}
+                  />
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
+
+      <Toast>{bulkOk}</Toast>
 
       <ConfirmDialog
         open={confirmBulk === "archive"}
@@ -789,29 +963,33 @@ function CandidatesList({ onPick }) {
         onCancel={() => setConfirmBulk(null)}
       />
 
-      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      <Lightbox
+        src={lightboxSrc}
+        onClose={() => setLightboxSrc(null)}
+        closeLabel={t("rec.candidate.close_photo")}
+      />
     </>
   );
 }
 
-// Labeled chip row for the filter toolbar. Wraps on desktop; on mobile
-// it becomes a single horizontally-scrollable strip so 8 status chips
-// never stack into a wall.
-function FilterChipRow({ label, children }) {
-  const isMobile = useIsMobile();
+// Text field with a leading magnifier.
+function SearchInput(props) {
   return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ ...S.label, marginBottom: 8 }}>{label}</div>
-      <div style={{
-        display: "flex",
-        gap: 6,
-        flexWrap: isMobile ? "nowrap" : "wrap",
-        overflowX: isMobile ? "auto" : "visible",
-        paddingBottom: isMobile ? 4 : 0,
-        WebkitOverflowScrolling: "touch",
-      }}>
-        {children}
-      </div>
+    <div style={{ position: "relative" }}>
+      <Icon
+        name="search"
+        size={16}
+        strokeWidth={2}
+        style={{
+          position: "absolute",
+          insetInlineStart: 12,
+          top: "50%",
+          marginTop: -8,
+          color: C.dim,
+          pointerEvents: "none",
+        }}
+      />
+      <Input {...props} style={{ paddingInlineStart: 36, ...(props.style || {}) }} />
     </div>
   );
 }
@@ -824,85 +1002,86 @@ function CandidateRow({
   selectMode, selected, onToggleSelect, onOpenPhoto, onRestore,
 }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const archived = !!candidate.archived_at;
   const activate = selectMode ? onToggleSelect : onClick;
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={activate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
-      }}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        width: "100%",
-        boxSizing: "border-box",
-        minHeight: 56,
-        padding: "8px 8px",
-        borderBottom: `1px solid ${C.border}`,
-        background: selected ? C.selectedBg : "transparent",
-        textAlign: "start",
-        cursor: "pointer",
-        color: C.text,
-        fontFamily: "inherit",
-      }}
+  const fade = archived ? 0.55 : 1;
+
+  const statusBadge = (
+    <Badge tone={statusTone(candidate.status)}>
+      {t(`rec.candidate_status.${candidate.status}`)}
+    </Badge>
+  );
+  const archivedBadge = archived
+    ? <Badge tone="warn">{t("rec.candidates.archived")}</Badge>
+    : null;
+  const restoreBtn = archived && !selectMode && onRestore ? (
+    <Btn
+      small
+      type="button"
+      icon="undo"
+      iconFlip
+      onClick={(e) => { e.stopPropagation(); onRestore(); }}
     >
-      {selectMode && <Checkbox checked={selected} />}
-      <span style={{ opacity: archived ? 0.55 : 1, display: "flex", flexShrink: 0 }}>
-        <CandidateAvatar
-          photoUrl={candidate.photo_url}
-          name={candidate.full_name}
-          size={40}
-          onOpenPhoto={selectMode ? undefined : onOpenPhoto}
-        />
-      </span>
-      <div style={{ flex: 1, minWidth: 0, opacity: archived ? 0.55 : 1 }}>
-        <div style={{
-          color: C.bright, fontSize: 14, fontWeight: 600,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{candidate.full_name || "—"}</div>
-        <div style={{ fontSize: 12, color: C.dim, fontFamily: FONT_MONO, marginTop: 3 }}>
-          {candidate.personal_id || "—"}
+      {t("rec.candidates.restore")}
+    </Btn>
+  ) : null;
+  const recChip = recommendationCount > 0
+    ? <RecCountChip n={recommendationCount} compact={isMobile} />
+    : null;
+
+  // Desktop keeps every badge at the trailing edge; on phones the status
+  // moves under the name (like mission rows) so the name keeps its room.
+  const trailing = isMobile
+    ? (recChip || restoreBtn ? <>{recChip}{restoreBtn}</> : null)
+    : <>{archivedBadge}{restoreBtn}{recChip}{statusBadge}</>;
+
+  return (
+    <Row
+      as="div"
+      onClick={activate}
+      selected={selected}
+      aria-pressed={selectMode ? !!selected : undefined}
+      chevron={!selectMode}
+      leading={
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {selectMode && <Checkbox checked={selected} />}
+          <span style={{ display: "flex", opacity: fade }}>
+            <CandidateAvatar
+              photoUrl={candidate.photo_url}
+              name={candidate.full_name}
+              size={40}
+              onOpenPhoto={selectMode ? undefined : onOpenPhoto}
+            />
+          </span>
         </div>
+      }
+      trailing={trailing}
+    >
+      <div style={{ ...T.body, fontWeight: 600, color: C.bright, opacity: fade, ...ELLIPSIS }}>
+        {candidate.full_name || "—"}
       </div>
-      {archived && (
-        <>
-          <Badge tone="warn">{t("rec.candidates.archived")}</Badge>
-          {!selectMode && onRestore && (
-            <Btn
-              small
-              compact
-              onClick={(e) => { e.stopPropagation(); onRestore(); }}
-            >
-              {t("rec.candidates.restore")}
-            </Btn>
-          )}
-        </>
-      )}
-      {recommendationCount > 0 && (
-        <span style={{ flexShrink: 0, opacity: archived ? 0.7 : 1 }}>
-          <RecCountChip n={recommendationCount} />
-        </span>
-      )}
-      <span style={{ opacity: archived ? 0.7 : 1, flexShrink: 0 }}>
-        <Badge tone={statusTone(candidate.status)}>
-          {t(`rec.candidate_status.${candidate.status}`)}
-        </Badge>
-      </span>
-    </div>
+      {/* Wraps only when a phone row carries two badges (archived): the
+          ID then drops to its own line instead of being squeezed out. */}
+      <div style={{
+        display: "flex", alignItems: "center", flexWrap: "wrap",
+        columnGap: 8, rowGap: 3, marginTop: 2, minWidth: 0,
+      }}>
+        {isMobile && statusBadge}
+        {isMobile && archivedBadge}
+        <Mono style={{ fontSize: 13, color: C.dim, opacity: fade, minWidth: 0, ...ELLIPSIS }}>
+          {candidate.personal_id || "—"}
+        </Mono>
+      </div>
+    </Row>
   );
 }
 
-// ── Detail ────────────────────────────────────────────────────────
-
 // ── Accepted cohort panel ──────────────────────────────────────────
 // Renders at the top of the Candidates list when one or more
-// candidates have status='accepted'. A celebratory summary of the
-// final pick — photo, name, personal_id + team, interview + exam
-// score chips. Hidden when nobody's accepted yet.
+// candidates have status='accepted'. A summary of the final pick —
+// photo, name, personal_id + team, interview + exam scores. Hidden when
+// nobody's accepted yet.
 
 function AcceptedCohortPanel({ rows, onPick }) {
   const { t } = useI18n();
@@ -913,11 +1092,13 @@ function AcceptedCohortPanel({ rows, onPick }) {
   );
   if (accepted.length === 0) return null;
   return (
-    <Panel title={`${t("rec.candidates.accepted_cohort")} (${accepted.length})`}>
+    <Panel title={<TitleCount label={t("rec.candidates.accepted_cohort")} n={accepted.length} />}>
       <div style={{
         display: "grid",
-        gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-        gap: isMobile ? 10 : 14,
+        gridTemplateColumns: isMobile
+          ? "repeat(2, minmax(0, 1fr))"
+          : "repeat(auto-fill, minmax(200px, 1fr))",
+        gap: isMobile ? 10 : 12,
       }}>
         {accepted.map((row) => (
           <AcceptedCard
@@ -935,229 +1116,132 @@ function AcceptedCard({ row, onClick }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const { candidate, avgScore, examAttempt } = row;
-  const [photoSrc, setPhotoSrc] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!candidate.photo_url) { setPhotoSrc(null); return; }
-    candidatePhotoSignedUrl(candidate.photo_url).then((url) => {
-      if (!cancelled) setPhotoSrc(url);
-    });
-    return () => { cancelled = true; };
-  }, [candidate.photo_url]);
-
-  const initials = (candidate.full_name || "?")
-    .trim().split(/\s+/).slice(0, 2)
-    .map((s) => s[0] || "").join("").toUpperCase() || "?";
-
-  const avatarSize = isMobile ? 72 : 88;
+  const hasExam = examAttempt?.score != null && !!examAttempt?.total;
 
   return (
-    <button
-      type="button"
+    <Tile
       onClick={onClick}
+      padding={isMobile ? "16px 10px 14px" : "18px 14px 16px"}
       style={{
-        all: "unset",
-        boxSizing: "border-box",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 10,
-        padding: isMobile ? "14px 10px" : "18px 14px",
-        background: C.cardBg,
-        borderRadius: 12,
-        cursor: "pointer",
         textAlign: "center",
         minWidth: 0,
+        fontFamily: FONT,
       }}
     >
-      <div style={{
-        width: avatarSize,
-        height: avatarSize,
-        borderRadius: "50%",
-        background: C.inputBg,
-        border: `1px solid ${C.borderBright}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
-        flexShrink: 0,
-      }}>
-        {photoSrc ? (
-          <img src={photoSrc} alt="" style={{
-            width: "100%", height: "100%", objectFit: "cover",
-          }} />
-        ) : (
-          <div style={{
-            fontSize: avatarSize * 0.36,
-            color: C.dim,
-            fontFamily: FONT_MONO,
-            fontWeight: 700,
-            letterSpacing: "1.5px",
-          }}>{initials}</div>
-        )}
-      </div>
-
-      <div style={{ width: "100%", minWidth: 0 }}>
-        <div style={{
-          color: C.bright,
-          fontSize: isMobile ? 13 : 14,
-          fontWeight: 700,
-          letterSpacing: "0.3px",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          marginBottom: 3,
-        }}>{candidate.full_name || "—"}</div>
-        <div style={{
-          fontFamily: FONT_MONO,
-          fontSize: 11,
-          color: C.dim,
-          letterSpacing: "0.5px",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>
-          {candidate.personal_id || "—"}
-          {candidate.team ? ` · T${candidate.team}` : ""}
+      <CandidateAvatar
+        photoUrl={candidate.photo_url}
+        name={candidate.full_name}
+        size={isMobile ? 60 : 68}
+      />
+      <div style={{ width: "100%", minWidth: 0, marginTop: 10 }}>
+        <div style={{ ...T.callout, fontWeight: 600, color: C.bright, ...ELLIPSIS }}>
+          {candidate.full_name || "—"}
+        </div>
+        <div style={{ ...T.caption, color: C.dim, marginTop: 2, ...ELLIPSIS }}>
+          <Mono>{candidate.personal_id || "—"}</Mono>
+          {candidate.team ? (
+            <>
+              <span aria-hidden style={{ color: C.dimmer, margin: "0 5px" }}>·</span>
+              {t("rec.candidates.team")} {candidate.team}
+            </>
+          ) : null}
         </div>
       </div>
-
-      <div style={{
-        display: "flex",
-        gap: 6,
-        flexWrap: "wrap",
-        justifyContent: "center",
-        width: "100%",
-      }}>
-        <ScoreChip
-          label={t("rec.candidates.avg_label")}
+      <div style={{ display: "flex", width: "100%", marginTop: 12 }}>
+        <Stat
+          size="sm"
+          align="center"
           value={avgScore != null ? avgScore.toFixed(1) : "—"}
+          label={t("rec.candidates.avg_label")}
           tone={scoreToneFromPct(avgScore, 10)}
+          style={{ flex: 1 }}
         />
-        <ScoreChip
+        <span aria-hidden style={{ width: 1, background: C.separator, marginBlock: 4 }} />
+        <Stat
+          size="sm"
+          align="center"
+          value={hasExam ? `${examAttempt.score}/${examAttempt.total}` : "—"}
           label={t("rec.candidates.exam_label")}
-          value={examAttempt?.score != null && examAttempt?.total
-            ? `${examAttempt.score}/${examAttempt.total}`
-            : "—"}
-          tone={examAttempt?.score != null && examAttempt?.total
-            ? scoreToneFromPct(examAttempt.score, examAttempt.total)
-            : "default"}
+          tone={hasExam ? scoreToneFromPct(examAttempt.score, examAttempt.total) : "dim"}
+          style={{ flex: 1 }}
         />
       </div>
-    </button>
+    </Tile>
   );
 }
 
 // Compact "how many people named this candidate" marker. Used in list
-// rows and the hero, where a full ScoreChip would be too heavy.
-function RecCountChip({ n }) {
+// rows and the hero. `compact` drops the word and keeps icon + number.
+function RecCountChip({ n, compact }) {
   const { t } = useI18n();
+  const title = t("rec.candidates.recs_title", { n });
   return (
-    <span
-      title={t("rec.candidates.recs_title", { n })}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "3px 9px",
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: "0.5px",
-        textTransform: "uppercase",
-        background: n >= 3 ? C.badgeOk : C.badgeBright,
-        color: n >= 3 ? C.ok : C.bright,
-        border: `1px solid ${n >= 3 ? C.badgeOkBorder : C.borderBright}`,
-        borderRadius: 999,
-        whiteSpace: "nowrap",
-      }}
-    >
-      <span style={{ fontFamily: FONT_MONO, fontWeight: 700 }}>{n}</span>
-      {t("rec.candidates.recs_label")}
+    <span role="img" aria-label={title} title={title} style={{ display: "inline-flex", flexShrink: 0 }}>
+      <Badge tone={n >= 3 ? "ok" : "bright"}>
+        <Icon name="star" size={11} strokeWidth={2.2} />
+        <Num>{n}</Num>
+        {!compact && t("rec.candidates.recs_label")}
+      </Badge>
     </span>
   );
 }
 
-// Name chips for a set of candidates, optionally clickable so the reader
+// Tappable name capsule that jumps to that candidate's profile.
+function NameChip({ label, onClick }) {
+  const isMobile = useIsMobile();
+  return (
+    <button
+      type="button"
+      data-press="scale"
+      onClick={onClick}
+      style={{
+        all: "unset",
+        boxSizing: "border-box",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        maxWidth: "100%",
+        minHeight: isMobile ? 34 : 28,
+        paddingInline: "12px 8px",
+        borderRadius: R.pill,
+        background: C.fill,
+        color: C.bright,
+        fontFamily: FONT,
+        ...T.footnote,
+        fontWeight: 600,
+        cursor: "pointer",
+      }}
+    >
+      <span style={{ minWidth: 0, ...ELLIPSIS }}>{label}</span>
+      <Icon name="chevronForward" size={12} strokeWidth={2.4} flip style={{ flexShrink: 0, color: C.dimmer }} />
+    </button>
+  );
+}
+
+// Name chips for a set of candidates, optionally tappable so the reader
 // can jump straight to the profile that was named.
 function RecNameList({ people, emptyLabel, onOpen }) {
   if (!people || people.length === 0) {
-    return <div style={{ color: C.dim, fontSize: 13 }}>{emptyLabel}</div>;
+    return <div style={{ ...T.footnote, color: C.dim }}>{emptyLabel}</div>;
   }
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       {people.map((person) => {
         const label = person.full_name || "—";
-        if (!onOpen) return <Badge key={person.id} tone="bright">{label}</Badge>;
-        return (
-          <button
-            key={person.id}
-            type="button"
-            onClick={() => onOpen(person.id)}
-            style={{
-              padding: "3px 10px",
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.5px",
-              textTransform: "uppercase",
-              background: C.badgeBright,
-              color: C.bright,
-              border: `1px solid ${C.borderBright}`,
-              borderRadius: 999,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >{label}</button>
-        );
+        if (!onOpen) {
+          return (
+            <Badge key={person.id} tone="bright" style={{ maxWidth: "100%" }}>
+              <span style={{ minWidth: 0, ...ELLIPSIS }}>{label}</span>
+            </Badge>
+          );
+        }
+        return <NameChip key={person.id} label={label} onClick={() => onOpen(person.id)} />;
       })}
     </div>
   );
-}
-
-function ScoreChip({ label, value, tone }) {
-  const tones = {
-    ok:      { fg: C.ok,    border: C.badgeOkBorder,    bg: C.badgeOk },
-    bright:  { fg: C.bright, border: C.borderBright,     bg: C.badgeBright },
-    warn:    { fg: C.warn,  border: C.badgeWarnBorder,  bg: C.badgeWarn },
-    default: { fg: C.dim,   border: C.border,           bg: "transparent" },
-  };
-  const c = tones[tone] || tones.default;
-  return (
-    <div style={{
-      display: "inline-flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: 1,
-      padding: "5px 9px",
-      border: `1px solid ${c.border}`,
-      borderRadius: 2,
-      background: c.bg,
-      minWidth: 56,
-    }}>
-      <div style={{
-        fontFamily: FONT_MONO,
-        fontSize: 14,
-        fontWeight: 700,
-        color: c.fg,
-        letterSpacing: "0.3px",
-        lineHeight: 1,
-      }}>{value}</div>
-      <div style={{
-        fontSize: 9,
-        color: C.dim,
-        letterSpacing: "0.8px",
-        textTransform: "uppercase",
-      }}>{label}</div>
-    </div>
-  );
-}
-
-function scoreToneFromPct(score, max) {
-  if (score == null || !max) return "default";
-  const pct = score / max;
-  if (pct >= 0.8) return "ok";
-  if (pct >= 0.5) return "bright";
-  return "warn";
 }
 
 // ── Leaderboard row (used when sorted by interview / exam score) ────
@@ -1185,142 +1269,120 @@ function LeaderboardRow({
   const scoreMax = isCombinedSort ? 100 : isExamSort ? (examAttempt?.total ?? null) : 10;
   const hasScore = score != null;
   // A zero recommendation count is a real value, but it shouldn't earn a
-  // rank badge — nobody has named them, so they sit below the ranked set.
+  // rank — nobody has named them, so they sit below the ranked set.
   const ranked = hasScore && (!isRecSort || recCount > 0);
   const hasRange = !isExamSort && !isCombinedSort && !isRecSort
     && minScore != null && maxScore != null && minScore !== maxScore;
+  const maxTags = isMobile ? 2 : 4;
+
+  const scoreLabel = !hasScore ? t("rec.candidates.no_score_short")
+    : isRecSort ? t("rec.candidates.recs_label")
+    : isCombinedSort ? t("rec.candidates.combined_label")
+    : isExamSort ? t("rec.candidates.exam_label")
+    : t("rec.candidates.avg_label");
 
   return (
-    <div style={{
-      borderRadius: 10,
-      marginBottom: 10,
-      background: selected ? C.selectedBg : C.cardBg,
-      overflow: "hidden",
-      opacity: archived && !selected ? 0.55 : 1,
-    }}>
-      <div
-        role="button"
-        tabIndex={0}
+    <div style={{ opacity: archived && !selected ? 0.55 : 1 }}>
+      <Row
+        as="div"
         onClick={activate}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); }
-        }}
-        style={{
-          boxSizing: "border-box",
-          display: "flex",
-          alignItems: "center",
-          gap: isMobile ? 10 : 14,
-          width: "100%",
-          padding: isMobile ? "12px 12px" : "14px 16px",
-          cursor: "pointer",
-        }}
-      >
-        {selectMode && <Checkbox checked={selected} />}
-        <div style={{
-          flexShrink: 0,
-          width: isMobile ? 30 : 36,
-          textAlign: "center",
-          fontFamily: FONT_MONO,
-          fontSize: isMobile ? 13 : 15,
-          fontWeight: 700,
-          color: !ranked ? C.dimmer : (rank <= 4 ? C.bright : C.dim),
-        }}>
-          {ranked ? `#${rank}` : "—"}
-        </div>
-
-        <CandidateAvatar
-          photoUrl={candidate.photo_url}
-          name={candidate.full_name}
-          size={isMobile ? 36 : 42}
-          onOpenPhoto={selectMode ? undefined : onOpenPhoto}
-        />
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            color: C.bright, fontSize: isMobile ? 14 : 15, fontWeight: 600,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>{candidate.full_name || "—"}</div>
-          <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>
-            <span style={{ fontFamily: FONT_MONO }}>{candidate.personal_id || "—"}</span>
-            {candidate.team ? ` · ${t("rec.candidates.team")} ${candidate.team}` : ""}
-          </div>
-          {tags.length > 0 && (
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-              {tags.slice(0, isMobile ? 2 : 4).map((tg) => (
-                <Badge key={tg} tone={tagTone(tg)}>{tagLabel(tg, t)}</Badge>
-              ))}
-              {tags.length > (isMobile ? 2 : 4) && (
-                <Badge>+{tags.length - (isMobile ? 2 : 4)}</Badge>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div style={{ flexShrink: 0, textAlign: "center", minWidth: isMobile ? 56 : 72 }}>
-          <div style={{
-            fontFamily: FONT_MONO,
-            fontSize: isMobile ? 20 : 26,
-            fontWeight: 700,
-            color: isRecSort ? recColor(recCount) : scoreColor(score, scoreMax),
-            lineHeight: 1,
-          }}>
-            {!hasScore ? "—"
-              : isRecSort || isCombinedSort ? String(score)
-              : isExamSort ? `${score} / ${scoreMax}`
-              : score.toFixed(1)}
-          </div>
-          <div style={{
-            fontSize: 10, color: C.dim, marginTop: 4,
-            letterSpacing: "0.5px", textTransform: "uppercase",
-          }}>
-            {!hasScore ? t("rec.candidates.no_score_short")
-              : isRecSort ? t("rec.candidates.recs_label")
-              : isCombinedSort ? t("rec.candidates.combined_label")
-              : isExamSort ? t("rec.candidates.exam_label")
-              : t("rec.candidates.avg_label")}
-          </div>
-          {hasRange && (
-            <div style={{ fontSize: 10, color: C.dimmer, marginTop: 2, fontFamily: FONT_MONO }}>
-              {minScore}–{maxScore}
-            </div>
-          )}
-        </div>
-
-        <div style={{
-          flexShrink: 0,
-          color: C.dim,
-          fontSize: 12,
-          transform: expanded ? "rotate(90deg)" : "none",
-          transition: "transform 120ms",
-        }}>▶</div>
-      </div>
-
-      {expanded && (
-        <div style={{
-          borderTop: `1px solid ${C.border}`,
-          padding: isMobile ? "12px" : "14px 16px",
-        }}>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ ...S.label, marginBottom: 8 }}>
-              {t("rec.candidate.recommended_by")}
-              <span style={{ fontFamily: FONT_MONO, marginInlineStart: 6, color: recColor(recCount) }}>
-                {recCount}
-              </span>
-            </div>
-            <RecNameList
-              people={row.recommendedBy}
-              emptyLabel={t("rec.candidate.no_recommendations")}
+        selected={selected}
+        aria-expanded={selectMode ? undefined : expanded}
+        aria-pressed={selectMode ? !!selected : undefined}
+        style={{ paddingBlock: 12 }}
+        leading={
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 12 }}>
+            {selectMode && <Checkbox checked={selected} />}
+            <span style={{
+              width: isMobile ? 20 : 26,
+              textAlign: "center",
+              ...(isMobile ? T.callout : T.body),
+              fontWeight: ranked && rank <= 4 ? 700 : 500,
+              color: !ranked ? C.dimmer : (rank <= 4 ? C.bright : C.dim),
+            }}>
+              <Num>{ranked ? rank : "—"}</Num>
+            </span>
+            <CandidateAvatar
+              photoUrl={candidate.photo_url}
+              name={candidate.full_name}
+              size={isMobile ? 36 : 42}
+              onOpenPhoto={selectMode ? undefined : onOpenPhoto}
             />
-            {row.recommends?.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ ...S.label, marginBottom: 8 }}>
-                  {t("rec.candidate.recommends")}
-                </div>
-                <RecNameList people={row.recommends} emptyLabel="" />
-              </div>
+          </div>
+        }
+        trailing={
+          <>
+            <Stat
+              size={isMobile ? "sm" : "md"}
+              align="end"
+              tone={isRecSort ? recTone(recCount) : scoreTone(score, scoreMax)}
+              value={!hasScore ? "—"
+                : isRecSort || isCombinedSort ? String(score)
+                : isExamSort ? `${score} / ${scoreMax}`
+                : score.toFixed(1)}
+              label={
+                <>
+                  {scoreLabel}
+                  {hasRange && (
+                    <>
+                      <span aria-hidden style={{ color: C.dimmer, margin: "0 4px" }}>·</span>
+                      <Num>{`${minScore}–${maxScore}`}</Num>
+                    </>
+                  )}
+                </>
+              }
+              style={{ minWidth: isMobile ? 56 : 84 }}
+            />
+            {!selectMode && <ExpandChevron open={expanded} />}
+          </>
+        }
+      >
+        <div style={{ ...T.body, fontWeight: 600, color: C.bright, ...ELLIPSIS }}>
+          {candidate.full_name || "—"}
+        </div>
+        <div style={{ ...T.footnote, color: C.dim, marginTop: 1, ...ELLIPSIS }}>
+          <Mono>{candidate.personal_id || "—"}</Mono>
+          {candidate.team ? (
+            <>
+              <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+              {t("rec.candidates.team")} {candidate.team}
+            </>
+          ) : null}
+        </div>
+        {tags.length > 0 && (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+            {tags.slice(0, maxTags).map((tg) => (
+              <Badge key={tg} tone={tagTone(tg)}>{tagLabel(tg, t)}</Badge>
+            ))}
+            {tags.length > maxTags && (
+              <Badge><Num>{`+${tags.length - maxTags}`}</Num></Badge>
             )}
           </div>
-          <div style={{ ...S.label, marginBottom: 10 }}>
+        )}
+      </Row>
+
+      {expanded && (
+        <Tile style={{ marginTop: 2, marginBottom: 12, animation: RISE }}>
+          <Label>
+            {t("rec.candidate.recommended_by")}
+            <Num style={{ margin: "0 6px", fontWeight: 600, color: toneColor(recTone(recCount)) }}>
+              {recCount}
+            </Num>
+          </Label>
+          <RecNameList
+            people={row.recommendedBy}
+            emptyLabel={t("rec.candidate.no_recommendations")}
+          />
+          {row.recommends?.length > 0 && (
+            <>
+              <Label style={{ marginTop: 12 }}>{t("rec.candidate.recommends")}</Label>
+              <RecNameList people={row.recommends} emptyLabel="" />
+            </>
+          )}
+
+          <Divider style={{ margin: "14px 0 12px" }} />
+
+          <Label style={{ marginBottom: 2 }}>
             {interviewCount === 1
               ? t("rec.candidates.one_interview")
               : t("rec.candidates.n_interviews", { n: interviewCount })}
@@ -1329,89 +1391,81 @@ function LeaderboardRow({
                 {" "}· {t("rec.candidates.unscored", { n: interviewCount - scoredCount })}
               </span>
             )}
-          </div>
+          </Label>
           {row.interviews.length === 0 && (
-            <div style={{ color: C.dim, fontSize: 13 }}>
+            <div style={{ ...T.footnote, color: C.dim, marginTop: 6 }}>
               {t("rec.candidates.no_interviews_yet")}
             </div>
           )}
-          {row.interviews.map((iv) => (
-            <InterviewBreakdown key={iv.id} interview={iv} />
-          ))}
-          <div style={{ marginTop: 14 }}>
-            <Btn small onClick={onOpen}>{t("rec.candidates.open_detail")} →</Btn>
+          <List>
+            {row.interviews.map((iv) => (
+              <div key={iv.id} style={{ padding: "10px 0" }}>
+                <InterviewSummary interview={iv} />
+              </div>
+            ))}
+          </List>
+          <div style={{ marginTop: 10 }}>
+            <Btn small type="button" onClick={onOpen} iconEnd="chevronForward" iconFlip>
+              {t("rec.candidates.open_detail")}
+            </Btn>
           </div>
-        </div>
+        </Tile>
       )}
     </div>
   );
 }
 
-function InterviewBreakdown({ interview }) {
+// One interviewer's record, read-only: who, score, tags, the names they
+// recorded (when a name lookup is supplied) and their notes. Shown in the
+// leaderboard drill-down and on the "other interviews" tiles.
+function InterviewSummary({ interview, namesById }) {
   const { t } = useI18n();
   const interviewer = interview.interviewer;
+  const hasTags = interview.tags && interview.tags.length > 0;
   return (
-    <div style={{
-      padding: "10px 0",
-      borderBottom: `1px solid ${C.border}`,
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        marginBottom: interview.tags?.length || interview.notes ? 8 : 0,
-        flexWrap: "wrap",
-      }}>
-        <span style={{
-          fontFamily: FONT_MONO, fontSize: 13, color: C.bright,
-          fontWeight: 600, letterSpacing: "0.5px",
-        }}>
-          {interviewer?.callsign || "—"}
-        </span>
-        {interviewer?.full_name && (
-          <span style={{ fontSize: 12, color: C.dim }}>{interviewer.full_name}</span>
-        )}
-        <div style={{ flex: 1 }} />
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, ...ELLIPSIS }}>
+          <Mono style={{ fontSize: T.callout.fontSize, fontWeight: 600, color: C.bright }}>
+            {interviewer?.callsign || "—"}
+          </Mono>
+          {interviewer?.full_name && (
+            <span style={{ ...T.footnote, color: C.dim, marginInlineStart: 8 }}>
+              {interviewer.full_name}
+            </span>
+          )}
+        </div>
         {interview.score != null && (
-          <Badge tone={scoreToneBadge(interview.score)}>
-            {interview.score} / 10
-          </Badge>
+          <span title={t("rec.interview.score")} style={{ display: "inline-flex", flexShrink: 0 }}>
+            <Badge tone={scoreToneBadge(interview.score)}>
+              <Num>{`${interview.score} / 10`}</Num>
+            </Badge>
+          </span>
         )}
       </div>
-      {interview.tags && interview.tags.length > 0 && (
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+      {hasTags && (
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
           {interview.tags.map((tg, i) => (
             <Badge key={i} tone={tagTone(tg)}>{tagLabel(tg, t)}</Badge>
           ))}
         </div>
       )}
+      {namesById && <RecommendedNames ids={interview.recommended_ids} namesById={namesById} />}
       {interview.notes && (
         <div style={{
-          fontSize: 13, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap",
-        }}>{interview.notes}</div>
+          ...T.callout, color: C.text, lineHeight: 1.55, marginTop: 8,
+          whiteSpace: "pre-wrap", overflowWrap: "anywhere",
+        }}><UserText>{interview.notes}</UserText></div>
       )}
-    </div>
+    </>
   );
 }
 
-// Score-to-colour mapping. `max` is the score scale (10 for interviews,
-// total for exam) — we colour by percentage so an 8/17 exam reads "low"
-// the same way a 2/10 interview does.
-function scoreColor(score, max) {
-  if (score == null) return C.dim;
-  const pct = max ? score / max : score / 10;
-  if (pct >= 0.8) return C.ok;
-  if (pct >= 0.5) return C.bright;
-  return C.warn;
-}
-
-function scoreToneBadge(score) {
-  if (score == null) return "default";
-  if (score >= 8) return "ok";
-  if (score >= 5) return "bright";
-  return "warn";
-}
+// ── Detail ────────────────────────────────────────────────────────
 
 function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const { profile } = useAuth();
   const [data, setData] = useState(null); // { candidate, cycle, questions, responses }
   const [interviews, setInterviews] = useState([]);
@@ -1456,8 +1510,8 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
     }
   }
 
-  // Jumping profile → profile (via a recommendation chip) reuses this
-  // component, so clear the previous candidate's state instead of showing
+  // Jumping from profile to profile (via a recommendation chip) lands here with
+  // a new id, so clear the previous candidate's state instead of showing
   // it under the new name while the fetch is in flight.
   useEffect(() => {
     setData(null);
@@ -1505,8 +1559,14 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
   if (!data) {
     return (
       <>
-        <PageHeader title={t("common.loading")} action={<BackButton onClick={onBack} />} />
-        <Panel connectTop><div style={{ color: C.dim }}>{t("common.loading")}</div></Panel>
+        <PageHeader
+          hero={false}
+          back={{ onClick: onBack }}
+          title={<Skeleton width={isMobile ? 180 : 240} height={isMobile ? 28 : 34} />}
+        />
+        {err
+          ? <Panel><Notice tone="error">{err}</Notice></Panel>
+          : <DetailSkeleton />}
       </>
     );
   }
@@ -1528,6 +1588,9 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
   // Reopening drops a candidate back where they actually got to, so an
   // un-rejected candidate doesn't reappear as if they never sat the exam.
   const reopenTarget = examAttempt?.finished_at ? "exam_done" : "interviewed";
+  const canDecide = candidate.status === "exam_done" || candidate.status === "interviewed"
+    || candidate.status === "ready_for_exam";
+  const hasQuickActions = candidate.status === "survey_done" || canDecide || decided;
 
   async function handleToggleExamUnlock() {
     setBusy(true); setErr(""); setOk("");
@@ -1570,21 +1633,25 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
     onBack();
   }
 
-  async function copyExamUrl(url) {
-    try {
-      await navigator.clipboard.writeText(url);
-      flash(setOk, t("rec.cycles.url_copied"));
-    } catch {
-      setErr(t("rec.cycles.url_copy_failed"));
-    }
-  }
-
   return (
     <>
+      {/* The name is the page title (and the nav-bar title once it
+          scrolls away); the hero card below carries photo and state. */}
       <PageHeader
+        hero={false}
+        back={{ onClick: onBack }}
         title={candidate.full_name || "—"}
-        subtitle={`${t(`rec.candidate_status.${candidate.status}`)}`}
-        action={<BackButton onClick={onBack} />}
+        subtitle={
+          <>
+            <Mono>{candidate.personal_id || "—"}</Mono>
+            {cycle?.name ? (
+              <>
+                <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+                <UserText>{cycle.name}</UserText>
+              </>
+            ) : null}
+          </>
+        }
       />
 
       <CandidateHero
@@ -1594,13 +1661,6 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
         onUpload={handlePhotoUpload}
         onOpenPhoto={(src) => setLightboxSrc(src)}
       />
-
-      {(err || ok) && (
-        <Panel>
-          <ErrLine>{err}</ErrLine>
-          <OkLine>{ok}</OkLine>
-        </Panel>
-      )}
 
       <SurveyResponses questions={questions} responsesByQ={responsesByQ} />
 
@@ -1620,10 +1680,7 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
         onOpenCandidate={onOpenCandidate}
       />
 
-      <CycleLinksPanel
-        cycle={cycle}
-        onCopy={(url) => copyExamUrl(url)}
-      />
+      <CycleLinksPanel cycle={cycle} />
 
       <ExamPanel
         candidate={candidate}
@@ -1631,120 +1688,107 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
         attempt={examAttempt}
         busy={busy}
         onToggleUnlock={handleToggleExamUnlock}
-        onCopyUrl={copyExamUrl}
       />
 
-      <PromotePanel candidate={candidate} onPromoted={refresh} onFlash={{
-        ok: (m) => flash(setOk, m),
-        err: (m) => setErr(m),
-      }} />
+      <PromotePanel candidate={candidate} onPromoted={refresh} />
 
       <Panel title={t("rec.candidate.actions")}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {candidate.status === "survey_done" && (
-            <Btn small onClick={() => handleStatus("interviewed")} disabled={busy}>
-              → {t("rec.candidate_status.interviewed")}
-            </Btn>
-          )}
-          {candidate.status === "interviewed" && (
-            <Btn small onClick={() => handleStatus("ready_for_exam")} disabled={busy}>
-              → {t("rec.candidate_status.ready_for_exam")}
-            </Btn>
-          )}
-          {(candidate.status === "exam_done" || candidate.status === "interviewed" || candidate.status === "ready_for_exam") && (
-            <>
-              <Btn small onClick={() => handleStatus("accepted")} disabled={busy}>
-                {t("rec.candidate.mark_accepted")}
-              </Btn>
-              <Btn small onClick={() => handleStatus("rejected")} disabled={busy}>
-                {t("rec.candidate.mark_rejected")}
-              </Btn>
-            </>
-          )}
-          {/* One-click undo for a decided candidate — back to whichever
-              stage they actually reached, decision cleared. */}
-          {decided && (
-            <Btn small onClick={() => handleStatus(reopenTarget)} disabled={busy}>
-              ↩ {t("rec.candidate.reopen")} → {t(`rec.candidate_status.${reopenTarget}`)}
-            </Btn>
-          )}
-        </div>
-
-        <div style={{ height: 1, background: C.border, margin: "18px 0" }} />
+        {hasQuickActions && (
+          <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {candidate.status === "survey_done" && (
+                <Btn type="button" iconEnd="arrowForward" iconFlip onClick={() => handleStatus("interviewed")} disabled={busy}>
+                  {t("rec.candidate_status.interviewed")}
+                </Btn>
+              )}
+              {candidate.status === "interviewed" && (
+                <Btn type="button" iconEnd="arrowForward" iconFlip onClick={() => handleStatus("ready_for_exam")} disabled={busy}>
+                  {t("rec.candidate_status.ready_for_exam")}
+                </Btn>
+              )}
+              {canDecide && (
+                <>
+                  <Btn type="button" icon="checkCircle" onClick={() => handleStatus("accepted")} disabled={busy}>
+                    {t("rec.candidate.mark_accepted")}
+                  </Btn>
+                  <Btn type="button" icon="xCircle" onClick={() => handleStatus("rejected")} disabled={busy}>
+                    {t("rec.candidate.mark_rejected")}
+                  </Btn>
+                </>
+              )}
+              {/* One-click undo for a decided candidate — back to whichever
+                  stage they actually reached, decision cleared. */}
+              {decided && (
+                <Btn type="button" icon="undo" iconFlip onClick={() => handleStatus(reopenTarget)} disabled={busy}>
+                  {t("rec.candidate.reopen")}
+                  <Icon name="arrowForward" size={14} strokeWidth={2} flip style={{ opacity: 0.55 }} />
+                  {t(`rec.candidate_status.${reopenTarget}`)}
+                </Btn>
+              )}
+            </div>
+            <Divider style={{ margin: "16px 0" }} />
+          </>
+        )}
 
         {/* Free-form status control. The quick buttons above only move
             forward; this is how a candidate goes back to any stage. */}
-        <div style={{ ...S.label, marginBottom: 8 }}>
-          {t("rec.candidate.change_status")}
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <select
+        <Label>{t("rec.candidate.change_status")}</Label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Select
             value={selectedStatus}
             onChange={(e) => setStatusDraft(e.target.value)}
             aria-label={t("rec.candidate.change_status")}
-            style={{ ...S.input, fontSize: 14, width: "auto", minWidth: 180 }}
+            wrapStyle={{ flex: isMobile ? 1 : "0 1 260px", minWidth: 0 }}
           >
             {ALL_STATUSES.map((st) => (
               <option key={st} value={st}>{t(`rec.candidate_status.${st}`)}</option>
             ))}
-          </select>
+          </Select>
           <Btn
-            small
-            primary
+            type="button"
             onClick={() => handleStatus(selectedStatus)}
             disabled={busy || selectedStatus === candidate.status}
+            style={{ flexShrink: 0 }}
           >
             {t("rec.candidate.apply_status")}
           </Btn>
         </div>
-        <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginTop: 10 }}>
+        <div style={{ ...T.footnote, color: C.dim, marginTop: 10 }}>
           {t("rec.candidate.status_help")}
         </div>
       </Panel>
 
-      {/* Danger zone: archive/restore (secondary) + permanent delete */}
+      {/* Danger zone: archive/restore (reversible) + permanent delete */}
       <Panel title={t("rec.candidate.danger_title")}>
         {candidate.archived_at ? (
-          <>
-            <div style={{
-              padding: "10px 14px",
-              background: C.warnBg,
-              border: `1px solid ${C.warnBorderFaint}`,
-              color: C.warn,
-              borderRadius: 10,
-              fontSize: 13,
-              lineHeight: 1.6,
-              marginBottom: 12,
-            }}>
-              {t("rec.candidate.archived_note")}
-            </div>
-            <Btn small onClick={handleArchiveToggle} disabled={busy}>
-              {t("rec.candidates.restore")}
-            </Btn>
-          </>
+          <Notice
+            tone="warn"
+            style={{ alignItems: "center" }}
+            action={
+              <Btn small type="button" icon="undo" iconFlip onClick={handleArchiveToggle} disabled={busy}>
+                {t("rec.candidates.restore")}
+              </Btn>
+            }
+          >
+            {t("rec.candidate.archived_note")}
+          </Notice>
         ) : (
-          <>
-            <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
-              {t("rec.candidate.archive_explainer")}
-            </div>
-            <Btn small onClick={() => setConfirmArchive(true)} disabled={busy}>
+          <DangerRow text={t("rec.candidate.archive_explainer")}>
+            <Btn type="button" icon="folder" onClick={() => setConfirmArchive(true)} disabled={busy}>
               {t("rec.candidate.archive")}
             </Btn>
-          </>
+          </DangerRow>
         )}
-        <div style={{ height: 1, background: C.border, margin: "18px 0" }} />
-        <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
-          {t("rec.candidate.delete_explainer")}
-        </div>
-        <Btn
-          small
-          onClick={() => setConfirmDelete(true)}
-          disabled={busy}
-          style={{ color: C.error, borderColor: C.errBorder, background: C.errBg }}
-        >
-          {t("rec.candidate.delete")}
-        </Btn>
+        <Divider style={{ margin: "16px 0" }} />
+        <DangerRow text={t("rec.candidate.delete_explainer")}>
+          <Btn danger type="button" icon="trash" onClick={() => setConfirmDelete(true)} disabled={busy}>
+            {t("rec.candidate.delete")}
+          </Btn>
+        </DangerRow>
       </Panel>
+
+      <Toast>{ok}</Toast>
+      {!ok && <Toast tone="error" onDismiss={() => setErr("")}>{err}</Toast>}
 
       <ConfirmDialog
         open={confirmArchive}
@@ -1768,18 +1812,73 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
         onCancel={() => setConfirmDelete(false)}
       />
 
-      <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
+      <Lightbox
+        src={lightboxSrc}
+        alt={candidate.full_name || ""}
+        onClose={() => setLightboxSrc(null)}
+        closeLabel={t("rec.candidate.close_photo")}
+      />
     </>
   );
 }
 
+// Explanation on the leading side, its action at the trailing edge
+// (stacked on phones).
+function DangerRow({ text, children }) {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      alignItems: isMobile ? "stretch" : "center",
+      gap: isMobile ? 12 : 20,
+    }}>
+      <div style={{ flex: 1, minWidth: 0, ...T.footnote, color: C.dim }}>{text}</div>
+      <div style={{ flexShrink: 0, display: "flex" }}>{children}</div>
+    </div>
+  );
+}
+
+// Placeholder blocks while a candidate loads.
+function DetailSkeleton() {
+  const isMobile = useIsMobile();
+  return (
+    <div aria-busy="true">
+      <Panel>
+        <div style={{
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: "center",
+          gap: isMobile ? 14 : 22,
+        }}>
+          <Skeleton width={isMobile ? 96 : 88} height={isMobile ? 96 : 88} style={{ borderRadius: R.pill, flexShrink: 0 }} />
+          <div style={{
+            flex: 1, width: "100%", display: "flex", flexDirection: isMobile ? "column" : "row",
+            alignItems: "center", justifyContent: "space-between", gap: 12,
+          }}>
+            <Skeleton width={isMobile ? "70%" : 280} height={22} style={{ borderRadius: R.pill }} />
+            <Skeleton width={120} height={30} style={{ borderRadius: R.pill }} />
+          </div>
+        </div>
+      </Panel>
+      <Panel><SkeletonRows rows={4} /></Panel>
+      <Panel>
+        <Skeleton width="34%" height={17} style={{ marginBottom: 16 }} />
+        <Skeleton height={40} style={{ borderRadius: R.md, marginBottom: 12 }} />
+        <Skeleton height={96} style={{ borderRadius: R.md }} />
+      </Panel>
+    </div>
+  );
+}
+
 // ── Promote-to-BootCamp bridge (Phase C5) ──────────────────────────
-// Shown once a candidate is accepted. Bridges recruitment → bootcamp:
+// Shown once a candidate is accepted. Bridges recruitment to bootcamp:
 // pick a boot camp squad, mint a squad-scoped sniper invite, and hand
 // the code to the candidate. Read-only summary once promoted.
 
-function PromotePanel({ candidate, onPromoted, onFlash }) {
+function PromotePanel({ candidate, onPromoted }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [squads, setSquads] = useState([]);
   const [squadId, setSquadId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1809,15 +1908,6 @@ function PromotePanel({ candidate, onPromoted, onFlash }) {
     onPromoted();
   }
 
-  async function copyCode() {
-    try {
-      await navigator.clipboard.writeText(candidate.promote_invite_code);
-      onFlash.ok(t("rec.candidate.invite_copied"));
-    } catch {
-      onFlash.err(t("rec.cycles.url_copy_failed"));
-    }
-  }
-
   return (
     <Panel title={t("rec.candidate.promote_title")}>
       {candidate.promoted_squad_id ? (
@@ -1826,51 +1916,63 @@ function PromotePanel({ candidate, onPromoted, onFlash }) {
             display: "flex", alignItems: "center", gap: 10,
             flexWrap: "wrap", marginBottom: 12,
           }}>
-            <Badge tone="ok">{t("rec.candidate.promoted")}</Badge>
-            <span style={{ color: C.text, fontSize: 14, fontWeight: 600 }}>
+            <Badge tone="ok">
+              <Icon name="check" size={11} strokeWidth={3} />
+              {t("rec.candidate.promoted")}
+            </Badge>
+            <span style={{ ...T.headline, color: C.bright }}>
               {promotedSquad?.name || t("rec.candidate.promoted_squad")}
             </span>
             {candidate.promoted_at && (
-              <span style={{ color: C.dimmer, fontSize: 12, fontFamily: FONT_MONO }}>
-                {fmtWhen(candidate.promoted_at, t, { year: "numeric", month: "short", day: "numeric" })}
+              <span style={{ ...T.footnote, color: C.dim }}>
+                <Num>{fmtWhen(candidate.promoted_at, t, { year: "numeric", month: "short", day: "numeric" })}</Num>
               </span>
             )}
           </div>
           {candidate.promote_invite_code && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{
-                fontFamily: FONT_MONO, fontSize: 16, letterSpacing: "1.5px",
-                color: C.bright, border: `1px solid ${C.borderBright}`,
-                borderRadius: 2, padding: "8px 14px", background: C.inputBg,
-              }}>{candidate.promote_invite_code}</span>
-              <Btn small onClick={copyCode}>{t("rec.candidate.copy_invite")}</Btn>
-            </div>
+            <CopyField
+              value={candidate.promote_invite_code}
+              copyLabel={t("rec.candidate.copy_invite")}
+              copiedLabel={t("common.copied")}
+            />
           )}
-          <div style={{ color: C.dim, fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+          <div style={{ ...T.footnote, color: C.dim, marginTop: 12 }}>
             {t("rec.candidate.promote_done_hint")}
           </div>
         </>
       ) : squads.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6 }}>
+        <div style={{ ...T.footnote, color: C.dim }}>
           {t("rec.candidate.no_bootcamp_squads")}
         </div>
       ) : (
         <>
-          <Field label={t("rec.candidate.promote_squad")}>
-            <select
-              value={squadId}
-              onChange={(e) => setSquadId(e.target.value)}
-              style={{ ...S.input, fontSize: 14 }}
+          <div style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "stretch" : "flex-end",
+            gap: 12,
+          }}>
+            <label style={{ display: "block", flex: isMobile ? undefined : "0 1 300px", minWidth: 0 }}>
+              <div style={S.label}>{t("rec.candidate.promote_squad")}</div>
+              <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
+                {squads.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </Select>
+            </label>
+            <Btn
+              primary
+              type="button"
+              icon="graduation"
+              busy={busy}
+              onClick={handlePromote}
+              disabled={busy || !squadId}
+              style={isMobile ? undefined : { minHeight: 40, paddingBlock: 8 }}
             >
-              {squads.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Btn onClick={handlePromote} disabled={busy || !squadId}>
-            {t("rec.candidate.promote_action")}
-          </Btn>
-          <div style={{ color: C.dim, fontSize: 12, marginTop: 12, lineHeight: 1.6 }}>
+              {t("rec.candidate.promote_action")}
+            </Btn>
+          </div>
+          <div style={{ ...T.footnote, color: C.dim, marginTop: 12 }}>
             {t("rec.candidate.promote_hint")}
           </div>
           <ErrLine>{err}</ErrLine>
@@ -1880,7 +1982,10 @@ function PromotePanel({ candidate, onPromoted, onFlash }) {
   );
 }
 
-// ── Candidate hero (profile-card style) ────────────────────────────
+// ── Candidate hero ─────────────────────────────────────────────────
+// Portrait (tap: full-size photo, or the file picker when there is none)
+// plus the candidate's standing as badges. The name itself is the page
+// title right above.
 
 function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto, recommendationCount = 0 }) {
   const { t } = useI18n();
@@ -1888,14 +1993,6 @@ function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto, recommendat
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
-
-  const initials = (candidate.full_name || "?")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((s) => s[0] || "")
-    .join("")
-    .toUpperCase() || "?";
 
   async function handleFile(file) {
     if (!file) return;
@@ -1909,161 +2006,128 @@ function CandidateHero({ candidate, photoSrc, onUpload, onOpenPhoto, recommendat
     }
   }
 
-  const photoSize = isMobile ? 96 : 112;
+  const photoSize = isMobile ? 96 : 88;
+  const canView = !!photoSrc && !!onOpenPhoto;
+  const portraitLabel = canView
+    ? t("rec.candidate.view_photo")
+    : t("rec.candidate.upload_photo");
 
   return (
-    <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
-      background: C.cardBg,
-      padding: isMobile ? "20px 16px" : "24px",
-      marginBottom: isMobile ? 14 : 18,
-      display: "flex",
-      flexDirection: isMobile ? "column" : "row",
-      alignItems: "center",
-      gap: isMobile ? 14 : 22,
-    }}>
-      <button
-        type="button"
-        // With a photo, clicking the portrait opens the full-size
-        // lightbox; without one it opens the file picker.
-        onClick={() => {
-          if (photoSrc && onOpenPhoto) onOpenPhoto(photoSrc);
-          else fileRef.current?.click();
-        }}
-        disabled={uploading}
-        title={photoSrc && onOpenPhoto
-          ? t("rec.candidate.view_photo")
-          : t("rec.candidate.upload_photo")}
-        style={{
-          all: "unset",
-          width: photoSize,
-          height: photoSize,
-          borderRadius: "50%",
-          background: C.inputBg,
-          border: `1px solid ${C.borderBright}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          flexShrink: 0,
-          cursor: uploading ? "wait" : (photoSrc && onOpenPhoto ? "zoom-in" : "pointer"),
-          position: "relative",
-        }}
-      >
-        {photoSrc ? (
-          <img
-            src={photoSrc}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        ) : (
-          <div style={{
-            fontSize: photoSize * 0.34,
-            color: C.dim,
-            fontFamily: FONT_MONO,
-            fontWeight: 700,
-            letterSpacing: "1.5px",
-          }}>{initials}</div>
-        )}
-        {uploading && (
-          <div style={{
-            position: "absolute", inset: 0,
-            background: `${C.imageShade}0.5)`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: C.imageOverlayText, fontSize: 11, letterSpacing: "1px", textTransform: "uppercase",
-          }}>{t("rec.candidate.uploading")}</div>
-        )}
-      </button>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        style={{ display: "none" }}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) handleFile(f);
-        }}
-      />
-
+    <Panel>
       <div style={{
-        flex: 1,
-        minWidth: 0,
-        textAlign: isMobile ? "center" : "start",
-        width: "100%",
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: "center",
+        gap: isMobile ? 14 : 22,
       }}>
+        <button
+          type="button"
+          data-press="scale"
+          data-press-depth="soft"
+          // With a photo, tapping the portrait opens the full-size
+          // lightbox; without one it opens the file picker.
+          onClick={() => {
+            if (uploading) return;
+            if (canView) onOpenPhoto(photoSrc);
+            else fileRef.current?.click();
+          }}
+          aria-busy={uploading || undefined}
+          aria-label={portraitLabel}
+          title={portraitLabel}
+          style={{
+            all: "unset",
+            position: "relative",
+            display: "flex",
+            flexShrink: 0,
+            borderRadius: R.pill,
+            cursor: uploading ? "wait" : (canView ? "zoom-in" : "pointer"),
+          }}
+        >
+          <Avatar src={photoSrc} name={candidate.full_name} size={photoSize} />
+          {uploading && (
+            <span style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: R.pill,
+              background: `${C.imageShade}0.5)`,
+              color: C.imageOverlayText,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <Spinner size={24} />
+            </span>
+          )}
+        </button>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) handleFile(f);
+          }}
+        />
+
+        {/* Phones: badges then the photo action, centered under the
+            portrait. Desktop: badges beside it, the action at the far edge. */}
         <div style={{
-          fontSize: isMobile ? 18 : 22,
-          color: C.bright,
-          fontWeight: 700,
-          letterSpacing: "0.5px",
-          marginBottom: 6,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>{candidate.full_name || "—"}</div>
-        <div style={{
-          fontFamily: FONT_MONO,
-          fontSize: 13,
-          color: C.dim,
-          marginBottom: 12,
-          letterSpacing: "0.5px",
-        }}>{candidate.personal_id || "—"}</div>
-        <div style={{
+          flex: 1,
+          minWidth: 0,
+          width: "100%",
           display: "flex",
-          gap: 6,
-          flexWrap: "wrap",
-          justifyContent: isMobile ? "center" : "flex-start",
-          marginBottom: 14,
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: isMobile ? 12 : 16,
         }}>
-          {candidate.team && (
-            <Badge tone="bright">{t("rec.candidates.team")} {candidate.team}</Badge>
-          )}
-          {candidate.archived_at && (
-            <Badge tone="warn">{t("rec.candidates.archived")}</Badge>
-          )}
-          <Badge tone={statusTone(candidate.status)}>
-            {t(`rec.candidate_status.${candidate.status}`)}
-          </Badge>
-          {candidate.final_status && (
-            <Badge tone={candidate.final_status === "accepted" ? "ok" : "error"}>
-              {t(`rec.final_status.${candidate.final_status}`)}
+          <div style={{
+            display: "flex",
+            gap: 6,
+            flexWrap: "wrap",
+            justifyContent: isMobile ? "center" : "flex-start",
+          }}>
+            {candidate.team && (
+              <Badge tone="bright">{t("rec.candidates.team")} {candidate.team}</Badge>
+            )}
+            {candidate.archived_at && (
+              <Badge tone="warn">{t("rec.candidates.archived")}</Badge>
+            )}
+            <Badge tone={statusTone(candidate.status)}>
+              {t(`rec.candidate_status.${candidate.status}`)}
             </Badge>
-          )}
-          {recommendationCount > 0 && <RecCountChip n={recommendationCount} />}
+            {/* The final decision normally mirrors the status badge next to
+                it; show it only when the two actually differ. */}
+            {candidate.final_status && candidate.final_status !== candidate.status && (
+              <Badge tone={candidate.final_status === "accepted" ? "ok" : "error"}>
+                {t(`rec.final_status.${candidate.final_status}`)}
+              </Badge>
+            )}
+            {recommendationCount > 0 && <RecCountChip n={recommendationCount} />}
+          </div>
+          <Btn
+            small
+            type="button"
+            icon="camera"
+            busy={uploading}
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading
+              ? t("rec.candidate.uploading")
+              : photoSrc ? t("rec.candidate.replace_photo") : t("rec.candidate.upload_photo")}
+          </Btn>
         </div>
-        <Btn small onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {photoSrc ? t("rec.candidate.replace_photo") : t("rec.candidate.upload_photo")}
-        </Btn>
-        <ErrLine>{err}</ErrLine>
       </div>
-    </div>
+      <ErrLine>{err}</ErrLine>
+    </Panel>
   );
 }
 
-function SummaryRow({ label, value }) {
-  return (
-    <div style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 12,
-      padding: "8px 0",
-      borderBottom: `1px solid ${C.border}`,
-      fontSize: 14,
-    }}>
-      <div style={{
-        color: C.dim, fontSize: 11, letterSpacing: "0.8px",
-        textTransform: "uppercase", fontWeight: 600, flexShrink: 0,
-      }}>{label}</div>
-      <div style={{ color: C.text, textAlign: "end" }}>{value}</div>
-    </div>
-  );
-}
-
-// ── Survey responses (collapsible per section) ─────────────────────
+// ── Survey responses (one card, collapsible per section) ───────────
 
 function SurveyResponses({ questions, responsesByQ }) {
   const { t } = useI18n();
@@ -2075,96 +2139,76 @@ function SurveyResponses({ questions, responsesByQ }) {
     }))
     .filter((s) => s.questions.length > 0);
 
+  if (sections.length === 0) return null;
   return (
-    <>
-      {sections.map((s) => (
-        <SurveySection key={s.key} section={s} responsesByQ={responsesByQ} />
-      ))}
-    </>
+    <Panel title={t("rec.candidate.survey_title")}>
+      <List>
+        {sections.map((s) => (
+          <SurveySection key={s.key} section={s} responsesByQ={responsesByQ} />
+        ))}
+      </List>
+    </Panel>
   );
 }
 
 function SurveySection({ section, responsesByQ }) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
   const answeredCount = section.questions.filter((q) => responsesByQ.has(q.id)).length;
-
   return (
-    <Panel>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          all: "unset",
-          boxSizing: "border-box",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          width: "100%",
-          cursor: "pointer",
-          marginBottom: open ? 14 : 0,
-        }}
-      >
-        <span style={{
-          color: C.dimmer, fontSize: 12, width: 12, flexShrink: 0,
-          transform: open ? "rotate(90deg)" : "none",
-          transition: "transform 120ms",
-        }}>▶</span>
-        <span style={{
-          color: C.bright, fontSize: 13, fontWeight: 600,
-          letterSpacing: "1.2px", textTransform: "uppercase", flex: 1,
-        }}>{section.title}</span>
-        <span style={{ color: C.dim, fontSize: 12 }}>
-          {answeredCount} / {section.questions.length}
-        </span>
-      </button>
-      {open && section.questions.map((q) => (
-        <ResponseRow key={q.id} question={q} response={responsesByQ.get(q.id)} />
-      ))}
-    </Panel>
+    <Disclosure
+      title={section.title}
+      count={<Num>{`${answeredCount} / ${section.questions.length}`}</Num>}
+    >
+      {/* Answers line up under the section title (past the chevron). */}
+      <List style={{ paddingInlineStart: 24 }}>
+        {section.questions.map((q) => (
+          <ResponseRow key={q.id} question={q} response={responsesByQ.get(q.id)} />
+        ))}
+      </List>
+    </Disclosure>
   );
 }
 
 function ResponseRow({ question, response }) {
   let answer = "—";
+  let numeric = false;
   if (response) {
     if (question.question_type === "likert_5" && response.answer_value != null) {
       answer = `${response.answer_value} / 5`;
+      numeric = true;
     } else if (response.answer_text) {
       answer = response.answer_text;
     } else if (response.answer_value != null) {
       answer = String(response.answer_value);
+      numeric = true;
     }
   }
   return (
-    <div style={{
-      padding: "10px 0",
-      borderBottom: `1px solid ${C.border}`,
-    }}>
+    <div style={{ padding: "10px 0" }}>
+      <div style={{ ...T.footnote, color: C.dim, marginBottom: 2, overflowWrap: "anywhere" }}>
+        {question.question_text}
+      </div>
       <div style={{
-        color: C.dim, fontSize: 12, lineHeight: 1.4, marginBottom: 4,
-      }}>{question.question_text}</div>
-      <div style={{
-        color: response ? C.text : C.dim,
-        fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap",
-        fontStyle: response ? "normal" : "italic",
-      }}>{answer}</div>
+        ...T.body,
+        color: response ? C.text : C.dimmer,
+        whiteSpace: "pre-wrap",
+        overflowWrap: "anywhere",
+      }}>
+        {numeric ? <Num>{answer}</Num> : response ? <UserText>{answer}</UserText> : answer}
+      </div>
     </div>
   );
 }
 
-// ── Exam panel ─────────────────────────────────────────────────────
-
 // ── Cycle links panel — surfaces the shared survey URL on this
 // candidate's page so admins don't have to navigate back to Cycles. ─
 
-function CycleLinksPanel({ cycle, onCopy }) {
+function CycleLinksPanel({ cycle }) {
   const { t } = useI18n();
   const surveyUrl = surveyUrlForCycle(cycle);
   if (!surveyUrl) {
     return (
       <Panel title={t("rec.candidate.cycle_links")}>
-        <div style={{ color: C.dim, fontSize: 13, lineHeight: 1.6 }}>
+        <div style={{ ...T.footnote, color: C.dim }}>
           {t("rec.candidate.no_survey_url")}
         </div>
       </Panel>
@@ -2172,27 +2216,19 @@ function CycleLinksPanel({ cycle, onCopy }) {
   }
   return (
     <Panel title={t("rec.candidate.cycle_links")}>
-      <div style={{
-        color: C.dim, fontSize: 12, marginBottom: 6,
-        letterSpacing: "0.5px", textTransform: "uppercase",
-      }}>
-        {t("rec.candidate.shared_survey_url")}
-      </div>
-      <div style={{
-        fontFamily: FONT_MONO, fontSize: 12,
-        padding: "10px 12px", background: C.cardBg,
-        border: `1px solid ${C.border}`, borderRadius: 3,
-        wordBreak: "break-all", color: C.text, lineHeight: 1.5,
-        marginBottom: 12,
-      }}>{surveyUrl}</div>
-      <Btn small onClick={() => onCopy(surveyUrl)}>
-        {t("rec.candidate.copy_survey_url")}
-      </Btn>
+      <Label>{t("rec.candidate.shared_survey_url")}</Label>
+      <CopyField
+        value={surveyUrl}
+        copyLabel={t("common.copy")}
+        copiedLabel={t("common.copied")}
+      />
     </Panel>
   );
 }
 
-function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl }) {
+// ── Exam panel ─────────────────────────────────────────────────────
+
+function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock }) {
   const { t } = useI18n();
   const url = examUrlFor(cycle, candidate);
   const finished = attempt?.finished_at;
@@ -2202,68 +2238,55 @@ function ExamPanel({ candidate, cycle, attempt, busy, onToggleUnlock, onCopyUrl 
     <Panel title={t("rec.candidate.exam")}>
       {/* Score display first — most important info when present */}
       {finished && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 14, marginBottom: 14,
-          padding: "14px 16px", border: `1px solid ${C.border}`,
-          background: C.cardBg, borderRadius: 4,
-        }}>
-          <div style={{
-            fontFamily: FONT_MONO, fontSize: 28, fontWeight: 700, color: C.bright,
-          }}>{attempt.score} / {attempt.total}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{
-              fontSize: 11, color: C.dim, letterSpacing: "0.8px",
-              textTransform: "uppercase", fontWeight: 600,
-            }}>{t("rec.candidate.exam_score")}</div>
-            <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>
-              {fmtWhen(attempt.finished_at, t)}
-            </div>
-          </div>
-        </div>
+        <>
+          <Stat
+            value={`${attempt.score} / ${attempt.total}`}
+            label={
+              <>
+                {t("rec.candidate.exam_score")}
+                <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+                <Num>{fmtWhen(attempt.finished_at, t)}</Num>
+              </>
+            }
+          />
+          <Divider style={{ margin: "14px 0 10px" }} />
+        </>
       )}
 
       {inProgress && (
-        <div style={{
-          padding: "10px 14px", background: C.warnBg,
-          border: `1px solid ${C.warnBorderFaint}`, color: C.warn,
-          borderRadius: 3, fontSize: 13, marginBottom: 14,
-        }}>
+        <Notice tone="warn" icon="clock" style={{ marginBottom: 10 }}>
           {t("rec.candidate.exam_in_progress_note")}
-        </div>
+        </Notice>
       )}
 
+      <Switch
+        checked={!!candidate.exam_unlocked}
+        onChange={onToggleUnlock}
+        disabled={busy}
+        label={t("rec.candidate.exam_unlocked_label")}
+      />
+
       {!attempt && (
-        <div style={{ color: C.dim, fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+        <div style={{ ...T.footnote, color: C.dim, marginTop: 6 }}>
           {candidate.exam_unlocked
             ? t("rec.candidate.exam_unlocked_explainer")
             : t("rec.candidate.exam_locked_explainer")}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-        <Btn small onClick={onToggleUnlock} disabled={busy}>
-          {candidate.exam_unlocked
-            ? t("rec.candidate.lock_exam")
-            : t("rec.candidate.unlock_exam")}
-        </Btn>
-        {candidate.exam_unlocked && url && (
-          <Btn small onClick={() => onCopyUrl(url)}>{t("rec.candidate.copy_exam_url")}</Btn>
-        )}
-      </div>
-
       {candidate.exam_unlocked && url && (
-        <div style={{
-          fontFamily: FONT_MONO, fontSize: 12,
-          padding: "10px 12px", background: C.cardBg,
-          border: `1px solid ${C.border}`, borderRadius: 3,
-          wordBreak: "break-all", color: C.text, lineHeight: 1.5,
-        }}>{url}</div>
+        <CopyField
+          value={url}
+          copyLabel={t("common.copy")}
+          copiedLabel={t("common.copied")}
+          style={{ marginTop: 12 }}
+        />
       )}
 
       {candidate.exam_unlocked && !url && (
-        <div style={{ color: C.warn, fontSize: 12 }}>
+        <Notice tone="warn" style={{ marginTop: 12 }}>
           {t("rec.candidate.no_exam_url")}
-        </div>
+        </Notice>
       )}
     </Panel>
   );
@@ -2322,18 +2345,36 @@ function InterviewPanel({
 
   return (
     <Panel title={t("rec.interview.title")}>
-      <div style={{ color: C.dim, fontSize: 12, marginBottom: 16, lineHeight: 1.6 }}>
+      <div style={{ ...T.footnote, color: C.dim, marginBottom: 16 }}>
         {t("rec.interview.subtitle")}
       </div>
 
-      <Field label={`${t("rec.interview.your_interview")} · ${currentUserCallsign || ""}`}>
+      <Field label={
+        <>
+          {t("rec.interview.your_interview")}
+          {currentUserCallsign ? (
+            <>
+              <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+              <Mono>{currentUserCallsign}</Mono>
+            </>
+          ) : null}
+        </>
+      }>
         <ScorePicker value={score} onChange={setScore} />
       </Field>
       <Field label={t("rec.interview.tags")}>
         <TagPicker selected={tags} onChange={setTags} />
       </Field>
-      <Field label={`${t("rec.interview.recommendations")} · ${recommended.length}/${MAX_RECOMMENDATIONS}`}>
-        <div style={{ color: C.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+      <Field
+        label={
+          <>
+            {t("rec.interview.recommendations")}
+            <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+            <Num>{`${recommended.length}/${MAX_RECOMMENDATIONS}`}</Num>
+          </>
+        }
+      >
+        <div style={{ ...T.footnote, color: C.dim, marginBottom: 10 }}>
           {t("rec.interview.recommendations_hint")}
         </div>
         <RecommendPicker
@@ -2347,22 +2388,25 @@ function InterviewPanel({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder={t("rec.interview.notes_ph")}
+          aria-label={t("rec.interview.notes")}
         />
       </Field>
-      <Btn primary onClick={save} disabled={busy}>
+      <Btn primary type="button" onClick={save} disabled={busy} busy={busy}>
         {busy ? t("rec.saving") : t("rec.interview.save_btn")}
       </Btn>
       <ErrLine>{err}</ErrLine>
       <OkLine>{ok}</OkLine>
 
       {others.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ ...S.label, marginBottom: 10 }}>
-            {t("rec.interview.others")}
+        <div style={{ marginTop: 22 }}>
+          <Label style={{ marginBottom: 8 }}>{t("rec.interview.others")}</Label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {others.map((iv) => (
+              <Tile key={iv.id}>
+                <InterviewSummary interview={iv} namesById={namesById} />
+              </Tile>
+            ))}
           </div>
-          {others.map((iv) => (
-            <OtherInterviewCard key={iv.id} interview={iv} namesById={namesById} />
-          ))}
         </div>
       )}
     </Panel>
@@ -2399,112 +2443,103 @@ function RecommendPicker({ roster, selected, onChange }) {
     <>
       {selected.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-          {selected.map((id, i) => (
-            <span
-              key={id}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "5px 6px 5px 12px",
-                background: C.badgeBright,
-                color: C.bright,
-                border: `1px solid ${C.borderBright}`,
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              <span style={{ fontFamily: FONT_MONO, color: C.dim, fontSize: 11 }}>
-                {i + 1}
-              </span>
-              {byId.get(id)?.full_name || t("rec.interview.rec_unknown")}
-              <button
-                type="button"
-                onClick={() => onChange(selected.filter((x) => x !== id))}
-                aria-label={t("common.remove")}
+          {selected.map((id, i) => {
+            const name = byId.get(id)?.full_name || t("rec.interview.rec_unknown");
+            return (
+              <span
+                key={id}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  width: 20,
-                  height: 20,
-                  background: "transparent",
-                  color: C.dim,
-                  border: "none",
-                  borderRadius: 999,
-                  cursor: "pointer",
-                  fontSize: 15,
-                  lineHeight: 1,
-                  fontFamily: "inherit",
+                  gap: 8,
+                  maxWidth: "100%",
+                  minHeight: 34,
+                  boxSizing: "border-box",
+                  paddingBlock: 3,
+                  paddingInline: "12px 4px",
+                  background: C.fill,
+                  color: C.bright,
+                  borderRadius: R.pill,
+                  ...T.footnote,
+                  fontWeight: 600,
                 }}
-              >×</button>
-            </span>
-          ))}
+              >
+                <Num style={{ color: C.dim, fontWeight: 500 }}>{i + 1}</Num>
+                <span style={{ minWidth: 0, ...ELLIPSIS }}>{name}</span>
+                <button
+                  type="button"
+                  data-press="scale"
+                  data-press-depth="deep"
+                  onClick={() => onChange(selected.filter((x) => x !== id))}
+                  aria-label={`${t("common.remove")} — ${name}`}
+                  title={t("common.remove")}
+                  style={{
+                    all: "unset",
+                    boxSizing: "border-box",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    width: 28,
+                    height: 28,
+                    borderRadius: R.pill,
+                    background: C.fill,
+                    color: C.dim,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Icon name="xmark" size={12} strokeWidth={2.6} />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
       {full ? (
-        <div style={{ color: C.dim, fontSize: 12 }}>{t("rec.interview.rec_full")}</div>
+        <div style={{ ...T.footnote, color: C.dim }}>{t("rec.interview.rec_full")}</div>
       ) : roster.length === 0 ? (
-        <div style={{ color: C.dim, fontSize: 12 }}>{t("rec.interview.rec_empty_roster")}</div>
+        <div style={{ ...T.footnote, color: C.dim }}>{t("rec.interview.rec_empty_roster")}</div>
       ) : (
         <>
-          <Input
+          <SearchInput
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("rec.interview.rec_search_ph")}
+            aria-label={t("rec.interview.recommendations")}
           />
           {query.trim() !== "" && (
-            <div style={{
-              marginTop: 6,
-              border: `1px solid ${C.border}`,
-              borderRadius: 10,
-              maxHeight: 200,
-              overflowY: "auto",
-            }}>
+            <Tile
+              padding="2px 12px"
+              style={{ marginTop: 8, maxHeight: 232, overflowY: "auto", animation: RISE }}
+            >
               {matches.length === 0 && (
-                <div style={{ padding: "12px 14px", color: C.dim, fontSize: 13 }}>
+                <div style={{ padding: "12px 0", ...T.footnote, color: C.dim }}>
                   {t("rec.interview.rec_no_matches")}
                 </div>
               )}
-              {matches.map((c, i) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => pick(c.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    width: "100%",
-                    boxSizing: "border-box",
-                    minHeight: 44,
-                    padding: "10px 14px",
-                    background: "transparent",
-                    border: "none",
-                    borderTop: i === 0 ? "none" : `1px solid ${C.border}`,
-                    textAlign: "start",
-                    cursor: "pointer",
-                    color: C.text,
-                    fontFamily: "inherit",
-                    fontSize: 13,
-                  }}
-                >
-                  <span style={{ flex: 1, minWidth: 0, color: C.bright, fontWeight: 600 }}>
-                    {c.full_name || "—"}
-                  </span>
-                  <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: C.dim }}>
-                    {c.personal_id || ""}
-                  </span>
-                  {c.team ? (
-                    <span style={{ fontSize: 11, color: C.dim }}>
-                      {t("rec.candidates.team")} {c.team}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
+              <List>
+                {matches.map((c) => (
+                  <Row
+                    key={c.id}
+                    onClick={() => pick(c.id)}
+                    title={c.full_name || "—"}
+                    subtitle={
+                      <>
+                        <Mono>{c.personal_id || ""}</Mono>
+                        {c.team ? (
+                          <>
+                            {c.personal_id ? <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span> : null}
+                            {t("rec.candidates.team")} {c.team}
+                          </>
+                        ) : null}
+                      </>
+                    }
+                    trailing={<Icon name="plus" size={16} strokeWidth={2.2} style={{ color: C.dim }} />}
+                  />
+                ))}
+              </List>
+            </Tile>
           )}
         </>
       )}
@@ -2512,23 +2547,22 @@ function RecommendPicker({ roster, selected, onChange }) {
   );
 }
 
-// The names one interviewer recorded, shown read-only on their card and
-// in the leaderboard drill-down.
+// The names one interviewer recorded, shown read-only on their tile.
 function RecommendedNames({ ids, namesById }) {
   const { t } = useI18n();
   if (!ids || ids.length === 0) return null;
   return (
     <div style={{
-      display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 8,
+      display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8,
     }}>
-      <span style={{
-        fontSize: 10, color: C.dim, letterSpacing: "0.7px", textTransform: "uppercase",
-      }}>
+      <span style={{ ...T.caption, color: C.dim }}>
         {t("rec.interview.recommended")}
       </span>
       {ids.map((id) => (
-        <Badge key={id} tone="bright">
-          {namesById?.get(id) || t("rec.interview.rec_unknown")}
+        <Badge key={id} tone="bright" style={{ maxWidth: "100%" }}>
+          <span style={{ minWidth: 0, ...ELLIPSIS }}>
+            {namesById?.get(id) || t("rec.interview.rec_unknown")}
+          </span>
         </Badge>
       ))}
     </div>
@@ -2543,28 +2577,23 @@ function RecommendationsPanel({ incoming, outgoing, onOpenCandidate }) {
   const count = incoming?.length || 0;
   return (
     <Panel title={t("rec.candidate.recommendations_title")}>
-      <div style={{
-        display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16,
-      }}>
-        <span style={{
-          fontFamily: FONT_MONO, fontSize: 32, fontWeight: 700,
-          color: recColor(count), lineHeight: 1,
-        }}>{count}</span>
-        <span style={{
-          color: C.dim, fontSize: 11, letterSpacing: "0.8px", textTransform: "uppercase",
-        }}>{t("rec.candidate.rec_count")}</span>
-      </div>
+      <Stat
+        value={count}
+        label={t("rec.candidate.rec_count")}
+        tone={recTone(count)}
+        style={{ marginBottom: 16 }}
+      />
 
-      <div style={{ ...S.label, marginBottom: 8 }}>{t("rec.candidate.recommended_by")}</div>
+      <Label>{t("rec.candidate.recommended_by")}</Label>
       <RecNameList
         people={incoming}
         emptyLabel={t("rec.candidate.no_recommendations")}
         onOpen={onOpenCandidate}
       />
 
-      <div style={{ height: 1, background: C.border, margin: "18px 0" }} />
+      <Divider style={{ margin: "16px 0 14px" }} />
 
-      <div style={{ ...S.label, marginBottom: 8 }}>{t("rec.candidate.recommends")}</div>
+      <Label>{t("rec.candidate.recommends")}</Label>
       <RecNameList
         people={outgoing}
         emptyLabel={t("rec.candidate.no_recommends")}
@@ -2574,29 +2603,51 @@ function RecommendationsPanel({ incoming, outgoing, onOpenCandidate }) {
   );
 }
 
+// 1–10 as a row of round buttons (two rows of five on phones, so each
+// stays a comfortable target).
 function ScorePicker({ value, onChange }) {
+  const { t } = useI18n();
   const isMobile = useIsMobile();
   return (
-    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+    <div
+      role="radiogroup"
+      aria-label={t("rec.interview.score")}
+      style={isMobile ? {
+        display: "grid",
+        gridTemplateColumns: "repeat(5, minmax(36px, 44px))",
+        gap: 10,
+      } : {
+        display: "flex",
+        gap: 8,
+        flexWrap: "wrap",
+      }}
+    >
       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => {
         const active = Number(value) === n;
         return (
           <button
             key={n}
             type="button"
+            role="radio"
+            aria-checked={active}
+            data-press="scale"
             onClick={() => onChange(n)}
             style={{
-              flex: isMobile ? "1 1 18%" : "0 0 auto",
-              minWidth: 36,
-              minHeight: 40,
-              padding: "8px 10px",
-              background: active ? C.bright : "transparent",
-              color: active ? C.btnActiveColor : C.text,
-              border: `1px solid ${active ? C.bright : C.border}`,
-              borderRadius: 2,
-              fontFamily: FONT_MONO,
-              fontSize: 14,
-              fontWeight: 700,
+              all: "unset",
+              boxSizing: "border-box",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              ...(isMobile
+                ? { width: "100%", aspectRatio: "1 / 1" }
+                : { width: 38, height: 38 }),
+              borderRadius: R.pill,
+              background: active ? C.tint : C.fill,
+              color: active ? C.onTint : C.bright,
+              fontFamily: FONT,
+              ...T.body,
+              ...NUM,
+              fontWeight: 600,
               cursor: "pointer",
             }}
           >{n}</button>
@@ -2606,60 +2657,13 @@ function ScorePicker({ value, onChange }) {
   );
 }
 
-function OtherInterviewCard({ interview, namesById }) {
-  const { t } = useI18n();
-  const interviewer = interview.interviewer;
-  return (
-    <div style={{
-      padding: "14px",
-      border: `1px solid ${C.border}`,
-      borderRadius: 4,
-      marginBottom: 10,
-      background: C.cardBg,
-    }}>
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        marginBottom: 10, gap: 10, flexWrap: "wrap",
-      }}>
-        <div style={{
-          fontFamily: FONT_MONO, fontSize: 13, color: C.bright,
-          fontWeight: 600, letterSpacing: "0.5px",
-        }}>
-          {interviewer?.callsign || "—"}
-          <span style={{ color: C.dim, fontWeight: 400, marginInlineStart: 8 }}>
-            {interviewer?.full_name || ""}
-          </span>
-        </div>
-        {interview.score != null && (
-          <Badge tone="bright">
-            {t("rec.interview.score")}: {interview.score} / 10
-          </Badge>
-        )}
-      </div>
-      {interview.tags && interview.tags.length > 0 && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          {interview.tags.map((tag, i) => (
-            <Badge key={i} tone={tagTone(tag)}>{tagLabel(tag, t)}</Badge>
-          ))}
-        </div>
-      )}
-      <RecommendedNames ids={interview.recommended_ids} namesById={namesById} />
-      {interview.notes && (
-        <div style={{
-          fontSize: 13, color: C.text, lineHeight: 1.6,
-          whiteSpace: "pre-wrap",
-        }}>{interview.notes}</div>
-      )}
-    </div>
-  );
-}
-
 // ── Tag picker (predefined chips) ──────────────────────────────────
 
 function TagPicker({ selected, onChange }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: isMobile ? 8 : 6, flexWrap: "wrap" }}>
       {PREDEFINED_TAGS.map((tag) => {
         const active = selected.includes(tag.key);
         const colors = chipColors(tag.tone, active);
@@ -2667,23 +2671,27 @@ function TagPicker({ selected, onChange }) {
           <button
             key={tag.key}
             type="button"
+            data-press="scale"
+            aria-pressed={active}
             onClick={() => {
               if (active) onChange(selected.filter((s) => s !== tag.key));
               else onChange([...selected, tag.key]);
             }}
             style={{
-              padding: "7px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: "0.4px",
-              textTransform: "uppercase",
+              all: "unset",
+              boxSizing: "border-box",
+              display: "inline-flex",
+              alignItems: "center",
+              minHeight: isMobile ? 36 : 30,
+              paddingInline: isMobile ? 14 : 12,
+              borderRadius: R.pill,
               background: colors.bg,
               color: colors.fg,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 2,
+              fontFamily: FONT,
+              ...(isMobile ? T.callout : T.footnote),
+              fontWeight: 600,
+              whiteSpace: "nowrap",
               cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "background 140ms ease-out, border-color 140ms ease-out",
             }}
           >
             {tagLabel(tag.key, t)}
@@ -2694,21 +2702,11 @@ function TagPicker({ selected, onChange }) {
   );
 }
 
+// Unselected tags are quiet gray capsules; a selected tag fills with its
+// tone (strength = green, concern = amber, neutral = ink).
 function chipColors(tone, active) {
-  if (!active) {
-    return { bg: "transparent", fg: C.dim, border: C.border };
-  }
-  if (tone === "ok")   return { bg: C.badgeOk,   fg: C.ok,   border: C.badgeOkBorder };
-  if (tone === "warn") return { bg: C.badgeWarn, fg: C.warn, border: C.badgeWarnBorder };
-  return { bg: C.badgeBright, fg: C.bright, border: C.borderBright };
-}
-
-// ── Helpers ───────────────────────────────────────────────────────
-
-function statusTone(s) {
-  if (s === "accepted") return "ok";
-  if (s === "rejected") return "error";
-  if (s === "exam_done" || s === "interviewed" || s === "ready_for_exam") return "bright";
-  if (s === "survey_done") return "warn";
-  return "default";
+  if (!active) return { bg: C.fill, fg: C.text };
+  if (tone === "ok")   return { bg: C.ok,   fg: C.bg };
+  if (tone === "warn") return { bg: C.warn, fg: C.bg };
+  return { bg: C.tint, fg: C.onTint };
 }

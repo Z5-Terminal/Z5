@@ -1,11 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useAuth, roleLabelT, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
 import { useConsole } from "../console";
 import { useTheme } from "../ThemeContext";
-import { Page, AppShell, NavItem, NavLabel, TabItem, Badge } from "../ui";
+import {
+  Page, AppShell, MobileNavBar, NavItem, NavLabel, Badge, Avatar, Menu,
+  IconButton, ViewTransition, ELLIPSIS,
+} from "../ui";
+import { Icon } from "../icons";
 import { useIsMobile } from "../useIsMobile";
-import { C, FONT_MONO } from "../theme";
+import { C, FONT_MONO, T } from "../theme";
+import { profileAvatarPublicUrl } from "../data/avatars";
 import Home from "./Home";
 import Calendar from "./Calendar";
 import Profile from "./Profile";
@@ -19,69 +24,18 @@ import Cycles from "./recruitment/Cycles";
 import Candidates from "./recruitment/Candidates";
 
 // ── Tab icons ────────────────────────────────────────────────────────
-// Subject-matched line icons (mobile bottom bar + anywhere tabs render).
-// All inherit currentColor so active/dim tab tinting works untouched.
-function tabSvg(children) {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {children}
-    </svg>
-  );
-}
-
-const ICONS = {
-  // Home — house
-  home: tabSvg(<>
-    <path d="M3 9.5 12 3l9 6.5V20a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 20z" />
-    <path d="M9 21.5V13h6v8.5" />
-  </>),
-  // Calendar
-  calendar: tabSvg(<>
-    <rect x="3" y="4.5" width="18" height="17" rx="2.5" />
-    <path d="M16 2.5v4M8 2.5v4M3 10h18" />
-  </>),
-  // Missions — crosshair / scope reticle
-  missions: tabSvg(<>
-    <circle cx="12" cy="12" r="7.5" />
-    <path d="M12 1.5V6M12 18v4.5M1.5 12H6M18 12h4.5" />
-    <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-  </>),
-  // Knowledge — book (unchanged shape)
-  knowledge: tabSvg(<>
-    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-  </>),
-  // Course progress — rising chart
-  progress: tabSvg(<>
-    <path d="M3 20.5h18" />
-    <path d="M4 16.5 9.5 11l4 4L20 8" />
-    <path d="M15 8h5v5" />
-  </>),
-  // Roster — two people
-  roster: tabSvg(<>
-    <path d="M16.5 21v-2a4 4 0 0 0-4-4h-7a4 4 0 0 0-4 4v2" transform="translate(1.5 0)" />
-    <circle cx="10.5" cy="7" r="4" />
-    <path d="M22.5 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </>),
-  // Profile — single person
-  profile: tabSvg(<>
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </>),
-  // Recruitment cycles — circular arrows
-  cycles: tabSvg(<>
-    <path d="M23 4v6h-6" />
-    <path d="M1 20v-6h6" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
-    <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </>),
-  // Candidates — person + check
-  candidates: tabSvg(<>
-    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="8.5" cy="7" r="4" />
-    <path d="M17 11l2 2 4-4" />
-  </>),
+// Subject-matched line icons from the shared set (icons.jsx). They
+// inherit currentColor, so active/dim tinting needs nothing extra.
+const TAB_ICON = {
+  home: "home",
+  calendar: "calendar",
+  missions: "target",
+  knowledge: "book",
+  progress: "chart",
+  roster: "people",
+  profile: "person",
+  cycles: "cycles",
+  candidates: "personCheck",
 };
 
 // Default view key per console — used when entering a console or when
@@ -92,13 +46,12 @@ function defaultViewFor(mode) {
 }
 
 export default function Shell() {
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const { t } = useI18n();
-  const { consoleMode, mySquad } = useConsole();
+  const { consoleMode, mySquad, clearConsole } = useConsole();
   // Subscribe to theme so the sidebar / mobile top bar re-render after
-  // a theme toggle. Without this, NavItem/NavLabel inline styles keep
-  // their stale C.* values (because C is a mutable module export) and
-  // the sidebar text becomes near-invisible on the new background.
+  // a theme toggle. Without this, inline styles keep their stale C.*
+  // values (because C is a mutable module export).
   const { mode } = useTheme();
   // z5-logo.png is black line art — invert it on the dark (night) theme.
   const logoFilter = mode === "dark" ? "invert(0.9)" : "none";
@@ -109,6 +62,11 @@ export default function Shell() {
   const [createKind, setCreateKind] = useState("operational");
   const isMobile = useIsMobile();
 
+  // Keyed on the profile object (not just the path): a re-upload keeps the
+  // same storage path, and refreshProfile() hands us a new object, which
+  // re-derives the cache-busted URL so the new photo shows here too.
+  const avatarSrc = useMemo(() => profileAvatarPublicUrl(profile?.avatar_url), [profile]);
+
   const isAdminOrOfficer = canManageSquads(profile?.role);
   const isBootcamp = mySquad?.is_bootcamp === true;
 
@@ -116,33 +74,38 @@ export default function Shell() {
   const consoleLabel = useMemo(() => {
     if (consoleMode === "bootcamp")    return t("console.bootcamp");
     if (consoleMode === "recruitment") return t("console.recruitment");
-    return t("nav.terminal"); // Z5 TERMINAL
+    return t("nav.terminal"); // Z5 Terminal
   }, [consoleMode, t]);
 
   // ── Tab definitions per console ───────────────────────────────────
   const tabs = useMemo(() => {
+    const mk = (key, label) => ({
+      key,
+      label,
+      iconName: TAB_ICON[key],
+      icon: <Icon name={TAB_ICON[key]} size={23} strokeWidth={1.8} />,
+    });
     if (consoleMode === "recruitment") {
-      const recTabs = [
-        { key: "cycles",      label: t("nav.cycles"),      icon: ICONS.cycles },
-        { key: "candidates",  label: t("nav.candidates"),  icon: ICONS.candidates },
+      return [
+        mk("cycles", t("nav.cycles")),
+        mk("candidates", t("nav.candidates")),
+        mk("profile", t("nav.profile")),
       ];
-      recTabs.push({ key: "profile", label: t("nav.profile"), icon: ICONS.profile });
-      return recTabs;
     }
     // terminal + bootcamp share the operational tab set
     const opsTabs = [
-      { key: "home",      label: t("nav.home"),      icon: ICONS.home },
-      { key: "calendar",  label: t("nav.calendar"),  icon: ICONS.calendar },
-      { key: "missions",  label: t("nav.missions"),  icon: ICONS.missions },
-      { key: "knowledge", label: t("nav.knowledge"), icon: ICONS.knowledge },
+      mk("home", t("nav.home")),
+      mk("calendar", t("nav.calendar")),
+      mk("missions", t("nav.missions")),
+      mk("knowledge", t("nav.knowledge")),
     ];
     if (consoleMode === "bootcamp") {
-      opsTabs.splice(3, 0, { key: "progress", label: t("nav.progress"), icon: ICONS.progress });
+      opsTabs.splice(3, 0, mk("progress", t("nav.progress")));
     }
     if (isAdminOrOfficer) {
-      opsTabs.push({ key: "roster", label: t("nav.roster"), icon: ICONS.roster });
+      opsTabs.push(mk("roster", t("nav.roster")));
     }
-    opsTabs.push({ key: "profile", label: t("nav.profile"), icon: ICONS.profile });
+    opsTabs.push(mk("profile", t("nav.profile")));
     return opsTabs;
   }, [consoleMode, isAdminOrOfficer, t]);
 
@@ -162,37 +125,64 @@ export default function Shell() {
     }
   }
 
+  // ── View transitions ──────────────────────────────────────────────
+  // Switching tabs cross-fades; going into a mission pushes in from the
+  // trailing edge and coming back pops from the leading edge, so the
+  // hierarchy reads spatially. Every view change starts at the top.
+  const depth = view === "missions" && missionView !== "list" ? 1 : 0;
+  const viewKey = `${consoleMode}:${view}:${depth ? `${missionView}:${activeMissionId || ""}` : "root"}`;
+  const prev = useRef({ view, depth });
+  let kind = "tab";
+  if (prev.current.view === view) {
+    if (depth > prev.current.depth) kind = "push";
+    else if (depth < prev.current.depth) kind = "pop";
+  }
+  const kindRef = useRef(kind);
+  if (prev.current.view !== view || prev.current.depth !== depth) kindRef.current = kind;
+  useLayoutEffect(() => {
+    prev.current = { view, depth };
+    if (typeof window !== "undefined") window.scrollTo(0, 0);
+  }, [viewKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Account menu (profile / switch console / log out) — the way out is
+  // always one tap away, wherever you are.
+  const accountItems = [
+    { key: "profile", label: t("nav.profile"), icon: "person", onSelect: () => goTab("profile") },
+    { key: "switch", label: t("console.switch"), icon: "swap", onSelect: () => clearConsole() },
+    "divider",
+    { key: "logout", label: t("nav.logout"), icon: "logout", danger: true, onSelect: () => signOut() },
+  ];
+
+  const mainTabs = tabs.filter((tab) => tab.key !== "profile" && tab.key !== "roster");
+
   // ── Desktop sidebar ───────────────────────────────────────────────
   const sidebar = (
     <>
       <div style={{
-        padding: "0 14px 24px",
-        borderBottom: `1px solid ${C.border}`,
-        marginBottom: 12,
+        padding: "4px 12px 14px",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
+        alignItems: "flex-start",
         gap: 10,
       }}>
         <img
           src={`${import.meta.env.BASE_URL}z5-logo.png`}
           alt="Z5"
-          style={{ width: "100%", maxWidth: 150, maxHeight: 90, objectFit: "contain", display: "block", filter: logoFilter }}
+          style={{ height: 56, width: "auto", maxWidth: 150, objectFit: "contain", display: "block", filter: logoFilter }}
         />
-        <div style={{
-          color: C.bright,
-          fontSize: 16,
-          fontWeight: 700,
-          letterSpacing: "2px",
-          textAlign: "center",
-        }}>
+        <div style={{ ...T.title3, color: C.bright }}>
           {consoleLabel}
         </div>
       </div>
 
       <NavLabel>{t("nav.navigation")}</NavLabel>
-      {tabs.filter((tab) => tab.key !== "profile" && tab.key !== "roster").map((tab) => (
-        <NavItem key={tab.key} active={view === tab.key} onClick={() => goTab(tab.key)}>
+      {mainTabs.map((tab) => (
+        <NavItem
+          key={tab.key}
+          active={view === tab.key}
+          onClick={() => goTab(tab.key)}
+          icon={<Icon name={tab.iconName} size={18} />}
+        >
           {tab.label}
         </NavItem>
       ))}
@@ -200,70 +190,82 @@ export default function Shell() {
       {isAdminOrOfficer && tabs.some((tab) => tab.key === "roster") && (
         <>
           <NavLabel>{t("nav.admin")}</NavLabel>
-          <NavItem active={view === "roster"} onClick={() => goTab("roster")}>{t("nav.roster")}</NavItem>
+          <NavItem active={view === "roster"} onClick={() => goTab("roster")} icon={<Icon name="people" size={18} />}>
+            {t("nav.roster")}
+          </NavItem>
         </>
       )}
 
       <NavLabel>{t("nav.account")}</NavLabel>
-      <NavItem active={view === "profile"} onClick={() => goTab("profile")}>{t("nav.profile")}</NavItem>
+      <NavItem active={view === "profile"} onClick={() => goTab("profile")} icon={<Icon name="person" size={18} />}>
+        {t("nav.profile")}
+      </NavItem>
 
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, minHeight: 16 }} />
 
-      <div style={{ borderTop: `1px solid ${C.border}`, padding: "16px 14px 4px", marginTop: 16 }}>
-        <div style={{ fontFamily: FONT_MONO, fontSize: 13, color: C.bright, fontWeight: 600, letterSpacing: "0.5px", marginBottom: 4 }}>
-          {profile?.callsign || "—"}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        paddingBlock: "10px 2px",
+        paddingInline: "12px 8px",
+        borderTop: `1px solid ${C.separator}`,
+        marginTop: 8,
+      }}>
+        <Avatar src={avatarSrc} name={profile?.callsign || profile?.full_name} size={34} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 13, color: C.bright, fontWeight: 600, letterSpacing: "0.02em", ...ELLIPSIS }}>
+            {profile?.callsign || "—"}
+          </div>
+          <div style={{ ...T.caption, color: C.dim, ...ELLIPSIS }}>
+            {roleLabelT(profile?.role, t)}
+            {isBootcamp ? ` · ${t("nav.bootcamp")}` : ""}
+            {!profile?.squad_id ? ` · ${t("nav.nosquad")}` : ""}
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: C.dim, marginBottom: 8 }}>
-          {profile?.full_name || profile?.email}
-        </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <Badge tone="bright">{roleLabelT(profile?.role, t)}</Badge>
-          {isBootcamp && <Badge tone="warn">{t("nav.bootcamp")}</Badge>}
-          {!profile?.squad_id && <Badge tone="warn">{t("nav.nosquad")}</Badge>}
-        </div>
+        <Menu
+          align="start"
+          items={accountItems}
+          trigger={(p) => <IconButton icon="ellipsis" label={t("nav.account")} size={30} {...p} />}
+        />
       </div>
     </>
   );
 
   // ── Mobile top bar ────────────────────────────────────────────────
   const mobileTopBar = (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, minHeight: 52 }}>
-      <img
-        src={`${import.meta.env.BASE_URL}z5-logo.png`}
-        alt="Z5"
-        style={{ height: 52, width: "auto", maxWidth: 92, objectFit: "contain", flexShrink: 0, filter: logoFilter }}
-      />
-      <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-        <div style={{ color: C.bright, fontSize: 18, fontWeight: 800, letterSpacing: "2px", lineHeight: 1.1 }}>
-          {consoleLabel}
+    <MobileNavBar
+      leading={
+        <img
+          src={`${import.meta.env.BASE_URL}z5-logo.png`}
+          alt="Z5"
+          style={{ height: 30, width: "auto", maxWidth: 58, objectFit: "contain", display: "block", filter: logoFilter }}
+        />
+      }
+      brand={
+        <div style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0, maxWidth: "100%" }}>
+          <span style={{ ...T.headline, color: C.bright, ...ELLIPSIS }}>{consoleLabel}</span>
+          {isBootcamp && <Badge tone="warn">{t("nav.bootcamp")}</Badge>}
         </div>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6, marginTop: 3,
-          fontSize: 12, color: C.dim, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
-        }}>
-          <span style={{ fontFamily: FONT_MONO, color: C.bright, fontWeight: 600, letterSpacing: "0.5px" }}>
-            {profile?.callsign || "—"}
-          </span>
-          <span style={{ color: C.dimmer }}>·</span>
-          <span>{roleLabelT(profile?.role, t)}</span>
-          {isBootcamp && (
-            <>
-              <span style={{ color: C.dimmer }}>·</span>
-              <span style={{ color: C.warn }}>{t("nav.bootcamp")}</span>
-            </>
+      }
+      trailing={
+        <Menu
+          align="end"
+          items={accountItems}
+          trigger={(p) => (
+            <button
+              type="button"
+              data-press="scale"
+              aria-label={t("nav.account")}
+              {...p}
+              style={{ all: "unset", cursor: "pointer", display: "flex", borderRadius: 999 }}
+            >
+              <Avatar src={avatarSrc} name={profile?.callsign || profile?.full_name} size={32} />
+            </button>
           )}
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── Mobile bottom tab bar ─────────────────────────────────────────
-  const mobileTabBar = (
-    <>
-      {tabs.map((tab) => (
-        <TabItem key={tab.key} active={view === tab.key} onClick={() => goTab(tab.key)} icon={tab.icon} label={tab.label} />
-      ))}
-    </>
+        />
+      }
+    />
   );
 
   // ── Missions sub-router (terminal + bootcamp) ─────────────────────
@@ -336,9 +338,13 @@ export default function Shell() {
       <AppShell
         sidebar={sidebar}
         mobileTopBar={isMobile ? mobileTopBar : null}
-        mobileTabBar={isMobile ? mobileTabBar : null}
+        tabs={tabs}
+        activeTab={view}
+        onSelectTab={goTab}
       >
-        {renderView()}
+        <ViewTransition viewKey={viewKey} kind={kindRef.current}>
+          {renderView()}
+        </ViewTransition>
       </AppShell>
     </Page>
   );

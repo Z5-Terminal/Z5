@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useAuth, canCreateInvites, canManageSquads } from "../auth";
 import { useI18n } from "../i18n";
-import { Field, Input, Textarea, Btn, ErrLine, OkLine } from "../ui";
-import { useIsMobile } from "../useIsMobile";
-import { C } from "../theme";
+import { Field, Input, Textarea, Btn, ErrLine, OkLine, Segmented } from "../ui";
+import { C, T } from "../theme";
 import { postAnnouncement } from "../data/announcements";
 
 /**
@@ -15,7 +14,6 @@ import { postAnnouncement } from "../data/announcements";
 export default function AnnouncementComposer({ onPosted }) {
   const { profile } = useAuth();
   const { t } = useI18n();
-  const isMobile = useIsMobile();
 
   const isLead   = profile?.role === "squad_leader";
   const isAdmin  = canManageSquads(profile?.role);
@@ -61,35 +59,23 @@ export default function AnnouncementComposer({ onPosted }) {
   return (
     <form onSubmit={submit}>
       {isAdmin && (
-        <Field label={t("ann.scope")}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Btn
-              type="button"
-              small
-              active={scope === "global"}
-              onClick={() => setScope("global")}
-            >
-              {t("ann.global")}
-            </Btn>
-            <Btn
-              type="button"
-              small
-              active={scope === "squad"}
-              onClick={() => setScope("squad")}
-              disabled={!profile?.squad_id}
-            >
-              {t("ann.mysquad")}
-            </Btn>
-          </div>
-          <div style={{ color: C.dim, fontSize: 12, marginTop: 6 }}>
-            {scope === "global"
-              ? t("ann.global_desc")
-              : t("ann.squad_desc")}
-          </div>
+        <Field
+          label={t("ann.scope")}
+          hint={scope === "global" ? t("ann.global_desc") : t("ann.squad_desc")}
+        >
+          <Segmented
+            ariaLabel={t("ann.scope")}
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: "global", label: t("ann.global") },
+              { value: "squad", label: t("ann.mysquad"), disabled: !profile?.squad_id },
+            ]}
+          />
         </Field>
       )}
       {!isAdmin && (
-        <div style={{ color: C.dim, fontSize: 12, marginBottom: 12 }}>
+        <div style={{ ...T.footnote, color: C.dim, marginBottom: 12 }}>
           {t("ann.lead_desc")}
         </div>
       )}
@@ -113,7 +99,7 @@ export default function AnnouncementComposer({ onPosted }) {
       </Field>
 
       <div style={{ marginTop: 8 }}>
-        <Btn primary disabled={busy}>
+        <Btn primary type="submit" disabled={busy} busy={busy}>
           {busy ? t("ann.posting") : t("ann.post")}
         </Btn>
       </div>

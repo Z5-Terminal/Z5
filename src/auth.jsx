@@ -163,11 +163,11 @@ export function useAuth() {
 // This function is kept for backward compatibility in places that don't have i18n context.
 export function roleLabel(role) {
   switch (role) {
-    case "admin":        return "ADMIN";
-    case "officer":      return "TEAM OFFICER";
-    case "squad_leader": return "SQUAD LEADER";
-    case "sniper":       return "SNIPER";
-    default:             return (role || "").toUpperCase();
+    case "admin":        return "Admin";
+    case "officer":      return "Team Officer";
+    case "squad_leader": return "Squad Leader";
+    case "sniper":       return "Sniper";
+    default:             return role || "";
   }
 }
 

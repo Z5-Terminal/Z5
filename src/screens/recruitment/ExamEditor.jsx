@@ -5,15 +5,18 @@
 //   - options: array of { key, text?, image_url? }
 //   - correct_option: the option key marked as correct
 // Reached from the Cycles detail screen via "Edit exam".
+// Shares its scaffold with QuestionEditor — keep the two visually identical.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
-  PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
-  BackButton, ConfirmDialog,
+  PageHeader, Panel, Tile, List, Row, Btn, IconButton, Input, Textarea, Field,
+  Checkbox, Badge, Num, Notice, ErrLine, OkLine, EmptyState, SkeletonRows,
+  ConfirmDialog, Lightbox, ELLIPSIS,
 } from "../../ui";
-import { C, S, FONT_MONO } from "../../theme";
+import { C, S, R, T, FONT } from "../../theme";
+import { DURATION } from "../../motion";
 import {
   listExamQuestions,
   createExamQuestion,
@@ -24,10 +27,14 @@ import {
   examFigureUrl,
 } from "../../data/examQuestions";
 
+// New content appearing in place rises in.
+const RISE = `z5-rise ${DURATION.move}ms var(--z5-spring) backwards`;
+
 export default function ExamEditor({ cycleId, cycleName, onBack }) {
   const { t } = useI18n();
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -49,7 +56,9 @@ export default function ExamEditor({ cycleId, cycleName, onBack }) {
 
   async function handleSeed() {
     setErr(""); setOk("");
+    setSeeding(true);
     const { data, error } = await seedDefaultExam(cycleId);
+    setSeeding(false);
     if (error) { setErr(error.message); return; }
     flash(setOk, data > 0
       ? t("rec.exam_editor.seeded", { n: data })
@@ -86,39 +95,40 @@ export default function ExamEditor({ cycleId, cycleName, onBack }) {
   const missingKey = questions.filter((q) => !q.correct_option).length;
   const missingImages = questions.filter((q) => questionMissingImages(q)).length;
 
+  // First load only — later refreshes keep the list on screen.
+  const firstLoad = loading && questions.length === 0;
+  const seedBtn = (
+    <Btn small type="button" onClick={handleSeed} disabled={seeding} busy={seeding}>
+      {t("rec.exam_editor.seed")}
+    </Btn>
+  );
+
   return (
     <>
       <PageHeader
-        title={`${t("rec.exam_editor.title")} — ${cycleName || ""}`}
+        back={{ onClick: onBack, label: cycleName ? <BackLabel>{cycleName}</BackLabel> : undefined }}
+        title={t("rec.exam_editor.title")}
         subtitle={t("rec.exam_editor.subtitle")}
-        action={<BackButton onClick={onBack} />}
-      />
-
-      <Panel>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <Btn small onClick={handleSeed}>{t("rec.exam_editor.seed")}</Btn>
-          <Btn small onClick={() => setAdding(true)}>{t("rec.exam_editor.add")}</Btn>
-        </div>
-        {(missingKey > 0 || missingImages > 0) && (
-          <div style={{
-            background: C.warnBg,
-            border: `1px solid ${C.warnBorderFaint}`,
-            color: C.warn,
-            padding: "10px 14px",
-            borderRadius: 3,
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}>
-            {missingKey > 0 && <div>· {t("rec.exam_editor.missing_keys", { n: missingKey })}</div>}
-            {missingImages > 0 && <div>· {t("rec.exam_editor.missing_images", { n: missingImages })}</div>}
-          </div>
+        action={(
+          <>
+            {seedBtn}
+            <Btn small primary type="button" icon="plus" onClick={() => setAdding(true)}>
+              {t("rec.exam_editor.add")}
+            </Btn>
+          </>
         )}
-        <ErrLine>{err}</ErrLine>
-        <OkLine>{ok}</OkLine>
-      </Panel>
+      />
+      {(missingKey > 0 || missingImages > 0) && (
+        <Notice tone="warn" style={{ marginTop: 12 }}>
+          {missingKey > 0 && <div>{withNum(t("rec.exam_editor.missing_keys"), "n", missingKey)}</div>}
+          {missingImages > 0 && <div>{withNum(t("rec.exam_editor.missing_images"), "n", missingImages)}</div>}
+        </Notice>
+      )}
+      <ErrLine>{err}</ErrLine>
+      <OkLine>{ok}</OkLine>
 
       {adding && (
-        <Panel title={t("rec.exam_editor.new_question")}>
+        <Panel title={t("rec.exam_editor.new_question")} style={{ animation: RISE }}>
           <QuestionForm
             cycleId={cycleId}
             initial={defaultNewQuestion(questions)}
@@ -128,40 +138,63 @@ export default function ExamEditor({ cycleId, cycleName, onBack }) {
         </Panel>
       )}
 
-      {loading && (
-        <Panel><div style={{ color: C.dim }}>{t("common.loading")}</div></Panel>
+      {firstLoad && (
+        <Panel><SkeletonRows rows={5} /></Panel>
       )}
 
       {!loading && questions.length === 0 && !adding && (
         <Panel>
-          <div style={{ color: C.dim, fontSize: 14, lineHeight: 1.6 }}>
-            {t("rec.exam_editor.empty")}
-          </div>
+          <EmptyState icon="graduation" title={t("rec.exam_editor.empty_title")} action={seedBtn}>
+            {t("rec.exam_editor.empty_hint")}
+          </EmptyState>
         </Panel>
       )}
 
-      {questions.map((q) => (
-        editingId === q.id ? (
-          <Panel key={q.id} title={`#${q.ord}`}>
-            <QuestionForm
-              cycleId={cycleId}
-              initial={q}
-              onSave={(patch) => handleUpdate(q.id, patch)}
-              onCancel={() => setEditingId(null)}
-            />
-          </Panel>
-        ) : (
-          <Panel key={q.id}>
-            <QuestionRow
-              q={q}
-              onEdit={() => setEditingId(q.id)}
-              onDelete={() => handleDelete(q.id)}
-            />
-          </Panel>
-        )
-      ))}
+      {questions.length > 0 && (
+        <Panel>
+          <List>
+            {questions.map((q) => (
+              editingId === q.id ? (
+                <Tile key={q.id} style={{ marginBlock: 8, animation: RISE }}>
+                  <QuestionForm
+                    cycleId={cycleId}
+                    initial={q}
+                    inTile
+                    onSave={(patch) => handleUpdate(q.id, patch)}
+                    onCancel={() => setEditingId(null)}
+                  />
+                </Tile>
+              ) : (
+                <QuestionRow
+                  key={q.id}
+                  q={q}
+                  onEdit={() => setEditingId(q.id)}
+                  onDelete={() => handleDelete(q.id)}
+                />
+              )
+            ))}
+          </List>
+        </Panel>
+      )}
     </>
   );
+}
+
+// Renders an i18n template with its `{token}` number going through <Num>
+// (tabular figures, bidi-isolated).
+function withNum(template, token, value) {
+  const i = String(template).indexOf(`{${token}}`);
+  if (i < 0) return template;
+  return [
+    template.slice(0, i),
+    <Num key="n">{value}</Num>,
+    template.slice(i + token.length + 2),
+  ];
+}
+
+// Back control label: the cycle we return to, cut short when it is long.
+function BackLabel({ children }) {
+  return <span style={{ ...ELLIPSIS, maxWidth: 220 }}>{children}</span>;
 }
 
 function defaultNewQuestion(existing) {
@@ -184,62 +217,115 @@ function questionMissingImages(q) {
   return (q.options || []).some((o) => !o.text && !o.image_url);
 }
 
+// Figures are line art made for a white page; they keep a paper backdrop
+// in both themes so they stay legible at night.
+function figureStyle(size) {
+  return {
+    display: "block",
+    boxSizing: "border-box",
+    height: size,
+    width: "auto",
+    maxWidth: "100%",
+    padding: 4,
+    objectFit: "contain",
+    borderRadius: R.sm,
+    background: C.posterPaper,
+  };
+}
+
 // ── Read-only row view ─────────────────────────────────────────────
 
 function QuestionRow({ q, onEdit, onDelete }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [confirmDel, setConfirmDel] = useState(false);
+  const [zoom, setZoom] = useState(false);
   const promptImg = examFigureUrl(q.prompt_image_url);
+  const btnSize = isMobile ? 36 : 32;
   return (
-    <div>
-      <div style={{
-        display: "flex", alignItems: "flex-start", gap: 12,
-        marginBottom: q.options?.length ? 12 : 0,
-      }}>
-        <div style={{
-          flex: "0 0 30px",
-          fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700, color: C.dim,
-        }}>{q.ord}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            color: C.text, fontSize: 14, lineHeight: 1.5, marginBottom: 6,
-          }}>{q.prompt_text || <em style={{ color: C.dim }}>{t("rec.exam_editor.no_prompt")}</em>}</div>
-          {promptImg && (
-            <img src={promptImg} alt="" style={{
-              maxWidth: 160, display: "block", border: `1px solid ${C.border}`,
-              borderRadius: 3, marginBottom: 6,
-            }} />
-          )}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {q.correct_option
-              ? <Badge tone="ok">{t("rec.exam_editor.keyed_to")} {q.correct_option}</Badge>
-              : <Badge tone="warn">{t("rec.exam_editor.no_key")}</Badge>}
-            <Badge>{(q.options || []).length} {t("rec.exam_editor.options")}</Badge>
-            <Badge tone="bright">{q.points ?? 1} {t("rec.exam_editor.points_suffix")}</Badge>
+    <>
+      <Row
+        as="div"
+        align="flex-start"
+        leading={<OrdMark>{q.ord}</OrdMark>}
+        trailing={(
+          <div style={{ display: "flex", gap: 6 }}>
+            <IconButton icon="pencil" label={t("common.edit")} size={btnSize} onClick={onEdit} />
+            <IconButton icon="trash" label={t("common.delete")} size={btnSize} onClick={() => setConfirmDel(true)} />
           </div>
+        )}
+      >
+        <div style={{
+          ...T.body,
+          fontWeight: 500,
+          color: q.prompt_text ? C.bright : C.dim,
+          overflowWrap: "anywhere",
+        }}>
+          {/* Prompt text is content, not chrome: it keeps its own direction. */}
+          {q.prompt_text ? <span dir="auto">{q.prompt_text}</span> : t("rec.exam_editor.no_prompt")}
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <Btn small onClick={onEdit}>{t("rec.exam_editor.edit")}</Btn>
-          <Btn small onClick={() => setConfirmDel(true)}>{t("rec.exam_editor.del")}</Btn>
+        {promptImg && (
+          <button
+            type="button"
+            data-press="scale"
+            data-press-depth="soft"
+            aria-label={t("rec.exam_editor.view_figure")}
+            onClick={() => setZoom(true)}
+            style={{
+              all: "unset",
+              display: "block",
+              maxWidth: "100%",
+              marginTop: 8,
+              borderRadius: R.sm,
+              cursor: "zoom-in",
+            }}
+          >
+            <img src={promptImg} alt="" style={figureStyle(84)} />
+          </button>
+        )}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          {q.correct_option
+            ? <Badge tone="ok">{t("rec.exam_editor.keyed_to")} <Num>{q.correct_option}</Num></Badge>
+            : <Badge tone="warn">{t("rec.exam_editor.no_key")}</Badge>}
+          <Badge><Num>{(q.options || []).length}</Num> {t("rec.exam_editor.options")}</Badge>
+          <Badge tone="bright"><Num>{q.points ?? 1}</Num> {t("rec.exam_editor.points_suffix")}</Badge>
         </div>
-      </div>
+      </Row>
+      {zoom && (
+        <Lightbox
+          src={promptImg}
+          alt={q.prompt_text || ""}
+          closeLabel={t("common.close")}
+          onClose={() => setZoom(false)}
+        />
+      )}
       <ConfirmDialog
         open={confirmDel}
         title={t("rec.exam_editor.delete_title")}
         message={t("rec.exam_editor.delete_body")}
-        confirmLabel={t("mis.delete")}
+        confirmLabel={t("common.delete")}
         cancelLabel={t("common.cancel")}
         onConfirm={() => { setConfirmDel(false); onDelete(); }}
         onCancel={() => setConfirmDel(false)}
       />
-    </div>
+    </>
+  );
+}
+
+// Quiet order number, sitting on the first text line of its row.
+function OrdMark({ children }) {
+  return (
+    <span style={{ ...T.body, minWidth: 22, textAlign: "center", color: C.dimmer }}>
+      <Num>{children}</Num>
+    </span>
   );
 }
 
 // ── Edit form (used by create + update) ────────────────────────────
 
-function QuestionForm({ cycleId, initial, onSave, onCancel }) {
+function QuestionForm({ cycleId, initial, inTile, onSave, onCancel }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [ord, setOrd] = useState(initial.ord || 1);
   const [promptText, setPromptText] = useState(initial.prompt_text || "");
   const [promptImagePath, setPromptImagePath] = useState(initial.prompt_image_url || null);
@@ -286,12 +372,16 @@ function QuestionForm({ cycleId, initial, onSave, onCancel }) {
 
   return (
     <form onSubmit={save}>
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "120px 120px",
+        columnGap: 12,
+      }}>
         <Field label={t("rec.exam_editor.ord")}>
-          <Input type="number" value={ord} onChange={(e) => setOrd(e.target.value)} style={{ width: 110 }} />
+          <Input type="number" value={ord} onChange={(e) => setOrd(e.target.value)} />
         </Field>
         <Field label={t("rec.exam_editor.points")}>
-          <Input type="number" min="1" max="100" value={points} onChange={(e) => setPoints(e.target.value)} style={{ width: 110 }} />
+          <Input type="number" min="1" max="100" value={points} onChange={(e) => setPoints(e.target.value)} />
         </Field>
       </div>
       <Field label={t("rec.exam_editor.prompt_text")}>
@@ -299,6 +389,7 @@ function QuestionForm({ cycleId, initial, onSave, onCancel }) {
           value={promptText}
           onChange={(e) => setPromptText(e.target.value)}
           placeholder={t("rec.exam_editor.prompt_ph")}
+          style={{ height: 88 }}
         />
       </Field>
       <Field label={t("rec.exam_editor.prompt_image")}>
@@ -306,36 +397,44 @@ function QuestionForm({ cycleId, initial, onSave, onCancel }) {
           slot="prompt"
           questionId={initial.id}
           path={promptImagePath}
+          previewSize={112}
           onUploaded={setPromptImagePath}
           onCleared={() => setPromptImagePath(null)}
         />
       </Field>
 
-      <div style={{ marginTop: 16 }}>
-        <div style={{ ...S.label, marginBottom: 8 }}>
-          {t("rec.exam_editor.options_label")}
-        </div>
+      <div style={S.label}>{t("rec.exam_editor.options_label")}</div>
+      <div
+        role="radiogroup"
+        aria-label={t("rec.exam_editor.correct")}
+        style={{ display: "flex", flexDirection: "column", gap: 8 }}
+      >
+        {/* Keyed by position: the key text is editable, so keying by it
+            would remount the row (and drop focus) on every keystroke. */}
         {options.map((opt, i) => (
           <OptionEditor
-            key={opt.key + i}
+            key={i}
             questionId={initial.id}
             option={opt}
+            inTile={inTile}
             isCorrect={correct === opt.key}
             onMarkCorrect={() => setCorrect(opt.key)}
             onChange={(patch) => updateOption(i, patch)}
             onRemove={options.length > 2 ? () => removeOption(i) : null}
           />
         ))}
-        <Btn small onClick={(e) => { e.preventDefault(); addOption(); }}>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Btn small plain type="button" icon="plus" onClick={addOption}>
           {t("rec.exam_editor.add_option")}
         </Btn>
       </div>
 
-      <div style={{ marginTop: 18, display: "flex", gap: 8 }}>
-        <Btn small primary type="submit" disabled={busy}>
+      <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Btn small={!isMobile} primary type="submit" disabled={busy} busy={busy}>
           {busy ? t("rec.saving") : t("rec.exam_editor.save_btn")}
         </Btn>
-        <Btn small type="button" onClick={onCancel}>
+        <Btn small={!isMobile} type="button" onClick={onCancel}>
           {t("rec.exam_editor.cancel_btn")}
         </Btn>
       </div>
@@ -344,48 +443,51 @@ function QuestionForm({ cycleId, initial, onSave, onCancel }) {
   );
 }
 
-function OptionEditor({ questionId, option, isCorrect, onMarkCorrect, onChange, onRemove }) {
+// One answer option: key, text, optional figure, and the "correct
+// answer" radio. `inTile` — the form itself sits on a Tile, so the option
+// uses the card surface to stay one distinct level.
+function OptionEditor({ questionId, option, inTile, isCorrect, onMarkCorrect, onChange, onRemove }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   return (
-    <div style={{
-      border: `1px solid ${isCorrect ? C.ok : C.border}`,
-      borderRadius: 3,
-      padding: "10px 12px",
-      marginBottom: 10,
-      background: isCorrect ? C.okBg : "transparent",
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10, marginBottom: 8,
-      }}>
-        <span style={{
-          fontFamily: FONT_MONO, fontWeight: 700, color: C.bright,
-          fontSize: 13, minWidth: 28,
-        }}>{option.key}</span>
+    <Tile
+      padding={isMobile ? "10px 10px" : "12px 12px"}
+      style={isCorrect
+        ? { background: C.selectedBg }
+        : (inTile ? { background: C.panel } : null)}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Input
           mono
+          aria-label={t("rec.exam_editor.option_key")}
           value={option.key}
           onChange={(e) => onChange({ key: e.target.value })}
-          style={{ maxWidth: 80 }}
+          style={{ width: 60, flexShrink: 0, textAlign: "center", paddingInline: 6 }}
         />
-        <Btn small
-          active={isCorrect}
-          onClick={(e) => { e.preventDefault(); onMarkCorrect(); }}
-          type="button"
-        >
-          {isCorrect ? `✓ ${t("rec.exam_editor.correct")}` : t("rec.exam_editor.mark_correct")}
-        </Btn>
-        {onRemove && (
-          <Btn small type="button" onClick={(e) => { e.preventDefault(); onRemove(); }}>✕</Btn>
-        )}
-      </div>
-      <Field label={t("rec.exam_editor.option_text")}>
         <Input
+          aria-label={t("rec.exam_editor.option_text")}
           value={option.text || ""}
           onChange={(e) => onChange({ text: e.target.value })}
           placeholder={t("rec.exam_editor.option_text_ph")}
+          style={{ flex: 1, minWidth: 0 }}
         />
-      </Field>
-      <Field label={t("rec.exam_editor.option_image")}>
+        {onRemove && (
+          <IconButton
+            icon="xmark"
+            label={t("rec.exam_editor.remove_option")}
+            size={isMobile ? 38 : 32}
+            onClick={onRemove}
+          />
+        )}
+      </div>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 8,
+        marginTop: 10,
+      }}>
         <FigureUpload
           slot={option.key}
           questionId={questionId}
@@ -393,13 +495,50 @@ function OptionEditor({ questionId, option, isCorrect, onMarkCorrect, onChange, 
           onUploaded={(path) => onChange({ image_url: path })}
           onCleared={() => onChange({ image_url: null })}
         />
-      </Field>
-    </div>
+        <CorrectRadio checked={isCorrect} onSelect={onMarkCorrect} />
+      </div>
+    </Tile>
   );
 }
 
-function FigureUpload({ questionId, slot, path, onUploaded, onCleared }) {
+// "Correct answer" control — a radio across the options of one question.
+function CorrectRadio({ checked, onSelect }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={!!checked}
+      data-press="scale"
+      onClick={onSelect}
+      style={{
+        all: "unset",
+        boxSizing: "border-box",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        flexShrink: 0,
+        minHeight: isMobile ? 34 : 30,
+        paddingInline: "5px 12px",
+        borderRadius: R.pill,
+        cursor: "pointer",
+        fontFamily: FONT,
+        ...T.footnote,
+        fontWeight: 600,
+        background: checked ? C.badgeOk : C.fill,
+        color: checked ? C.ok : C.dim,
+      }}
+    >
+      <Checkbox checked={checked} tone="ok" size={20} />
+      {checked ? t("rec.exam_editor.correct") : t("rec.exam_editor.mark_correct")}
+    </button>
+  );
+}
+
+function FigureUpload({ questionId, slot, path, previewSize = 64, onUploaded, onCleared }) {
+  const { t } = useI18n();
+  const isMobile = useIsMobile();
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -419,7 +558,7 @@ function FigureUpload({ questionId, slot, path, onUploaded, onCleared }) {
   }
 
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <input
         ref={fileRef}
         type="file"
@@ -431,20 +570,25 @@ function FigureUpload({ questionId, slot, path, onUploaded, onCleared }) {
           if (f) handleFile(f);
         }}
       />
-      {url && (
-        <img src={url} alt="" style={{
-          maxWidth: 200, display: "block", marginBottom: 8,
-          border: `1px solid ${C.border}`, borderRadius: 3,
-        }} />
-      )}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <Btn small type="button" onClick={() => fileRef.current?.click()} disabled={busy}>
-          {busy ? t("rec.exam_editor.uploading")
-                : (url ? t("rec.exam_editor.replace_image") : t("rec.exam_editor.upload_image"))}
-        </Btn>
-        {url && onCleared && (
-          <Btn small type="button" onClick={onCleared}>{t("rec.exam_editor.clear_image")}</Btn>
-        )}
+      {/* Phones: the preview gets its own line so figures of any shape
+          leave the buttons in one predictable row. */}
+      <div style={{
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: isMobile ? "flex-start" : "center",
+        flexWrap: isMobile ? "nowrap" : "wrap",
+        gap: 8,
+      }}>
+        {url && <img src={url} alt="" style={figureStyle(previewSize)} />}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <Btn small type="button" icon="upload" onClick={() => fileRef.current?.click()} disabled={busy} busy={busy}>
+            {busy ? t("rec.exam_editor.uploading")
+                  : (url ? t("rec.exam_editor.replace_image") : t("rec.exam_editor.upload_image"))}
+          </Btn>
+          {url && onCleared && (
+            <Btn small plain type="button" onClick={onCleared}>{t("rec.exam_editor.clear_image")}</Btn>
+          )}
+        </div>
       </div>
       <ErrLine>{err}</ErrLine>
     </div>

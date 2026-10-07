@@ -1,6 +1,6 @@
 # Z5 TERMINAL
 
-A field operations platform for team management, mission planning, and training coordination. Built as a lightweight single-page application with a retro military terminal aesthetic.
+A field operations platform for team management, mission planning, and training coordination. Built as a lightweight single-page application with a calm e-ink look and fluid, native-feeling interaction.
 
 ![React](https://img.shields.io/badge/React-18-blue)
 ![Vite](https://img.shields.io/badge/Vite-5-purple)
@@ -11,9 +11,11 @@ A field operations platform for team management, mission planning, and training 
 
 ## Overview
 
-Z5 Terminal is an internal operations tool designed for small team coordination. It provides role-based access control, squad management, mission checklists with real-time progress tracking, a knowledge base for training materials, and a scheduling calendar — all wrapped in a green-on-black CRT terminal interface.
+Z5 Terminal is an internal operations tool designed for small team coordination. It provides role-based access control, squad management, mission checklists with real-time progress tracking, a knowledge base for training materials, and a scheduling calendar — in a warm paper / deep-black night interface with translucent chrome, spring-based motion and instant touch feedback.
 
-The platform supports English and Hebrew with full RTL layout.
+The platform is Hebrew-first with full RTL layout, and also available in English.
+
+The design language — tokens, primitives, motion rules and the pre-ship checklist — is documented in [DESIGN.md](DESIGN.md).
 
 ## Features
 
@@ -35,7 +37,7 @@ The platform supports English and Hebrew with full RTL layout.
 | Backend | Supabase (Postgres, Auth, Realtime, Storage) |
 | Security | Row Level Security policies, SECURITY DEFINER functions |
 | Deployment | GitHub Pages via GitHub Actions CI/CD |
-| Styling | Inline styles, system monospace fonts, CRT scanline overlay |
+| Styling | Inline styles on shared tokens (`src/theme.js`), system font, shared primitives (`src/ui.jsx`), spring motion (`src/motion.js`) |
 | i18n | Built-in EN/HE with RTL support |
 
 ## Getting Started

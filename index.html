@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="he" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#eeece5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -11,16 +11,41 @@
     <link rel="apple-touch-icon" href="/Z5/z5-logo.png" />
     <title>Z5 TERMINAL</title>
     <style>
+      /* Global interaction layer. Components style themselves inline with
+         theme tokens; this sheet only holds what inline styles cannot
+         express: pseudo-states (:active / :hover / :focus-visible),
+         keyframes, and user-preference media queries. Colors arrive as
+         --z5-* variables that ThemeContext mirrors from theme.js, so the
+         defaults below are just the paper palette for first paint. */
       :root {
         --safe-top: env(safe-area-inset-top, 0px);
         --safe-bottom: env(safe-area-inset-bottom, 0px);
         --safe-left: env(safe-area-inset-left, 0px);
         --safe-right: env(safe-area-inset-right, 0px);
+
+        --z5-bg: #eeece5;
+        --z5-text: #22211d;
+        --z5-bright: #141310;
+        --z5-on-tint: #fbfaf6;
+        --z5-hover: rgba(20,19,16,0.04);
+        --z5-pressed: rgba(20,19,16,0.08);
+        --z5-fill-strong: rgba(20,19,16,0.11);
+        --z5-focus: rgba(20,19,16,0.32);
+        --z5-border-bright: #aca798;
+        --z5-scroll-thumb: #c9c5b9;
+        --z5-material-solid: #f8f7f2;
+
+        /* Springs sampled by motion.js replace these at startup where
+           linear() easing is supported; these are the fallbacks. */
+        --z5-spring: cubic-bezier(0.22, 1, 0.36, 1);
+        --z5-spring-snap: cubic-bezier(0.25, 1, 0.5, 1);
+        --z5-spring-bounce: cubic-bezier(0.3, 1.35, 0.5, 1);
       }
+
       html, body, #root {
         margin: 0;
         padding: 0;
-        background: #eeece5; /* e-ink paper — matches theme.js LIGHT.bg */
+        background: var(--z5-bg);
         min-height: 100%;
         height: 100%;
       }
@@ -29,44 +54,107 @@
         text-size-adjust: 100%;
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        color: #22211d;
+        color: var(--z5-text);
         overscroll-behavior-y: none;
+        /* Removes the 300ms double-tap delay: no double-tap gesture exists
+           anywhere in the app, so taps commit immediately. */
         touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
       }
       input, textarea, button, select { font-family: inherit; }
-      /* Prevent iOS Safari from auto-zooming when focusing form fields.
-         Any input under 16px font-size will trigger zoom, so we globally
-         enforce a 16px minimum on small screens. */
+      button { -webkit-tap-highlight-color: transparent; }
+
+      /* Prevent iOS Safari from auto-zooming when focusing form fields:
+         any input under 16px triggers zoom, so enforce 16px on phones. */
       @media (max-width: 900px) {
         input, textarea, select {
           font-size: 16px !important;
-        }
-      }
-      /* Decent tap target size on phones regardless of what inline styles
-         a component sets. */
-      @media (max-width: 900px) {
-        button, [role="button"] {
-          min-height: 44px;
         }
         input[type="checkbox"], input[type="radio"] {
           min-width: 22px;
           min-height: 22px;
         }
       }
-      ::selection { background: #22211d; color: #f7f6f1; }
-      /* Scrollbar styling to match the e-ink paper theme */
+
+      ::selection { background: var(--z5-bright); color: var(--z5-on-tint); }
+      ::placeholder { color: var(--z5-border-bright); opacity: 1; }
+
       ::-webkit-scrollbar { width: 10px; height: 10px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #c9c5b9; border-radius: 6px; }
-      ::-webkit-scrollbar-thumb:hover { background: #a9a496; }
-      /* Hide scrollbars on mobile for a cleaner app feel */
+      ::-webkit-scrollbar-thumb {
+        background: var(--z5-scroll-thumb);
+        border-radius: 6px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
       @media (max-width: 900px) {
         ::-webkit-scrollbar { width: 0; height: 0; }
       }
-      /* Shared animation keyframes (colors always come from inline styles) */
+      /* Horizontal chip strips scroll without a visible bar. */
+      [data-noscrollbar] { scrollbar-width: none; }
+      [data-noscrollbar]::-webkit-scrollbar { display: none; }
+
+      /* ── Response: feedback on pointer-down ─────────────────────────
+         Every tappable thing acknowledges the press the instant it
+         happens (never only on release).
+           data-press="scale" — buttons, cards, chips: sink slightly.
+           data-press="row"   — list rows: highlight fill.
+           (anything else)    — unmarked buttons dim.                */
+      [data-press="scale"] {
+        transition: transform 420ms var(--z5-spring), opacity 150ms ease-out,
+                    background-color 150ms ease-out, border-color 150ms ease-out,
+                    box-shadow 250ms ease-out, color 150ms ease-out;
+        touch-action: manipulation;
+      }
+      [data-press="scale"]:active:not(:disabled) {
+        transform: scale(0.97);
+        transition-duration: 90ms, 90ms, 90ms, 90ms, 90ms, 90ms;
+        transition-timing-function: ease-out;
+      }
+      [data-press="scale"][data-press-depth="deep"]:active:not(:disabled) { transform: scale(0.94); }
+      [data-press="scale"][data-press-depth="soft"]:active:not(:disabled) { transform: scale(0.985); }
+
+      [data-press="row"] {
+        transition: background-color 220ms ease-out;
+        touch-action: manipulation;
+      }
+      [data-press="row"]:active:not(:disabled):not([aria-disabled="true"]) {
+        background-color: var(--z5-pressed) !important;
+        transition-duration: 0ms;
+      }
+      @media (hover: hover) {
+        [data-press="row"]:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--z5-hover); }
+        [data-hover="fill"]:hover:not(:disabled) { background-color: var(--z5-fill-strong) !important; }
+        [data-hover="dim"]:hover:not(:disabled) { opacity: 0.82; }
+        [data-hover="lift"]:hover:not(:disabled) { transform: translateY(-2px); }
+        [data-hover="lift"]:active:not(:disabled) { transform: scale(0.985); }
+      }
+      button:not([data-press]):active:not(:disabled),
+      [role="button"]:not([data-press]):active { opacity: 0.62; }
+      button:disabled, [aria-disabled="true"] { opacity: 0.42; cursor: default !important; }
+
+      /* Focus: a visible ring for keyboard users only. */
+      :focus { outline: none; }
+      /* !important: many tappables reset themselves with an inline
+         `all: unset`, which would otherwise erase the ring. */
+      :focus-visible {
+        outline: 2px solid var(--z5-focus) !important;
+        outline-offset: 2px !important;
+      }
+      [data-field]:focus, [data-field]:focus-visible {
+        outline: none !important;
+        border-color: var(--z5-border-bright) !important;
+        box-shadow: 0 0 0 3.5px var(--z5-pressed);
+      }
+      [data-field] { transition: border-color 150ms ease-out, box-shadow 150ms ease-out; }
+
+      /* Icons that encode direction (chevrons, back arrows) mirror in RTL. */
+      [dir="rtl"] [data-flip] { transform: scaleX(-1); }
+
+      /* ── Keyframes (colors always come from inline styles) ────────── */
       @keyframes z5-shimmer {
         0%   { background-position: -300px 0; }
         100% { background-position: 300px 0; }
@@ -79,6 +167,97 @@
         0%   { transform: scale(1); }
         35%  { transform: scale(1.22); }
         100% { transform: scale(1); }
+      }
+      @keyframes z5-spin { to { transform: rotate(360deg); } }
+      @keyframes z5-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes z5-fade-out { from { opacity: 1; } to { opacity: 0; } }
+      /* Screen changes: sibling tabs cross-fade with a small rise; pushing
+         deeper slides in from the trailing edge and popping back comes
+         from the leading edge, so the two read as one reversible path.
+         --z5-dir is 1 in LTR and -1 in RTL. */
+      @keyframes z5-view-tab {
+        from { opacity: 0; transform: translateY(8px) scale(0.995); }
+        to   { opacity: 1; transform: none; }
+      }
+      @keyframes z5-view-push {
+        from { opacity: 0; transform: translateX(calc(28px * var(--z5-dir, 1))); }
+        to   { opacity: 1; transform: none; }
+      }
+      @keyframes z5-view-pop {
+        from { opacity: 0; transform: translateX(calc(-28px * var(--z5-dir, 1))); }
+        to   { opacity: 1; transform: none; }
+      }
+      /* Materialise: blur + scale + opacity together, anchored to the
+         trigger via transform-origin set inline. */
+      @keyframes z5-materialize {
+        from { opacity: 0; transform: scale(0.94); filter: blur(6px); }
+        to   { opacity: 1; transform: none; filter: blur(0); }
+      }
+      @keyframes z5-dematerialize {
+        from { opacity: 1; transform: none; filter: blur(0); }
+        to   { opacity: 0; transform: scale(0.96); filter: blur(4px); }
+      }
+      @keyframes z5-rise {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: none; }
+      }
+      [dir="rtl"] { --z5-dir: -1; }
+      [dir="ltr"] { --z5-dir: 1; }
+
+      /* Soften theme switches instead of an abrupt brightness jump. */
+      html[data-theme-switching] *,
+      html[data-theme-switching] *::before,
+      html[data-theme-switching] *::after {
+        transition: background-color 320ms ease, color 320ms ease,
+                    border-color 320ms ease, fill 320ms ease, stroke 320ms ease !important;
+      }
+
+      /* ── User preferences ─────────────────────────────────────────── */
+      @media (prefers-reduced-motion: reduce) {
+        /* Keep feedback, drop travel: springs become short fades, nothing
+           slides, scales or overshoots, loops stop. */
+        :root {
+          --z5-spring: ease-out;
+          --z5-spring-snap: ease-out;
+          --z5-spring-bounce: ease-out;
+        }
+        *, *::before, *::after {
+          animation-duration: 160ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+        }
+        /* A busy indicator is feedback, not decoration: it keeps turning
+           (slowly), otherwise "working" looks like "stuck". */
+        [data-spin] {
+          animation-duration: 1.4s !important;
+          animation-iteration-count: infinite !important;
+        }
+        [data-press="scale"]:active:not(:disabled),
+        [data-hover="lift"]:hover:not(:disabled),
+        [data-hover="lift"]:active:not(:disabled) { transform: none !important; opacity: 0.7; }
+        @keyframes z5-view-tab   { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes z5-view-push  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes z5-view-pop   { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes z5-materialize   { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes z5-dematerialize { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes z5-rise  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes z5-pop   { from { opacity: 0.6; } to { opacity: 1; } }
+        @keyframes z5-ping  { from { opacity: 0; } to { opacity: 0; } }
+      }
+      @media (prefers-reduced-transparency: reduce) {
+        [data-material] {
+          -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+          background: var(--z5-material-solid) !important;
+        }
+      }
+      @media (prefers-contrast: more) {
+        [data-material] {
+          -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+          background: var(--z5-material-solid) !important;
+        }
+        :focus-visible { outline-width: 3px; }
       }
     </style>
   </head>

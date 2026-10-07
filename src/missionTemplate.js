@@ -123,9 +123,11 @@ export const MISSION_STATUS_TONES = Object.fromEntries(
 // ---------- Mission kinds ---------------------------------------------
 // Kept in sync with missions.kind check constraint in schema_v4.sql.
 
+// `icon` is a name from the shared icon set (src/icons.jsx):
+//   <Icon name={MISSION_KIND_ICONS[kind]} />
 export const MISSION_KINDS = [
-  { key: "operational", label: "Operational", icon: "⌖" },
-  { key: "admin",       label: "Admin task",  icon: "◎" },
+  { key: "operational", label: "Operational", icon: "target" },
+  { key: "admin",       label: "Admin task",  icon: "clipboard" },
 ];
 
 export const MISSION_KIND_LABELS = Object.fromEntries(

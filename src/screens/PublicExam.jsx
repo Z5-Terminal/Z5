@@ -4,15 +4,23 @@
 // auto-submits when the clock runs out.
 
 import { useEffect, useRef, useState } from "react";
-import { Page } from "../ui";
-import { C, FONT, FONT_MONO } from "../theme";
+import {
+  Page, Panel, Tile, List, Btn, Progress, Notice, Num, Stat, Icon,
+  Skeleton, ViewTransition, ConfirmDialog,
+} from "../ui";
+// `T` is the local Hebrew string table below, so the type scale is `TY`.
+import { C, FONT, MATERIAL, R, T as TY, Z } from "../theme";
+import { DURATION, MOTION } from "../motion";
 import { useIsMobile } from "../useIsMobile";
+import { useTheme } from "../ThemeContext";
 import {
   getExamForToken, startExamAttempt, saveExamAnswer, submitExam,
 } from "../data/publicExam";
 import { examFigureUrl } from "../data/examQuestions";
 
 const T = {
+  brand: "Z5",
+  footer: "Z5 · שימוש פנימי בלבד · אין העברה מחוץ לרשת מבצעית",
   loading: "טוען…",
   invalid: "הקישור אינו תקף.",
   exam_not_open: "המבחן אינו פתוח כרגע.",
@@ -21,7 +29,9 @@ const T = {
   already_completed: "כבר השלמת את המבחן.",
   generic_error: "אירעה תקלה. נסה שוב.",
   intro_title: "מבחן פסיכוטכני לצוות צלפים",
-  intro_body: "במבחן יש {n} שאלות. סך הזמן למבחן הוא 15 דקות.\n\nניתן ומומלץ להשתמש בדף ועט. ברגע שתתחיל — השעון מתחיל לרוץ ולא ניתן לעצור אותו.",
+  intro_body: "ניתן ומומלץ להשתמש בדף ועט. ברגע שתתחיל — השעון מתחיל לרוץ ולא ניתן לעצור אותו.",
+  fact_questions: "{n} שאלות",
+  fact_time: "{n} דקות",
   start: "התחל מבחן",
   submit: "סיים והגש",
   submitting: "מגיש…",
@@ -31,13 +41,22 @@ const T = {
   points_suffix: "נק׳",
   of: "מתוך",
   answered: "נענו",
-  previous: "‹ הקודמת",
-  next: "הבאה ›",
+  previous: "הקודמת",
+  next: "הבאה",
   result_title: "המבחן הוגש.",
   result_score: "ציון",
   result_body: "תשובותיך נשמרו ונבדקו. המשך לחכות לעדכון מהמפקדים.",
-  unanswered_warn: "ישנן שאלות שלא נענו. להגיש בכל זאת?",
+  unanswered_title: "ישנן שאלות שלא נענו",
+  unanswered_body: "נענו {k} מתוך {n} שאלות. להגיש בכל זאת?",
+  unanswered_confirm: "הגש בכל זאת",
+  unanswered_cancel: "חזרה למבחן",
 };
+
+// Stated length of the exam window (the server enforces the real one).
+const EXAM_MINUTES = 15;
+
+// Content column shared by every phase.
+const COLUMN = 640;
 
 export default function PublicExam({ token, personalId }) {
   const [phase, setPhase] = useState("loading"); // loading|intro|exam|submitted|error
@@ -96,69 +115,216 @@ export default function PublicExam({ token, personalId }) {
     setPhase("exam");
   }
 
+  // The running exam brings its own shell: the sticky timer bar replaces
+  // the brand header.
+  if (phase === "exam" && exam && attempt) {
+    return (
+      <Page>
+        <ExamRunner
+          token={token}
+          personalId={personalId}
+          exam={exam}
+          attempt={attempt}
+          answers={answers}
+          setAnswers={setAnswers}
+          onSubmitted={(res) => { setResult(res); setPhase("submitted"); }}
+          onError={(msg) => { setError(msg); setPhase("error"); }}
+        />
+      </Page>
+    );
+  }
+
   return (
     <Page>
       <ExamShell>
-        {phase === "loading" && <Centered>{T.loading}</Centered>}
-        {phase === "error" && <ErrorBlock message={error} />}
-        {phase === "intro" && exam && (
-          <Intro exam={exam} onStart={handleStart} />
-        )}
-        {phase === "exam" && exam && attempt && (
-          <ExamRunner
-            token={token}
-            personalId={personalId}
-            exam={exam}
-            attempt={attempt}
-            answers={answers}
-            setAnswers={setAnswers}
-            onSubmitted={(res) => { setResult(res); setPhase("submitted"); }}
-            onError={(msg) => { setError(msg); setPhase("error"); }}
-          />
-        )}
-        {phase === "submitted" && result && <Result result={result} />}
+        <ViewTransition viewKey={phase} kind="tab">
+          {phase === "loading" && <Loading />}
+          {phase === "error" && <ErrorBlock message={error} />}
+          {phase === "intro" && exam && (
+            <Intro exam={exam} onStart={handleStart} />
+          )}
+          {phase === "submitted" && result && <Result result={result} />}
+        </ViewTransition>
       </ExamShell>
     </Page>
   );
 }
 
-// ── Shell ──────────────────────────────────────────────────────────
+// ── Shell kit (kept in step with PublicSurvey.jsx) ─────────────────
 
-function ExamShell({ children }) {
+// Width + gutters of the content column (also used by the timer bar).
+function columnStyle(isMobile) {
+  const gutter = isMobile ? 16 : 24;
+  return {
+    width: "100%",
+    maxWidth: COLUMN + gutter * 2,
+    marginInline: "auto",
+    boxSizing: "border-box",
+    paddingInline: `max(${gutter}px, var(--safe-left), var(--safe-right))`,
+  };
+}
+
+function ExamShell({ bar, children }) {
   const isMobile = useIsMobile();
   return (
-    <div dir="rtl" style={{
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      boxSizing: "border-box",
-      padding: isMobile
-        ? "calc(20px + var(--safe-top)) 16px calc(20px + var(--safe-bottom))"
-        : "40px 24px",
-      fontFamily: FONT,
-      color: C.text,
-    }}>
+    <div
+      dir="rtl"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        fontFamily: FONT,
+        color: C.text,
+        // Page transitions slide a few px sideways; never let that
+        // make the document scroll horizontally.
+        overflowX: "clip",
+      }}
+    >
+      {bar}
       <div style={{
-        width: "100%", maxWidth: 720, margin: "0 auto",
-        display: "flex", flexDirection: "column", flex: 1,
+        ...columnStyle(isMobile),
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        paddingTop: bar
+          ? (isMobile ? 4 : 12)
+          : (isMobile ? "calc(14px + var(--safe-top))" : 36),
+        paddingBottom: isMobile ? "calc(18px + var(--safe-bottom))" : 32,
       }}>
-        {children}
+        {!bar && <Brand />}
+        <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+        <FooterLine />
       </div>
     </div>
   );
 }
 
-function Centered({ children }) {
-  return <div style={{ padding: "60px 0", textAlign: "center", color: C.dim }}>{children}</div>;
+function Brand() {
+  const isMobile = useIsMobile();
+  // z5-logo.png is black line art — invert it on the night theme.
+  const { mode } = useTheme();
+  return (
+    <header style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      paddingBottom: isMobile ? 4 : 8,
+    }}>
+      <img
+        src={`${import.meta.env.BASE_URL}z5-logo.png`}
+        alt=""
+        style={{
+          height: isMobile ? 30 : 36,
+          width: "auto",
+          display: "block",
+          filter: mode === "dark" ? "invert(0.9)" : "none",
+        }}
+      />
+      <span style={{ ...(isMobile ? TY.headline : TY.title3), color: C.bright }}>{T.brand}</span>
+    </header>
+  );
+}
+
+function FooterLine() {
+  return (
+    <footer style={{
+      paddingTop: 20,
+      textAlign: "center",
+      ...TY.caption,
+      color: C.dimmer,
+    }}>
+      {T.footer}
+    </footer>
+  );
+}
+
+// Placeholder in the shape of the intro card while the link is checked.
+function Loading() {
+  return (
+    <Panel>
+      <div role="status" aria-label={T.loading} aria-busy="true">
+        <Skeleton width="64%" height={26} style={{ marginBottom: 12 }} />
+        <Skeleton width="36%" height={12} style={{ marginBottom: 22 }} />
+        <Skeleton height={13} style={{ marginBottom: 10 }} />
+        <Skeleton width="94%" height={13} style={{ marginBottom: 10 }} />
+        <Skeleton width="58%" height={13} />
+        <Skeleton height={48} style={{ marginTop: 24, borderRadius: R.md }} />
+      </div>
+    </Panel>
+  );
 }
 
 function ErrorBlock({ message }) {
+  const isMobile = useIsMobile();
+  return (
+    <Notice
+      tone="error"
+      style={{ marginTop: isMobile ? 12 : 16, padding: "14px 16px", ...TY.callout }}
+    >
+      {message}
+    </Notice>
+  );
+}
+
+// Primary / secondary action — the shared button at thumb height.
+function BigButton({ style, ...props }) {
+  const isMobile = useIsMobile();
+  return (
+    <Btn
+      type="button"
+      {...props}
+      style={{ minHeight: isMobile ? 50 : 46, ...style }}
+    />
+  );
+}
+
+// "{n} …" template with the number set in tabular figures.
+function withNum(template, n) {
+  const [before, after = ""] = String(template).split("{n}");
+  return <>{before}<Num>{n}</Num>{after}</>;
+}
+
+// Quiet icon + text row for the intro card.
+function Fact({ icon, children }) {
   return (
     <div style={{
-      marginTop: 60, padding: "20px 18px", textAlign: "center",
-      background: C.errBg, border: `1px solid ${C.errBorder}`,
-      borderRadius: 12, color: C.error, fontSize: 14, lineHeight: 1.6,
-    }}>{message}</div>
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 44,
+      padding: "8px 0",
+      boxSizing: "border-box",
+      ...TY.callout,
+      color: C.text,
+    }}>
+      <Icon name={icon} size={18} style={{ color: C.dim }} />
+      <span style={{ flex: 1, minWidth: 0 }}>{children}</span>
+    </div>
+  );
+}
+
+// Finished state: the check materialises together with the message.
+function Done({ title, extra, children }) {
+  const isMobile = useIsMobile();
+  return (
+    <Panel>
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        padding: isMobile ? "28px 4px 22px" : "40px 16px 32px",
+        animation: `z5-materialize ${DURATION.move}ms var(--z5-spring) both`,
+      }}>
+        <Icon name="checkCircle" size={64} strokeWidth={1.5} style={{ color: C.ok, marginBottom: 14 }} />
+        <h2 style={{ margin: 0, ...TY.title2, color: C.bright }}>{title}</h2>
+        {extra}
+        <div style={{ ...TY.callout, lineHeight: 1.6, color: C.dim, maxWidth: 420, marginTop: 10 }}>
+          {children}
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -166,21 +332,48 @@ function ErrorBlock({ message }) {
 
 function Intro({ exam, onStart }) {
   const isMobile = useIsMobile();
+  // Presentation only: show that the tap registered while the attempt
+  // is being opened (the intro unmounts as soon as that resolves).
+  const [starting, setStarting] = useState(false);
+  async function start() {
+    if (starting) return;
+    setStarting(true);
+    try { await onStart(); } finally { setStarting(false); }
+  }
   return (
-    <div style={{ padding: isMobile ? "16px 4px" : "32px 4px" }}>
-      <h1 style={{
-        margin: "0 0 8px", color: C.bright,
-        fontSize: isMobile ? 20 : 26, fontWeight: 700, letterSpacing: "0.5px",
-      }}>{T.intro_title}</h1>
-      <div style={{ color: C.dim, fontSize: 13, marginBottom: 24 }}>
-        {exam.cycle_name}{exam.candidate_name ? ` · ${exam.candidate_name}` : ""}
+    <Panel>
+      <h1 style={{ margin: 0, ...TY.title1, color: C.bright }}>{T.intro_title}</h1>
+      <div style={{ ...TY.footnote, color: C.dim, marginTop: 6 }}>
+        {exam.cycle_name}
       </div>
       <div style={{
-        whiteSpace: "pre-line", fontSize: 15, lineHeight: 1.8,
-        color: C.text, marginBottom: 32,
-      }}>{T.intro_body.replace("{n}", String((exam.questions || []).length || 17))}</div>
-      <BigButton primary onClick={onStart}>{T.start}</BigButton>
-    </div>
+        whiteSpace: "pre-line",
+        ...TY.body,
+        fontSize: isMobile ? 16 : 15,
+        lineHeight: 1.6,
+        color: C.text,
+        marginTop: isMobile ? 16 : 18,
+      }}>{T.intro_body}</div>
+      <Tile padding="2px 14px" style={{ marginTop: isMobile ? 18 : 20 }}>
+        <List>
+          {exam.candidate_name && <Fact icon="person">{exam.candidate_name}</Fact>}
+          <Fact icon="list">
+            {withNum(T.fact_questions, String((exam.questions || []).length || 17))}
+          </Fact>
+          <Fact icon="clock">{withNum(T.fact_time, EXAM_MINUTES)}</Fact>
+        </List>
+      </Tile>
+      <BigButton
+        primary
+        fullWidth
+        onClick={start}
+        disabled={starting}
+        busy={starting}
+        style={{ marginTop: isMobile ? 18 : 20 }}
+      >
+        {T.start}
+      </BigButton>
+    </Panel>
   );
 }
 
@@ -196,6 +389,10 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
   const [remaining, setRemaining] = useState(() => secondsLeft(attempt.expires_at));
   const [submitting, setSubmitting] = useState(false);
   const submittedRef = useRef(false);
+  // Presentation only: confirm sheet, direction of travel, bar hairline.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [travel, setTravel] = useState("push");
+  const [scrolled, setScrolled] = useState(false);
 
   // Countdown — ticks every second, auto-submits at zero.
   useEffect(() => {
@@ -210,6 +407,15 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt.expires_at]);
+
+  // The bar's hairline appears only once content is underneath it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   async function pick(questionId, optionKey) {
     setAnswers((prev) => ({ ...prev, [questionId]: optionKey }));
@@ -231,7 +437,14 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
 
   function handleSubmitClick() {
     const unanswered = questions.filter((q) => !answers[q.id]).length;
-    if (unanswered > 0 && !window.confirm(T.unanswered_warn)) return;
+    // Unanswered questions: ask first (the time-out path never comes here).
+    if (unanswered > 0) { setConfirmOpen(true); return; }
+    submittedRef.current = true;
+    doSubmit();
+  }
+
+  function confirmSubmit() {
+    setConfirmOpen(false);
     submittedRef.current = true;
     doSubmit();
   }
@@ -241,11 +454,13 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
   }
   function goPrev() {
     if (pageIdx === 0) return;
+    setTravel("pop");
     setPageIdx((i) => i - 1);
     scrollTop();
   }
   function goNext() {
     if (pageIdx >= total - 1) return;
+    setTravel("push");
     setPageIdx((i) => i + 1);
     scrollTop();
   }
@@ -258,114 +473,263 @@ function ExamRunner({ token, personalId, exam, attempt, answers, setAnswers, onS
 
   if (!current) return null;
 
-  return (
-    <div>
-      {/* Sticky countdown + progress header */}
-      <div style={{
+  // Sticky countdown + progress bar: translucent, content scrolls under.
+  const bar = (
+    <div
+      data-material=""
+      style={{
         position: "sticky",
         top: 0,
-        zIndex: 10,
-        background: C.bg,
-        borderBottom: `1px solid ${C.border}`,
-        padding: "12px 0",
-        marginBottom: 18,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-        flexWrap: "wrap",
+        zIndex: Z.sticky,
+        background: C.material,
+        ...MATERIAL.bar,
+        borderBottom: `1px solid ${scrolled ? C.separator : "transparent"}`,
+        transition: `border-color ${MOTION.fade}`,
+        paddingTop: "var(--safe-top)",
+      }}
+    >
+      <div style={{
+        ...columnStyle(isMobile),
+        paddingTop: isMobile ? 10 : 12,
+        paddingBottom: isMobile ? 10 : 12,
       }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          gap: 12,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ ...TY.caption, color: C.dim }}>{T.time_left}</div>
+            <div
+              role="timer"
+              style={{
+                ...TY.title2,
+                color: danger ? C.error : C.bright,
+                transition: `color ${MOTION.fade}`,
+              }}
+            >
+              {remaining <= 0 ? T.time_up : <Num>{formatClock(remaining)}</Num>}
+            </div>
+          </div>
           <div style={{
-            fontFamily: FONT_MONO, fontSize: 11, color: C.dim,
-            letterSpacing: "1px", textTransform: "uppercase",
-          }}>{T.time_left}</div>
-          <div style={{
-            fontFamily: FONT_MONO,
-            fontSize: isMobile ? 22 : 26,
-            fontWeight: 700,
-            color: danger ? C.error : C.bright,
-            letterSpacing: "1px",
-            lineHeight: 1,
-          }}>{remaining <= 0 ? T.time_up : formatClock(remaining)}</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, textAlign: "end" }}>
-          <div style={{
-            fontFamily: FONT_MONO, fontSize: 11, color: C.dim,
-            letterSpacing: "1px", textTransform: "uppercase",
-          }}>{T.question}</div>
-          <div style={{
-            fontFamily: FONT_MONO,
-            fontSize: isMobile ? 16 : 18,
-            fontWeight: 700,
-            color: C.bright,
-            letterSpacing: "0.5px",
-            lineHeight: 1,
+            ...TY.footnote,
+            color: C.dim,
+            textAlign: "end",
+            paddingBottom: 3,
+            minWidth: 0,
           }}>
-            {pageIdx + 1} {T.of} {total}
-            <span style={{
-              color: C.dim, fontSize: isMobile ? 11 : 12, fontWeight: 400,
-              marginInlineStart: 8,
-            }}>· {answeredCount} {T.answered}</span>
+            <span style={{ color: C.bright, fontWeight: 600 }}>
+              {T.question} <Num>{pageIdx + 1}</Num> {T.of} <Num>{total}</Num>
+            </span>
+            <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+            <span style={{ whiteSpace: "nowrap" }}>
+              <Num>{answeredCount}</Num> {T.answered}
+            </span>
           </div>
         </div>
+        <Progress
+          value={total > 0 ? (answeredCount / total) * 100 : 0}
+          height={4}
+          label={T.answered}
+          style={{ marginTop: 8 }}
+        />
       </div>
+    </div>
+  );
 
-      <ExamQuestion
-        key={current.id}
-        index={pageIdx + 1}
-        question={current}
-        selected={answers[current.id]}
-        onPick={(optKey) => pick(current.id, optKey)}
-      />
+  return (
+    <ExamShell bar={bar}>
+      <ViewTransition viewKey={current.id} kind={travel}>
+        <ExamQuestion
+          key={current.id}
+          index={pageIdx + 1}
+          question={current}
+          selected={answers[current.id]}
+          onPick={(optKey) => pick(current.id, optKey)}
+        />
+      </ViewTransition>
 
-      <div style={{
-        marginTop: 22,
-        display: "flex",
-        gap: 10,
-      }}>
-        <BigButton onClick={goPrev} disabled={isFirst}>
+      <div style={{ display: "flex", gap: 10, marginTop: isMobile ? 12 : 16 }}>
+        <BigButton onClick={goPrev} disabled={isFirst} icon="chevronBack" iconFlip>
           {T.previous}
         </BigButton>
         {isLast ? (
-          <BigButton primary onClick={handleSubmitClick} disabled={submitting}>
+          <BigButton
+            primary
+            onClick={handleSubmitClick}
+            disabled={submitting}
+            busy={submitting}
+            style={{ flex: 1 }}
+          >
             {submitting ? T.submitting : T.submit}
           </BigButton>
         ) : (
-          <BigButton primary onClick={goNext}>
+          <BigButton primary onClick={goNext} iconEnd="chevronForward" iconFlip style={{ flex: 1 }}>
             {T.next}
           </BigButton>
         )}
       </div>
-    </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={T.unanswered_title}
+        // The dialog is portalled outside this screen's dir="rtl" root.
+        message={(
+          <span dir="rtl">
+            {T.unanswered_body
+              .replace("{k}", String(answeredCount))
+              .replace("{n}", String(total))}
+          </span>
+        )}
+        confirmLabel={T.unanswered_confirm}
+        cancelLabel={T.unanswered_cancel}
+        danger={false}
+        dir="rtl"
+        onConfirm={confirmSubmit}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    </ExamShell>
+  );
+}
+
+// Keyboard focus ring for the shared tappables whose inline `all: unset`
+// cancels the global :focus-visible outline (Row, Tile).
+function useFocusRing() {
+  const [on, setOn] = useState(false);
+  return {
+    onFocus: (e) => {
+      try { setOn(e.currentTarget.matches(":focus-visible")); } catch { setOn(false); }
+    },
+    onBlur: () => setOn(false),
+    ring: on ? { outline: `2px solid ${C.focusRing}`, outlineOffset: 2 } : null,
+  };
+}
+
+// Radio mark: a ring that fills with ink and gains a dot when chosen.
+function RadioMark({ checked }) {
+  return (
+    <span aria-hidden style={{
+      width: 22,
+      height: 22,
+      flexShrink: 0,
+      boxSizing: "border-box",
+      borderRadius: R.pill,
+      border: `1.5px solid ${checked ? C.tint : C.borderBright}`,
+      background: checked ? C.tint : "transparent",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}>
+      {checked && (
+        <span style={{
+          width: 8,
+          height: 8,
+          borderRadius: R.pill,
+          background: C.onTint,
+          animation: `z5-pop ${DURATION.bounce}ms var(--z5-spring-bounce) both`,
+        }} />
+      )}
+    </span>
+  );
+}
+
+// One answer option: a tappable tile with a radio mark. Figure options
+// stack the mark (with the option's key) above the image.
+function OptionTile({ option, image, active, inFigureGrid, figureStyle, onPick }) {
+  const focus = useFocusRing();
+  return (
+    <Tile
+      onClick={onPick}
+      aria-pressed={active}
+      onFocus={focus.onFocus}
+      onBlur={focus.onBlur}
+      padding={image ? 10 : "12px 14px"}
+      style={{
+        display: "flex",
+        flexDirection: image ? "column" : "row",
+        alignItems: image ? "stretch" : inFigureGrid ? "flex-start" : "center",
+        gap: image ? 8 : 12,
+        width: "100%",
+        minHeight: 52,
+        fontFamily: FONT,
+        color: active ? C.bright : C.text,
+        textAlign: "start",
+        background: active ? C.selectedBg : C.cardBg,
+        border: `1.5px solid ${active ? C.tint : "transparent"}`,
+        ...focus.ring,
+      }}
+    >
+      {image ? (
+        <>
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <RadioMark checked={active} />
+            <span style={{ ...TY.footnote, fontWeight: 600, color: C.dim }}>
+              <Num>{option.key}</Num>
+            </span>
+          </span>
+          <img
+            src={image}
+            alt=""
+            style={{
+              maxWidth: "100%",
+              maxHeight: 120,
+              display: "block",
+              marginInline: "auto",
+              objectFit: "contain",
+              ...figureStyle,
+            }}
+          />
+        </>
+      ) : (
+        <>
+          <RadioMark checked={active} />
+          <span style={{
+            flex: 1,
+            minWidth: 0,
+            ...TY.body,
+            fontSize: 16,
+            lineHeight: 1.35,
+            overflowWrap: "anywhere",
+          }}>{option.text || option.key}</span>
+        </>
+      )}
+    </Tile>
   );
 }
 
 function ExamQuestion({ index, question, selected, onPick }) {
-  const isMobile = useIsMobile();
   const promptImg = examFigureUrl(question.prompt_image_url);
   const options = Array.isArray(question.options) ? question.options : [];
+  const hasFigures = options.some((o) => o.image_url);
+  const promptId = `exam-q-${question.id}`;
+  // Figures are line art: a paper backdrop keeps transparent ones legible
+  // on the night theme and is invisible behind opaque ones.
+  const figure = { background: C.posterPaper, borderRadius: R.sm };
 
   return (
-    <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 14,
-      background: C.cardBg,
-      padding: isMobile ? "14px" : "18px 20px",
-      marginBottom: 14,
-    }}>
+    <Panel>
       <div style={{
-        fontFamily: FONT_MONO, fontSize: 12, color: C.dim,
-        letterSpacing: "1px", marginBottom: 8,
-        display: "flex", justifyContent: "space-between",
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        ...TY.footnote,
+        color: C.dim,
+        marginBottom: 8,
       }}>
-        <span>{T.question} {index}</span>
-        <span>{question.points ?? 1} {T.points_suffix}</span>
+        <span id={promptId}>{T.question} <Num>{index}</Num></span>
+        <span><Num>{question.points ?? 1}</Num> {T.points_suffix}</span>
       </div>
 
       {question.prompt_text && (
         <div style={{
-          fontSize: 15, lineHeight: 1.7, color: C.text, marginBottom: promptImg ? 12 : 14,
+          // Short prompts read as a title; passages step down a size.
+          ...(String(question.prompt_text).length > 90
+            ? { ...TY.headline, fontSize: 17, lineHeight: 1.5 }
+            : TY.title3),
+          color: C.bright,
+          overflowWrap: "anywhere",
+          marginBottom: promptImg ? 14 : 16,
         }}>{question.prompt_text}</div>
       )}
       {promptImg && (
@@ -373,59 +737,43 @@ function ExamQuestion({ index, question, selected, onPick }) {
           src={promptImg}
           alt=""
           style={{
-            maxWidth: "100%", display: "block", margin: "0 auto 14px",
-            border: `1px solid ${C.border}`, borderRadius: 8,
+            maxWidth: "100%",
+            display: "block",
+            margin: "0 auto 16px",
+            ...figure,
+            borderRadius: R.md,
           }}
         />
       )}
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: options.some((o) => o.image_url)
-          ? (isMobile ? "1fr 1fr" : "1fr 1fr")
-          : "1fr",
-        gap: 8,
-      }}>
+      <div
+        role="group"
+        aria-labelledby={promptId}
+        style={{
+          display: "grid",
+          gridTemplateColumns: hasFigures
+            ? "minmax(0, 1fr) minmax(0, 1fr)"
+            : "minmax(0, 1fr)",
+          gap: 8,
+        }}
+      >
         {options.map((opt) => {
           const active = selected === opt.key;
           const optImg = examFigureUrl(opt.image_url);
           return (
-            <button
+            <OptionTile
               key={opt.key}
-              type="button"
-              onClick={() => onPick(opt.key)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: optImg ? "8px" : "12px 14px",
-                background: active ? C.selectedBg : C.inputBg,
-                border: `1px solid ${active ? C.bright : C.border}`,
-                borderRadius: 10,
-                cursor: "pointer",
-                fontFamily: FONT,
-                color: C.text,
-                textAlign: "start",
-                minHeight: 46,
-              }}
-            >
-              <span style={{
-                flexShrink: 0,
-                width: 16, height: 16, borderRadius: "50%",
-                border: `2px solid ${active ? C.bright : C.borderBright}`,
-                background: active ? C.bright : "transparent",
-              }} />
-              {optImg ? (
-                <img src={optImg} alt={opt.key}
-                  style={{ maxWidth: "100%", maxHeight: 120, display: "block" }} />
-              ) : (
-                <span style={{ fontSize: 15 }}>{opt.text || opt.key}</span>
-              )}
-            </button>
+              option={opt}
+              image={optImg}
+              active={active}
+              inFigureGrid={hasFigures}
+              figureStyle={figure}
+              onPick={() => onPick(opt.key)}
+            />
           );
         })}
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -433,52 +781,21 @@ function ExamQuestion({ index, question, selected, onPick }) {
 
 function Result({ result }) {
   return (
-    <div style={{ padding: "60px 20px", textAlign: "center" }}>
-      <div style={{ fontSize: 56, color: C.ok, marginBottom: 14, lineHeight: 1 }}>✓</div>
-      <h2 style={{ margin: "0 0 18px", color: C.bright, fontSize: 22, fontWeight: 700 }}>
-        {T.result_title}
-      </h2>
-      <div style={{
-        fontFamily: FONT_MONO, fontSize: 40, fontWeight: 700,
-        color: C.bright, marginBottom: 6,
-      }}>{result.score} / {result.total}</div>
-      <div style={{
-        fontSize: 11, color: C.dim, letterSpacing: "1px",
-        textTransform: "uppercase", marginBottom: 20,
-      }}>{T.result_score}</div>
-      <div style={{
-        color: C.dim, fontSize: 14, lineHeight: 1.7,
-        maxWidth: 420, margin: "0 auto",
-      }}>{T.result_body}</div>
-    </div>
-  );
-}
-
-// ── Shared button ──────────────────────────────────────────────────
-
-function BigButton({ children, onClick, disabled, primary }) {
-  const isMobile = useIsMobile();
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        width: "100%",
-        background: primary ? C.bright : "transparent",
-        color: primary ? C.btnActiveColor : C.text,
-        border: `1px solid ${primary ? C.bright : C.border}`,
-        padding: isMobile ? "14px 20px" : "13px 22px",
-        fontFamily: FONT,
-        fontSize: 15,
-        fontWeight: 600,
-        letterSpacing: "0.4px",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        borderRadius: 12,
-        minHeight: isMobile ? 50 : 46,
-      }}
-    >{children}</button>
+    <Done
+      title={T.result_title}
+      extra={(
+        <Tile padding="16px 28px" style={{ marginTop: 18, marginBottom: 6, minWidth: 180 }}>
+          <Stat
+            size="lg"
+            align="center"
+            value={`${result.score} / ${result.total}`}
+            label={T.result_score}
+          />
+        </Tile>
+      )}
+    >
+      {T.result_body}
+    </Done>
   );
 }
 

@@ -1,15 +1,18 @@
 // Z5 :: Survey question editor (admin) — Phase C2.
 // Per-cycle CRUD over the survey_questions table. Reached from the
 // Cycles detail screen via "Edit questions".
+// Shares its scaffold with ExamEditor — keep the two visually identical.
 
 import { useEffect, useState, useMemo } from "react";
 import { useI18n } from "../../i18n";
 import { useIsMobile } from "../../useIsMobile";
 import {
-  PageHeader, Panel, Btn, Input, Textarea, Field, Badge, ErrLine, OkLine,
-  BackButton, ConfirmDialog,
+  PageHeader, Panel, Tile, List, Row, Btn, IconButton, Input, Textarea, Select,
+  Field, Switch, Badge, Num, ErrLine, OkLine, EmptyState, SkeletonRows,
+  ConfirmDialog, ELLIPSIS,
 } from "../../ui";
-import { C, S } from "../../theme";
+import { C, T } from "../../theme";
+import { DURATION } from "../../motion";
 import {
   listSurveyQuestions,
   createSurveyQuestion,
@@ -27,10 +30,14 @@ const QUESTION_TYPES = [
   "likert_5", "team_radio", "recommend", "dont_recommend",
 ];
 
+// New content appearing in place rises in.
+const RISE = `z5-rise ${DURATION.move}ms var(--z5-spring) backwards`;
+
 export default function QuestionEditor({ cycleId, cycleName, onBack }) {
   const { t } = useI18n();
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -62,7 +69,9 @@ export default function QuestionEditor({ cycleId, cycleName, onBack }) {
 
   async function handleSeed() {
     setErr(""); setOk("");
+    setSeeding(true);
     const { data, error } = await seedDefaultTemplate(cycleId);
+    setSeeding(false);
     if (error) { setErr(error.message); return; }
     flash(setOk, data > 0
       ? t("rec.editor.seeded", { n: data })
@@ -94,31 +103,34 @@ export default function QuestionEditor({ cycleId, cycleName, onBack }) {
     await refresh();
   }
 
+  // First load only — later refreshes keep the list on screen.
+  const firstLoad = loading && questions.length === 0;
+  const seedBtn = (
+    <Btn small type="button" onClick={handleSeed} disabled={seeding} busy={seeding}>
+      {t("rec.editor.seed")}
+    </Btn>
+  );
+
   return (
     <>
       <PageHeader
-        title={`${t("rec.editor.title")} — ${cycleName || ""}`}
+        back={{ onClick: onBack, label: cycleName ? <BackLabel>{cycleName}</BackLabel> : undefined }}
+        title={t("rec.editor.title")}
         subtitle={t("rec.editor.subtitle")}
-        action={<BackButton onClick={onBack} />}
-      />
-      <Panel connectTop>
-        {questions.length === 0 && !loading && (
-          <div style={{
-            color: C.dim, fontSize: 13, lineHeight: 1.6, marginBottom: 12,
-          }}>
-            {t("rec.editor.empty")}
-          </div>
+        action={(
+          <>
+            {seedBtn}
+            <Btn small primary type="button" icon="plus" onClick={() => setAdding(true)}>
+              {t("rec.editor.add")}
+            </Btn>
+          </>
         )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-          <Btn small onClick={handleSeed}>{t("rec.editor.seed")}</Btn>
-          <Btn small onClick={() => setAdding(true)}>{t("rec.editor.add")}</Btn>
-        </div>
-        <ErrLine>{err}</ErrLine>
-        <OkLine>{ok}</OkLine>
-      </Panel>
+      />
+      <ErrLine>{err}</ErrLine>
+      <OkLine>{ok}</OkLine>
 
       {adding && (
-        <Panel title={t("rec.editor.new_question")}>
+        <Panel title={t("rec.editor.new_question")} style={{ animation: RISE }}>
           <QuestionForm
             initial={defaultNewQuestion(questions)}
             onSave={(q) => handleSave(q, true)}
@@ -127,33 +139,57 @@ export default function QuestionEditor({ cycleId, cycleName, onBack }) {
         </Panel>
       )}
 
+      {firstLoad && (
+        <Panel><SkeletonRows rows={5} /></Panel>
+      )}
+
+      {!loading && questions.length === 0 && !adding && (
+        <Panel>
+          <EmptyState icon="list" title={t("rec.editor.empty_title")} action={seedBtn}>
+            {t("rec.editor.empty_hint")}
+          </EmptyState>
+        </Panel>
+      )}
+
       {SECTIONS.map((s) => {
         const list = grouped.get(s) || [];
         if (list.length === 0) return null;
         return (
-          <Panel key={s} title={`${t(`rec.section.${s}`)} (${list.length})`}>
-            {list.map((q) => (
-              editingId === q.id ? (
-                <QuestionForm
-                  key={q.id}
-                  initial={q}
-                  onSave={(p) => handleSave({ ...p, id: q.id }, false)}
-                  onCancel={() => setEditingId(null)}
-                />
-              ) : (
-                <QuestionRow
-                  key={q.id}
-                  q={q}
-                  onEdit={() => setEditingId(q.id)}
-                  onDelete={() => handleDelete(q.id)}
-                />
-              )
-            ))}
+          <Panel
+            key={s}
+            title={t(`rec.section.${s}`)}
+            action={<Badge><Num>{list.length}</Num></Badge>}
+          >
+            <List>
+              {list.map((q) => (
+                editingId === q.id ? (
+                  <Tile key={q.id} style={{ marginBlock: 8, animation: RISE }}>
+                    <QuestionForm
+                      initial={q}
+                      onSave={(p) => handleSave({ ...p, id: q.id }, false)}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  </Tile>
+                ) : (
+                  <QuestionRow
+                    key={q.id}
+                    q={q}
+                    onEdit={() => setEditingId(q.id)}
+                    onDelete={() => handleDelete(q.id)}
+                  />
+                )
+              ))}
+            </List>
           </Panel>
         );
       })}
     </>
   );
+}
+
+// Back control label: the cycle we return to, cut short when it is long.
+function BackLabel({ children }) {
+  return <span style={{ ...ELLIPSIS, maxWidth: 220 }}>{children}</span>;
 }
 
 function defaultNewQuestion(existing) {
@@ -172,50 +208,53 @@ function defaultNewQuestion(existing) {
 
 function QuestionRow({ q, onEdit, onDelete }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [confirmDel, setConfirmDel] = useState(false);
   const typeLabel = QUESTION_TYPES.includes(q.question_type)
     ? t(`rec.qtype.${q.question_type}`)
     : q.question_type;
+  const btnSize = isMobile ? 36 : 32;
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 12,
-      padding: "10px 0",
-      borderBottom: `1px solid ${C.border}`,
-    }}>
-      <div style={{
-        flex: "0 0 28px",
-        color: C.dim,
-        fontFamily: "var(--font-mono, monospace)",
-        fontSize: 12,
-      }}>{q.ord}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          color: C.bright,
-          fontSize: 14,
-          marginBottom: 4,
-          lineHeight: 1.4,
-        }}>{q.question_text}</div>
-        <div style={{ display: "flex", gap: 6, fontSize: 11, color: C.dim, flexWrap: "wrap" }}>
-          <Badge>{typeLabel}</Badge>
-          {q.required && <Badge tone="warn">{t("rec.editor.required_label")}</Badge>}
+    <>
+      <Row
+        as="div"
+        align="flex-start"
+        leading={<OrdMark>{q.ord}</OrdMark>}
+        trailing={(
+          <div style={{ display: "flex", gap: 6 }}>
+            <IconButton icon="pencil" label={t("common.edit")} size={btnSize} onClick={onEdit} />
+            <IconButton icon="trash" label={t("common.delete")} size={btnSize} onClick={() => setConfirmDel(true)} />
+          </div>
+        )}
+      >
+        <div style={{ ...T.body, fontWeight: 500, color: C.bright, overflowWrap: "anywhere" }}>
+          {/* Question text is content, not chrome: it keeps its own direction. */}
+          <span dir="auto">{q.question_text}</span>
         </div>
-      </div>
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-        <Btn small onClick={onEdit}>{t("mis.edit")}</Btn>
-        <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
-      </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          <Badge>{typeLabel}</Badge>
+          {q.required && <Badge tone="bright">{t("rec.editor.required_label")}</Badge>}
+        </div>
+      </Row>
       <ConfirmDialog
         open={confirmDel}
         title={t("rec.editor.delete_title")}
         message={t("rec.editor.delete_body")}
-        confirmLabel={t("mis.delete")}
+        confirmLabel={t("common.delete")}
         cancelLabel={t("common.cancel")}
         onConfirm={() => { setConfirmDel(false); onDelete(); }}
         onCancel={() => setConfirmDel(false)}
       />
-    </div>
+    </>
+  );
+}
+
+// Quiet order number, sitting on the first text line of its row.
+function OrdMark({ children }) {
+  return (
+    <span style={{ ...T.body, minWidth: 22, textAlign: "center", color: C.dimmer }}>
+      <Num>{children}</Num>
+    </span>
   );
 }
 
@@ -223,6 +262,7 @@ function QuestionRow({ q, onEdit, onDelete }) {
 
 function QuestionForm({ initial, onSave, onCancel }) {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [ord, setOrd] = useState(initial.ord || 1);
   const [section, setSection] = useState(initial.section || "identity");
   const [text, setText] = useState(initial.question_text || "");
@@ -259,38 +299,37 @@ function QuestionForm({ initial, onSave, onCancel }) {
   }
 
   return (
-    <form onSubmit={save} style={{
-      padding: "14px",
-      background: C.cardBg,
-      border: `1px solid ${C.border}`,
-      borderRadius: 4,
-      marginBottom: 12,
-    }}>
+    <form onSubmit={save}>
       <div style={{
         display: "grid",
-        gridTemplateColumns: "1fr 1fr 80px",
-        gap: 10,
+        gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1fr) 96px",
+        columnGap: 12,
       }}>
         <Field label={t("rec.editor.section")}>
-          <select value={section} onChange={(e) => setSection(e.target.value)} style={{ ...S.input, fontSize: 14 }}>
+          <Select value={section} onChange={(e) => setSection(e.target.value)}>
             {SECTIONS.map((s) => (
               <option key={s} value={s}>{t(`rec.section.${s}`)}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("rec.editor.type")}>
-          <select value={type} onChange={(e) => setType(e.target.value)} style={{ ...S.input, fontSize: 14 }}>
+          <Select value={type} onChange={(e) => setType(e.target.value)}>
             {QUESTION_TYPES.map((qt) => (
               <option key={qt} value={qt}>{t(`rec.qtype.${qt}`)}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("rec.editor.ord")}>
           <Input type="number" value={ord} onChange={(e) => setOrd(e.target.value)} />
         </Field>
       </div>
       <Field label={t("rec.editor.text_label")}>
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={t("rec.editor.text_ph")} />
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={t("rec.editor.text_ph")}
+          style={{ height: 88 }}
+        />
       </Field>
       {usesOptions && (
         <Field label={t("rec.editor.options_label")}>
@@ -298,30 +337,22 @@ function QuestionForm({ initial, onSave, onCancel }) {
             value={optionsText}
             onChange={(e) => setOptionsText(e.target.value)}
             placeholder={t("rec.editor.options_ph")}
+            style={{ height: 110 }}
           />
         </Field>
       )}
-      <label style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 16,
-        cursor: "pointer",
-        fontSize: 13,
-        color: C.text,
-      }}>
-        <input
-          type="checkbox"
+      <div style={{ marginBottom: 16 }}>
+        <Switch
           checked={required}
-          onChange={(e) => setRequired(e.target.checked)}
+          onChange={setRequired}
+          label={t("rec.editor.required_label")}
         />
-        {t("rec.editor.required_label")}
-      </label>
-      <div style={{ display: "flex", gap: 8 }}>
-        <Btn small primary type="submit" disabled={busy}>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Btn small={!isMobile} primary type="submit" disabled={busy} busy={busy}>
           {busy ? t("rec.saving") : t("rec.editor.save_btn")}
         </Btn>
-        <Btn small type="button" onClick={onCancel}>
+        <Btn small={!isMobile} type="button" onClick={onCancel}>
           {t("rec.editor.cancel_btn")}
         </Btn>
       </div>

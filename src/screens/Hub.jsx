@@ -1,12 +1,11 @@
 // Z5 :: Hub — landing screen shown on every login.
-// Three banners stacked vertically as a console list. Selecting one
-// sets consoleMode and routes the user into Shell. Banners the user
-// cannot access render in a disabled state with a 'No access' tag.
+// Three console posters. Selecting one sets consoleMode and routes the
+// user into Shell. Posters the user cannot enter stay visible but are
+// dimmed and carry a status capsule ("Coming soon" / "No access").
 //
-// Visual direction: monochrome instrument-panel with snappy hover/focus
-// feedback and a clear pressed state on touch. No chromas, no glyphs,
-// no card fills — interactivity is communicated through state
-// transitions, not decoration.
+// Visual direction: the operator artwork is the hero. Chrome over it is
+// minimal — a title, one line of copy and a single translucent capsule —
+// and every poster answers a press immediately.
 
 import { useState } from "react";
 import { useAuth, roleLabelT } from "../auth";
@@ -14,201 +13,221 @@ import { useI18n } from "../i18n";
 import { useConsole } from "../console";
 import { useTheme } from "../ThemeContext";
 import { useIsMobile } from "../useIsMobile";
-import { Page } from "../ui";
-import { C, FONT, FONT_MONO } from "../theme";
+import { Page, Btn, Mono, Icon } from "../ui";
+import { C, FONT, MATERIAL, R, T } from "../theme";
+import { MOTION, DURATION } from "../motion";
 
-// Full-bleed hero poster card. The operator artwork (public/hero-*.png)
+// Full-bleed hero poster card. The operator artwork (public/hero-*.jpg)
 // fills the card; title + tagline sit over a bottom gradient. If the
 // hero image is missing, falls back to the console icon centered on
 // black, so the Hub works before the artwork is dropped in.
-// Poster cards are photographic and intrinsically dark in BOTH themes,
-// so the black backdrop / white overlay text here are deliberate
-// image-context literals, not theme-token violations.
-function PosterCard({ heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAccessLabel, comingSoonLabel, enterLabel, onSelect, isLight }) {
+// Posters are image contexts: their pixels do not follow the theme the
+// way surfaces do, so everything drawn over them uses the poster / image
+// tokens (paper + ink for the light artwork, black + white otherwise).
+function PosterCard({
+  heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAccessLabel,
+  comingSoonLabel, enterLabel, onSelect, isLight, delay = 0,
+}) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
-  const [pressed, setPressed] = useState(false);
-  // Source fallback chain: light-mode variant (when in light theme) →
-  // dark artwork → console icon. onError simply advances the chain.
+  // Source fallback chain: light-mode variant (when in light theme), then
+  // the dark artwork, then the console icon. onError advances the chain.
   const sources = isLight ? [heroSrc.replace(".jpg", "-light.jpg"), heroSrc] : [heroSrc];
   const [srcIdx, setSrcIdx] = useState(0);
   const activeSrc = srcIdx < sources.length ? sources[srcIdx] : null;
 
   const locked = comingSoon || !enabled;
-  const lit = !locked && (hover || pressed);
+  const lit = !locked && hover;
 
+  // Paper poster (light artwork) or dark poster (dark artwork / icon).
+  const paper = isLight && srcIdx === 0;
+  const ink = paper ? C.posterInk : C.imageOverlayText;
+  const backdrop = paper ? C.posterPaper : C.imageSurface;
+  const tint = paper ? C.overlay : C.imageTint;          // ink direction
+  const shade = paper ? C.overlayInverse : C.imageShade; // backdrop direction
+
+  // Hover is a pointer-only nicety (artwork zoom + lift); touch gets its
+  // feedback from the press state alone.
   const onPointerEnter = (e) => { if (e.pointerType !== "touch") setHover(true); };
-  const onPointerLeave = () => { setHover(false); setPressed(false); };
+  const onPointerLeave = () => { setHover(false); };
 
-  const handleClick = (e) => {
+  const handleClick = () => {
     if (locked) return;
-    setPressed(true);
-    if (e?.currentTarget?.blur) e.currentTarget.blur();
-    window.setTimeout(() => { onSelect(); }, 120);
+    onSelect();
+  };
+
+  const capsule = {
+    flexShrink: 0,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 30,
+    boxSizing: "border-box",
+    borderRadius: R.pill,
+    ...T.footnote,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    color: ink,
+    ...MATERIAL.bar,
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
+    <div
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
-      onPointerDown={() => setPressed(true)}
-      onPointerUp={() => setPressed(false)}
-      onPointerCancel={() => setPressed(false)}
-      disabled={locked}
-      aria-label={name}
       style={{
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "flex-end",
-        width: "100%",
-        // Desktop: height budgeted from the viewport so the whole Hub
-        // (brand + posters + footer) fits one screen; mobile keeps a
-        // portrait ratio and scrolls naturally.
-        aspectRatio: isMobile ? "4 / 5" : "auto",
-        height: isMobile ? "auto" : "min(52vh, 520px)",
-        minHeight: isMobile ? 0 : 300,
-        maxHeight: isMobile ? 420 : 520,
-        borderRadius: 18,
-        overflow: "hidden",
-        border: `1px solid ${lit ? C.borderBright : C.border}`,
-        background: isLight && srcIdx === 0 ? "#f8f6f0" : "#000",
-        padding: 0,
-        fontFamily: FONT,
-        textAlign: "start",
-        cursor: locked ? "not-allowed" : "pointer",
-        transform: pressed ? "scale(0.985)" : "scale(1)",
-        transition: "transform 160ms ease-out, border-color 220ms ease-out, box-shadow 220ms ease-out",
-        boxShadow: lit ? "0 16px 44px rgba(0,0,0,0.5)" : "none",
-        outline: "none",
-        WebkitTapHighlightColor: "transparent",
+        minWidth: 0,
+        animation: `z5-rise ${DURATION.move}ms var(--z5-spring) ${delay}ms backwards`,
+        transform: lit ? "translateY(-4px)" : "none",
+        transition: `transform ${MOTION.move}`,
       }}
     >
-      {/* Artwork */}
-      {activeSrc ? (
-        <img
-          key={activeSrc}
-          src={activeSrc}
-          alt=""
-          aria-hidden
-          onError={() => setSrcIdx((i) => i + 1)}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: "center",
-            filter: locked ? "grayscale(1) brightness(0.42)" : "none",
-            transform: lit ? "scale(1.05)" : "scale(1)",
-            transition: "transform 700ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease-out",
-          }}
-        />
-      ) : (
-        <div style={{
-          position: "absolute",
-          inset: 0,
+      <button
+        type="button"
+        data-press="scale"
+        data-press-depth="soft"
+        onClick={handleClick}
+        disabled={locked}
+        aria-label={name}
+        style={{
+          all: "unset",
+          boxSizing: "border-box",
+          position: "relative",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          width: "100%",
+          // Desktop: height budgeted from the viewport so the whole Hub
+          // (brand + posters + footer) fits one screen; mobile keeps a
+          // portrait ratio and scrolls naturally.
+          aspectRatio: isMobile ? "4 / 5" : "auto",
+          height: isMobile ? "auto" : "min(52vh, 520px)",
+          minHeight: isMobile ? 0 : 300,
+          maxHeight: isMobile ? 420 : 520,
+          borderRadius: R.sheet,
+          overflow: "hidden",
+          isolation: "isolate",
+          border: `1px solid ${C.border}`,
+          background: backdrop,
+          fontFamily: FONT,
+          textAlign: "start",
+          cursor: locked ? "default" : "pointer",
+          boxShadow: lit ? C.shadowLg : C.shadow,
+          // The locked state is drawn on the artwork itself; don't let the
+          // global disabled dimming fade the whole poster as well.
+          opacity: 1,
+        }}
+      >
+        {/* Artwork */}
+        {activeSrc ? (
           <img
-            src={`${import.meta.env.BASE_URL}${iconSrc}`}
+            key={activeSrc}
+            src={activeSrc}
             alt=""
+            aria-hidden
+            onError={() => setSrcIdx((i) => i + 1)}
             style={{
-              width: isMobile ? 72 : 96,
-              height: isMobile ? 72 : 96,
-              objectFit: "contain",
-              opacity: locked ? 0.3 : 0.75,
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "center",
+              // Locked artwork recedes into its own backdrop: toward
+              // paper on the light poster, toward black on the dark one.
+              filter: locked
+                ? (paper ? "grayscale(1) opacity(0.34)" : "grayscale(1) brightness(0.42)")
+                : "none",
+              transform: lit ? "scale(1.04)" : "none",
+              transition: `transform ${MOTION.move}, filter ${MOTION.fade}`,
             }}
           />
-        </div>
-      )}
+        ) : (
+          <div style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <img
+              src={`${import.meta.env.BASE_URL}${iconSrc}`}
+              alt=""
+              style={{
+                width: isMobile ? 72 : 96,
+                height: isMobile ? 72 : 96,
+                objectFit: "contain",
+                opacity: locked ? 0.3 : 0.75,
+              }}
+            />
+          </div>
+        )}
 
-      {/* Bottom gradient for text legibility — flips with the artwork:
-          dark posters get a black fade, white posters a paper fade. */}
-      <div aria-hidden style={{
-        position: "absolute",
-        inset: 0,
-        background: isLight && srcIdx === 0
-          ? "linear-gradient(to top, rgba(248,246,240,0.96) 0%, rgba(248,246,240,0.7) 24%, rgba(248,246,240,0) 52%)"
-          : "linear-gradient(to top, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.62) 24%, rgba(0,0,0,0) 52%)",
-      }} />
+        {/* Bottom gradient for text legibility — follows the artwork:
+            dark posters get a black fade, light posters a paper fade. */}
+        <div aria-hidden style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(to top, ${shade}0.96) 0%, ${shade}0.72) 24%, ${shade}0) 54%)`,
+        }} />
 
-      {/* Copy */}
-      <div style={{
-        position: "relative",
-        padding: isMobile ? "16px 16px 18px" : "20px 20px 24px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-      }}>
+        {/* Copy */}
         <div style={{
-          fontSize: isMobile ? 16 : 18,
-          fontWeight: 800,
-          letterSpacing: "3px",
-          textTransform: "uppercase",
-          color: isLight && srcIdx === 0 ? "#141310" : "#fff",
+          position: "relative",
+          padding: isMobile ? "16px 18px 18px" : "20px 22px 22px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 5,
         }}>
-          {name}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              flex: 1,
+              minWidth: 0,
+              ...T.title2,
+              color: locked ? `${tint}0.62)` : ink,
+              overflowWrap: "break-word",
+            }}>
+              {name}
+            </div>
+            {locked ? (
+              <span data-material="" style={{
+                ...capsule,
+                paddingInline: "10px 12px",
+                gap: 5,
+                background: `${tint}0.08)`,
+              }}>
+                <Icon name={comingSoon ? "clock" : "lock"} size={13} strokeWidth={2.2} />
+                {comingSoon ? comingSoonLabel : noAccessLabel}
+              </span>
+            ) : (
+              <span data-material="" style={{
+                ...capsule,
+                paddingInline: "13px 9px",
+                background: `${tint}${lit ? "0.18)" : "0.10)"}`,
+                transition: `background-color ${MOTION.fade}`,
+              }}>
+                {enterLabel}
+                <Icon name="chevronForward" size={13} strokeWidth={2.4} flip />
+              </span>
+            )}
+          </div>
+          <div style={{
+            ...T.footnote,
+            color: locked ? `${tint}0.55)` : `${tint}0.72)`,
+            // Side by side, every poster reserves two lines so the titles
+            // and capsules line up across the row.
+            minHeight: isMobile ? 0 : "2.8em",
+          }}>
+            {tagline}
+          </div>
         </div>
-        <div style={{
-          fontSize: isMobile ? 12 : 13,
-          lineHeight: 1.5,
-          color: isLight && srcIdx === 0 ? "rgba(20,19,16,0.72)" : "rgba(255,255,255,0.72)",
-        }}>
-          {tagline}
-        </div>
-        {comingSoon && (
-          <div style={{
-            marginTop: 4,
-            fontFamily: FONT_MONO,
-            fontSize: 10,
-            letterSpacing: "1.5px",
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: isLight && srcIdx === 0 ? "rgba(20,19,16,0.55)" : "rgba(255,255,255,0.55)",
-          }}>
-            {comingSoonLabel}
-          </div>
-        )}
-        {!comingSoon && !enabled && (
-          <div style={{
-            marginTop: 4,
-            fontFamily: FONT_MONO,
-            fontSize: 10,
-            letterSpacing: "1.5px",
-            textTransform: "uppercase",
-            fontWeight: 600,
-            color: C.warn,
-          }}>
-            {noAccessLabel}
-          </div>
-        )}
-        {!locked && (
-          <div style={{
-            marginTop: 6,
-            fontFamily: FONT_MONO,
-            fontSize: 11,
-            letterSpacing: "2px",
-            textTransform: "uppercase",
-            fontWeight: 700,
-            color: isLight && srcIdx === 0 ? "#141310" : "#fff",
-            opacity: lit ? 1 : 0.55,
-            transition: "opacity 200ms ease-out",
-          }}>
-            {enterLabel} ›
-          </div>
-        )}
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 
 export default function Hub() {
-  const { profile } = useAuth();
+  const { profile, signOut } = useAuth();
   const { t } = useI18n();
   const { setConsoleMode, availableConsoles } = useConsole();
   const { mode } = useTheme();
@@ -251,6 +270,7 @@ export default function Hub() {
   return (
     <Page>
       <div style={{
+        position: "relative",
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
@@ -259,6 +279,25 @@ export default function Hub() {
           ? "calc(24px + var(--safe-top)) 16px calc(16px + var(--safe-bottom))"
           : "24px 24px 16px",
       }}>
+        {/* The way out — quiet, in the top trailing corner. */}
+        <div style={{
+          position: "absolute",
+          top: isMobile ? "calc(6px + var(--safe-top))" : 16,
+          insetInlineEnd: isMobile ? 8 : 20,
+        }}>
+          <Btn
+            plain
+            small
+            type="button"
+            icon="logout"
+            iconFlip
+            onClick={() => signOut()}
+            style={{ color: C.dim, ...(isMobile ? { minHeight: 44 } : null) }}
+          >
+            {t("nav.logout")}
+          </Btn>
+        </div>
+
         {/* Main content centered */}
         <div style={{
           flex: 1,
@@ -273,16 +312,14 @@ export default function Hub() {
             maxWidth: isMobile ? 520 : 1100,
             display: "flex",
             flexDirection: "column",
-            gap: isMobile ? 18 : 20,
+            gap: isMobile ? 22 : 28,
           }}>
             {/* Brand block */}
             <div style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
-              gap: isMobile ? 10 : 10,
-              paddingBottom: isMobile ? 14 : 14,
-              borderBottom: `1px solid ${C.border}`,
+              textAlign: "center",
             }}>
               <img
                 src={`${import.meta.env.BASE_URL}z5-logo.png`}
@@ -293,41 +330,38 @@ export default function Hub() {
                   maxHeight: isMobile ? 95 : 105,
                   objectFit: "contain",
                   display: "block",
+                  marginBottom: 12,
                   filter: isLight ? "none" : "invert(0.9)",
                 }}
               />
-              <div style={{
+              <h1 style={{
+                margin: 0,
+                ...(isMobile ? T.title1 : T.largeTitle),
                 color: C.bright,
-                fontSize: isMobile ? 19 : 24,
-                fontWeight: 800,
-                letterSpacing: isMobile ? "4px" : "5px",
               }}>
                 {t("nav.terminal")}
-              </div>
+              </h1>
               <div style={{
-                fontFamily: FONT_MONO,
-                fontSize: isMobile ? 12 : 13,
-                letterSpacing: "0.4px",
-                textAlign: "center",
-                lineHeight: 1.6,
+                marginTop: 6,
                 maxWidth: "100%",
+                ...T.footnote,
                 color: C.dim,
               }}>
                 <span>{t("hub.status.operator")}: </span>
-                <span style={{ color: C.text, fontWeight: 700 }}>{profile?.callsign || "—"}</span>
-                <span style={{ color: C.dimmer, margin: "0 10px" }}>·</span>
+                <Mono style={{ color: C.text, fontWeight: 600 }}>{profile?.callsign || "—"}</Mono>
+                <span aria-hidden style={{ color: C.dimmer, margin: "0 8px" }}>·</span>
                 <span>{t("hub.status.clearance")}: </span>
-                <span style={{ color: C.text, fontWeight: 700 }}>{roleLabelT(profile?.role, t)}</span>
+                <span style={{ color: C.text, fontWeight: 600 }}>{roleLabelT(profile?.role, t)}</span>
               </div>
             </div>
 
-            {/* Poster wall — three vertical hero cards */}
+            {/* Poster wall — three hero cards */}
             <div style={{
               display: "grid",
               gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
               gap: isMobile ? 14 : 20,
             }}>
-              {banners.map((b) => (
+              {banners.map((b, i) => (
                 <PosterCard
                   key={b.mode}
                   heroSrc={`${import.meta.env.BASE_URL}hero-${b.mode}.jpg`}
@@ -341,6 +375,7 @@ export default function Hub() {
                   enterLabel={t("hub.enter")}
                   onSelect={() => setConsoleMode(b.mode)}
                   isLight={isLight}
+                  delay={i * 70}
                 />
               ))}
             </div>
@@ -349,13 +384,10 @@ export default function Hub() {
 
         {/* Footer */}
         <div style={{
-          paddingTop: isMobile ? 16 : 14,
+          paddingTop: isMobile ? 18 : 16,
           textAlign: "center",
-          fontFamily: FONT_MONO,
-          fontSize: isMobile ? 10 : 11,
-          color: C.dim,
-          letterSpacing: "1.4px",
-          textTransform: "uppercase",
+          ...T.caption,
+          color: C.dimmer,
         }}>
           {t("auth.footer")}
         </div>

@@ -7,80 +7,76 @@ import {
   setAdminTaskDone, deleteMission,
 } from "../data/missions";
 import {
-  Panel, PageHeader, Btn, Badge, Mono, ErrLine, OkLine,
+  Panel, PageHeader, Btn, Badge, Mono, Num, ErrLine, OkLine, Tile, Row, List,
+  Disclosure, Checkbox, Progress, Notice, EmptyState, Skeleton, SkeletonRows,
+  ConfirmDialog, Menu, IconButton, ELLIPSIS,
 } from "../ui";
 import { useIsMobile } from "../useIsMobile";
-import { C, FONT_MONO, FONT } from "../theme";
+import { C, R, S, T } from "../theme";
+import { MOTION, DURATION } from "../motion";
 import {
-  SECTIONS, SECTION_LABELS, COMMON_SECTIONS, sectionsForRole,
+  SECTIONS, SECTION_LABELS, sectionsForRole,
   OPERATOR_ROLE_LABELS, MISSION_STATUS_LABELS, MISSION_STATUS_TONES,
 } from "../missionTemplate";
 
 // ── Section icons ──────────────────────────────────────────────────
-const SECTION_ICONS = {
-  sniper_rec10: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1.2"/>
-      <line x1="4" y1="5" x2="4" y2="11" stroke="currentColor" strokeWidth="1"/>
-      <circle cx="10" cy="8" r="3" stroke="currentColor" strokeWidth="1.2"/>
-      <line x1="10" y1="5.5" x2="10" y2="10.5" stroke="currentColor" strokeWidth="0.7"/>
-      <line x1="7.5" y1="8" x2="12.5" y2="8" stroke="currentColor" strokeWidth="0.7"/>
-    </svg>
-  ),
-  sniper_bolt: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1.4"/>
-      <line x1="3" y1="5" x2="3" y2="11" stroke="currentColor" strokeWidth="1"/>
-      <rect x="6" y="6" width="5" height="4" rx="1" stroke="currentColor" strokeWidth="1"/>
-      <line x1="12" y1="8" x2="14" y2="10" stroke="currentColor" strokeWidth="1"/>
-    </svg>
-  ),
-  spotter_tl: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.2"/>
-      <line x1="8" y1="2" x2="8" y2="5" stroke="currentColor" strokeWidth="1"/>
-      <line x1="8" y1="11" x2="8" y2="14" stroke="currentColor" strokeWidth="1"/>
-      <line x1="2" y1="8" x2="5" y2="8" stroke="currentColor" strokeWidth="1"/>
-      <line x1="11" y1="8" x2="14" y2="8" stroke="currentColor" strokeWidth="1"/>
-      <circle cx="8" cy="8" r="1" fill="currentColor"/>
-    </svg>
-  ),
-  all: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <rect x="3" y="2" width="10" height="12" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-      <line x1="5" y1="5" x2="11" y2="5" stroke="currentColor" strokeWidth="0.8"/>
-      <line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" strokeWidth="0.8"/>
-      <line x1="5" y1="11" x2="9" y2="11" stroke="currentColor" strokeWidth="0.8"/>
-    </svg>
-  ),
-  final_check: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M5.5 8 L7.5 10 L11 5.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  final_ready: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-      <path d="M3 8 L6.5 11.5 L13 4.5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
+// Subject marks for the checklist sections (also used by the checklist
+// editor in MissionCreate). They inherit currentColor.
+const svg = (children) => (
+  <svg
+    width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden
+    stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"
+    style={{ display: "block", flexShrink: 0 }}
+  >
+    {children}
+  </svg>
+);
+
+export const SECTION_ICONS = {
+  sniper_rec10: svg(<>
+    <line x1="1" y1="8" x2="15" y2="8" strokeWidth="1.2" />
+    <line x1="4" y1="5" x2="4" y2="11" strokeWidth="1" />
+    <circle cx="10" cy="8" r="3" strokeWidth="1.2" />
+    <line x1="10" y1="5.5" x2="10" y2="10.5" strokeWidth="0.7" />
+    <line x1="7.5" y1="8" x2="12.5" y2="8" strokeWidth="0.7" />
+  </>),
+  sniper_bolt: svg(<>
+    <line x1="1" y1="8" x2="15" y2="8" strokeWidth="1.4" />
+    <line x1="3" y1="5" x2="3" y2="11" strokeWidth="1" />
+    <rect x="6" y="6" width="5" height="4" rx="1" strokeWidth="1" />
+    <line x1="12" y1="8" x2="14" y2="10" strokeWidth="1" />
+  </>),
+  spotter_tl: svg(<>
+    <circle cx="8" cy="8" r="5" strokeWidth="1.2" />
+    <line x1="8" y1="2" x2="8" y2="5" strokeWidth="1" />
+    <line x1="8" y1="11" x2="8" y2="14" strokeWidth="1" />
+    <line x1="2" y1="8" x2="5" y2="8" strokeWidth="1" />
+    <line x1="11" y1="8" x2="14" y2="8" strokeWidth="1" />
+    <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
+  </>),
+  all: svg(<>
+    <rect x="3" y="2" width="10" height="12" rx="1" strokeWidth="1.2" />
+    <line x1="5" y1="5" x2="11" y2="5" strokeWidth="0.8" />
+    <line x1="5" y1="8" x2="11" y2="8" strokeWidth="0.8" />
+    <line x1="5" y1="11" x2="9" y2="11" strokeWidth="0.8" />
+  </>),
+  final_check: svg(<>
+    <circle cx="8" cy="8" r="6" strokeWidth="1.2" />
+    <path d="M5.5 8 L7.5 10 L11 5.5" strokeWidth="1.3" />
+  </>),
+  final_ready: svg(
+    <path d="M3 8 L6.5 11.5 L13 4.5" strokeWidth="2" />
   ),
 };
 
-// ── Chevron for collapsible sections ───────────────────────────────
-function Chevron({ open }) {
-  return (
-    <svg
-      width="12" height="12" viewBox="0 0 12 12" fill="none"
-      style={{
-        transform: open ? "rotate(90deg)" : "rotate(0deg)",
-        transition: "transform 200ms",
-        flexShrink: 0,
-      }}
-    >
-      <path d="M4 2 L8 6 L4 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
+// Long form for the summary ("Wednesday, October 7, 2026, 21:30"); the
+// header keeps the short form used in lists.
+const LONG_WHEN = {
+  weekday: "long", day: "numeric", month: "long", year: "numeric",
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+};
+
+const rise = () => ({ animation: `z5-rise ${DURATION.move}ms var(--z5-spring) backwards` });
 
 export default function Checklist({ missionId, onBack }) {
   const { profile } = useAuth();
@@ -97,6 +93,9 @@ export default function Checklist({ missionId, onBack }) {
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
   const [busyStatus, setBusyStatus] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busyDelete, setBusyDelete] = useState(false);
 
   const myOp = useMemo(
     () => operators.find((o) => o.user_id === profile?.id) || null,
@@ -162,7 +161,6 @@ export default function Checklist({ missionId, onBack }) {
   // Progress bar shows aggregate for leaders, personal for regular operators
   const checkedCount = aggregateProgress ? aggregateProgress.checked : myCheckedCount;
   const total = aggregateProgress ? aggregateProgress.total : myItems.length;
-  const pct = total ? Math.round((checkedCount / total) * 100) : 0;
 
   const finalReadyItems = myItems.filter((it) => it.section === "final_ready");
   const allFinalReadyChecked =
@@ -190,7 +188,7 @@ export default function Checklist({ missionId, onBack }) {
     const { error } = await updateMissionStatus(missionId, next);
     setBusyStatus(false);
     if (error) { setErr(String(error.message || error)); return; }
-    setOk(t("cl.status_set", { status: next }));
+    setOk(t("cl.status_set", { status: statusText(next, t) }));
     load();
   }
 
@@ -200,11 +198,8 @@ export default function Checklist({ missionId, onBack }) {
     return ["admin", "officer", "squad_leader"].includes(profile.role);
   }
 
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [busyDelete, setBusyDelete] = useState(false);
-
+  // Runs from the confirmation dialog.
   async function handleDelete() {
-    if (!confirmDelete) { setConfirmDelete(true); return; }
     setBusyDelete(true);
     setErr("");
     const { error } = await deleteMission(missionId);
@@ -213,511 +208,451 @@ export default function Checklist({ missionId, onBack }) {
     onBack();
   }
 
+  const back = { onClick: onBack, label: t("cl.back") };
+
   if (loading) {
     return (
       <>
-        <PageHeader title={t("cl.title")} />
-        <Panel><div style={{ color: C.dim, fontSize: 13 }}>{t("cl.loading")}</div></Panel>
-        <Btn onClick={onBack} fullWidth={isMobile}>{t("cl.back")}</Btn>
+        <PageHeader back={back} title={t("cl.title")} />
+        <Panel>
+          <div aria-busy="true">
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <Skeleton width={62} height={22} style={{ borderRadius: R.pill }} />
+              <Skeleton width={84} height={22} style={{ borderRadius: R.pill }} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 20 }}>
+              <Skeleton height={58} style={{ borderRadius: R.md }} />
+              <Skeleton height={58} style={{ borderRadius: R.md }} />
+            </div>
+            <Skeleton width="32%" height={26} style={{ marginBottom: 12 }} />
+            <Skeleton height={8} style={{ borderRadius: R.pill }} />
+          </div>
+        </Panel>
+        <Panel>
+          <SkeletonRows rows={5} />
+        </Panel>
       </>
     );
   }
 
   if (!mission) {
+    // The data layer reports a missing row with its own (English)
+    // message; the title already says that, so only show other errors.
+    const detail = err && !/not found/i.test(err) ? err : null;
     return (
       <>
-        <PageHeader title={t("cl.title")} />
-        <Panel><ErrLine>{err || t("cl.notfound")}</ErrLine></Panel>
-        <Btn onClick={onBack} fullWidth={isMobile}>{t("cl.back")}</Btn>
+        <PageHeader back={back} title={t("cl.title")} />
+        <Panel>
+          <EmptyState icon="target" title={t("cl.notfound")}>{detail}</EmptyState>
+        </Panel>
       </>
     );
   }
 
-  if (mission.kind === "admin") {
+  const isAdminKind = mission.kind === "admin";
+
+  // Destructive action lives behind "more"; it is confirmed in a dialog.
+  const moreMenu = canDeleteMission(mission) ? (
+    <Menu
+      items={[{
+        key: "delete",
+        label: isAdminKind ? t("cl.delete_task") : t("cl.delete"),
+        icon: "trash",
+        danger: true,
+        onSelect: () => setConfirmDelete(true),
+      }]}
+      trigger={(p) => (
+        <IconButton icon="ellipsis" label={t("mis.more")} size={isMobile ? 40 : 34} {...p} />
+      )}
+    />
+  ) : null;
+
+  const deleteDialog = (
+    <ConfirmDialog
+      open={confirmDelete}
+      title={isAdminKind ? t("cl.delete_task_title") : t("cl.delete_title")}
+      message={isAdminKind ? t("cl.delete_task_body") : t("cl.delete_body")}
+      confirmLabel={busyDelete ? t("cl.deleting") : (isAdminKind ? t("cl.delete_task") : t("cl.delete"))}
+      cancelLabel={t("common.cancel")}
+      busy={busyDelete}
+      onConfirm={handleDelete}
+      onCancel={() => setConfirmDelete(false)}
+    />
+  );
+
+  if (isAdminKind) {
     return (
       <AdminTaskView
         mission={mission} operators={operators} profile={profile}
-        isMobile={isMobile} canSeeRollup={canSeeRollup} onBack={onBack}
-        reload={load} canDelete={canDeleteMission(mission)}
-        onDelete={handleDelete} confirmDelete={confirmDelete}
-        setConfirmDelete={setConfirmDelete} busyDelete={busyDelete} deleteErr={err}
+        isMobile={isMobile} canSeeRollup={canSeeRollup} back={back}
+        reload={load} headerAction={moreMenu} deleteDialog={deleteDialog}
+        deleteErr={err}
       />
     );
   }
 
-  const statusLabel = t(`status.${mission.status}`) || MISSION_STATUS_LABELS[mission.status] || mission.status;
-  const statusTone = MISSION_STATUS_TONES[mission.status] || "default";
   const opCount = operators.length;
+  const isReadOnly = !myOp && canSeeRollup;
+  // Someone who is neither assigned nor a leader has no checklist here,
+  // so there is no progress to report for them.
+  const showProgress = !!aggregateProgress || !!myOp;
 
   // Build section list for assigned / admin view
   const assignedSections = myOp
     ? SECTIONS.filter((sec) => myApplicableSections.has(sec.key))
     : (canSeeRollup ? SECTIONS : []);
 
+  const sectionBlocks = assignedSections
+    .map((sec) => {
+      const sectionItems = isReadOnly
+        ? items.filter((it) => it.section === sec.key)
+        : myItems.filter((it) => it.section === sec.key);
+      if (sectionItems.length === 0) return null;
+      const done = isReadOnly ? 0 : sectionItems.filter((it) => stateMap.get(it.id)).length;
+      return { key: sec.key, sectionItems, done, allDone: !isReadOnly && done === sectionItems.length };
+    })
+    .filter(Boolean);
+
+  const readyCount = readiness.filter((r) => r.ready_to_move).length;
+
+  // Valid next transitions (unchanged): a scheduled mission can become
+  // active or complete, an active one complete, and anything that is not
+  // finished can be cancelled.
+  const canActivate = mission.status === "scheduled";
+  const canComplete = mission.status === "active" || mission.status === "scheduled";
+  const canCancel = mission.status !== "complete" && mission.status !== "cancelled";
+  const hasStatusActions = canSeeRollup && (canActivate || canComplete || canCancel);
+
+  // Checklist sections
+  const checklistPanel = sectionBlocks.length > 0 && (
+    <Panel title={isReadOnly ? t("mc.checklist") : t("cl.my_checklist")}>
+      {isReadOnly && (
+        <div style={{ ...T.footnote, color: C.dim, marginBottom: 6 }}>{t("cl.readonly_hint")}</div>
+      )}
+      <List>
+        {sectionBlocks.map((b) => (
+          <Disclosure
+            key={b.key}
+            defaultOpen
+            title={SECTION_LABELS[b.key] || b.key}
+            icon={SECTION_ICONS[b.key]
+              ? <span style={{ display: "flex", color: b.allDone ? C.ok : C.dim, transition: `color ${MOTION.fade}` }}>{SECTION_ICONS[b.key]}</span>
+              : null}
+            trailing={(
+              <Badge tone={b.allDone ? "ok" : "default"}>
+                <Num>{isReadOnly ? `${b.sectionItems.length}` : `${b.done}/${b.sectionItems.length}`}</Num>
+              </Badge>
+            )}
+          >
+            <List inset={34}>
+              {b.sectionItems.map((it) => (
+                <ChecklistRow
+                  key={it.id}
+                  label={it.label}
+                  checked={!isReadOnly && !!stateMap.get(it.id)}
+                  onToggle={isReadOnly ? undefined : (next) => onToggle(it.id, next)}
+                />
+              ))}
+            </List>
+          </Disclosure>
+        ))}
+      </List>
+    </Panel>
+  );
+
+  // Team readiness roll-up
+  const readinessPanel = canSeeRollup && readiness.length > 0 && (
+    <Panel
+      title={t("cl.team_ready")}
+      action={(
+        <Badge tone={readyCount === readiness.length ? "ok" : "default"}>
+          <Num>{`${readyCount}/${readiness.length}`}</Num> {t("cl.ready_label")}
+        </Badge>
+      )}
+    >
+      <List>
+        {readiness.map((r) => (
+          <ReadinessRow key={r.user_id} row={r} isMobile={isMobile} />
+        ))}
+      </List>
+    </Panel>
+  );
+
   return (
     <>
       <PageHeader
+        back={back}
         title={mission.name}
-        subtitle={formatWhen(mission.scheduled_at, t) + (mission.location ? ` · ${mission.location}` : "")}
+        subtitle={<KindLine kind={t("kind.operational")} count={opCount} />}
+        action={moreMenu}
       />
 
-      {/* ═══ Single unified mission panel ═══════════════════════════ */}
-      <div style={{
-        border: `1px solid ${C.border}`,
-        background: C.panel,
-        borderRadius: 4,
-        marginBottom: 24,
-        overflow: "hidden",
-      }}>
-
-        {/* ── Header: badges + info ──────────────────────────────── */}
-        <div style={{ padding: isMobile ? "18px 16px" : "22px 24px" }}>
-          {/* Badges */}
-          <div style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 8,
-            alignItems: "center",
-            marginBottom: 16,
-          }}>
-            <Badge tone={statusTone}>{statusLabel}</Badge>
-            {myRole
-              ? <Badge tone="ok">{t("cl.yourrole")} {OPERATOR_ROLE_LABELS[myRole] || myRole}</Badge>
-              : !canSeeRollup && <Badge tone="warn">{t("cl.notassigned")}</Badge>}
-            {opCount > 0 && (
-              <span style={{ color: C.dim, fontSize: 12, fontFamily: FONT_MONO }}>
-                {opCount} {opCount === 1 ? t("mc.member") : t("mc.members")}
-              </span>
-            )}
-          </div>
-
-          {/* Mission info rows */}
-          {(mission.location || mission.notes) && (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: isMobile ? "1fr" : "auto 1fr",
-              gap: isMobile ? "4px 0" : "6px 16px",
-              padding: "10px 14px",
-              background: C.cardBg,
-              border: `1px solid ${C.border}`,
-              borderRadius: 3,
-              marginBottom: 16,
-            }}>
-              {mission.location && (<>
-                <span style={infoLabelStyle()}>{t("mc.location").replace(" (optional)", "")}</span>
-                <span style={infoValueStyle()}>{mission.location}</span>
-              </>)}
-              {mission.notes && (<>
-                <span style={infoLabelStyle()}>{t("mc.notes")}</span>
-                <span style={{ ...infoValueStyle(), whiteSpace: "pre-wrap" }}>{mission.notes}</span>
-              </>)}
-            </div>
-          )}
-
-          {/* Progress bar */}
-          <ProgressBar checked={checkedCount} total={total} />
-
-          {/* Ready banner */}
-          {allFinalReadyChecked && (
-            <div style={{
-              marginTop: 16,
-              padding: "12px 16px",
-              border: `1px solid ${C.ok}`,
-              background: C.okBg,
-              color: C.ok,
-              borderRadius: 3,
-              fontSize: 14,
-              fontWeight: 700,
-              letterSpacing: "1.5px",
-              textTransform: "uppercase",
-              textAlign: "center",
-              fontFamily: FONT_MONO,
-            }}>
-              ✔ {t("cl.ready")}
-            </div>
-          )}
-
-          {/* Status buttons — only show valid next transitions */}
-          {canSeeRollup && (
-            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {mission.status === "scheduled" && (
-                <Btn small disabled={busyStatus} onClick={() => setStatus("active")}>
-                  {t("cl.mark_active")}
-                </Btn>
-              )}
-              {(mission.status === "active" || mission.status === "scheduled") && (
-                <Btn small disabled={busyStatus} onClick={() => setStatus("complete")}>
-                  {t("cl.mark_complete")}
-                </Btn>
-              )}
-              {mission.status !== "complete" && mission.status !== "cancelled" && (
-                <Btn small disabled={busyStatus} onClick={() => setStatus("cancelled")}>
-                  {t("cl.cancel")}
-                </Btn>
-              )}
-            </div>
-          )}
-
-          {canDeleteMission(mission) && (
-            <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
-              <Btn
-                small
-                disabled={busyDelete}
-                onClick={handleDelete}
-                style={{
-                  color: C.error,
-                  borderColor: confirmDelete ? C.error : C.errBorderFaint,
-                }}
-              >
-                {busyDelete ? t("cl.deleting") : confirmDelete ? t("cl.confirm_delete") : t("cl.delete")}
-              </Btn>
-              {confirmDelete && !busyDelete && (
-                <Btn small onClick={() => setConfirmDelete(false)}>{t("cl.cancel")}</Btn>
-              )}
-            </div>
-          )}
-
-          <ErrLine>{err}</ErrLine>
-          <OkLine>{ok}</OkLine>
+      {/* ── Summary: what, when, where, who — and how far along ─────── */}
+      <Panel>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 14 }}>
+          <Badge tone={MISSION_STATUS_TONES[mission.status] || "default"}>
+            {statusText(mission.status, t)}
+          </Badge>
+          {myRole
+            ? <Badge tone="ok">{t("cl.yourrole")} {OPERATOR_ROLE_LABELS[myRole] || myRole}</Badge>
+            : !canSeeRollup && <Badge tone="warn">{t("cl.notassigned")}</Badge>}
         </div>
 
-        {/* ── Not assigned message ───────────────────────────────── */}
-        {!myOp && !canSeeRollup && (
-          <div style={{
-            padding: "14px 24px",
-            borderTop: `1px solid ${C.border}`,
-            color: C.dim,
-            fontSize: 13,
-          }}>
-            {t("cl.not_assigned_msg")}
+        <FactGrid columns={isMobile || !mission.location ? 1 : 2}>
+          <Fact label={t("cl.f_when")}>
+            <Num>{mission.scheduled_at ? fmtWhen(mission.scheduled_at, t, LONG_WHEN) : t("common.tbd")}</Num>
+          </Fact>
+          {mission.location && (
+            <Fact label={t("cl.f_location")}><bdi>{mission.location}</bdi></Fact>
+          )}
+          {mission.notes && (
+            <Fact label={t("mc.notes")} wide text><bdi>{mission.notes}</bdi></Fact>
+          )}
+        </FactGrid>
+
+        {showProgress && (
+          <ProgressSummary
+            label={aggregateProgress ? t("cl.progress_team") : t("cl.progress_mine")}
+            checked={checkedCount}
+            total={total}
+            style={{ marginTop: 20 }}
+          />
+        )}
+
+        {allFinalReadyChecked && (
+          <Notice tone="ok" title={t("cl.ready")} style={{ marginTop: 14, ...rise() }}>
+            {t("cl.ready_sub")}
+          </Notice>
+        )}
+
+        {/* Status — only valid next transitions; the natural next step
+            is the primary action. */}
+        {hasStatusActions && (
+          <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {canActivate && (
+              <Btn primary type="button" disabled={busyStatus} onClick={() => setStatus("active")}
+                style={isMobile ? { flex: "1 1 auto" } : undefined}>
+                {t("cl.mark_active")}
+              </Btn>
+            )}
+            {canComplete && (
+              <Btn primary={!canActivate} type="button" icon={canActivate ? undefined : "check"}
+                disabled={busyStatus} onClick={() => setStatus("complete")}
+                style={isMobile ? { flex: "1 1 auto" } : undefined}>
+                {t("cl.mark_complete")}
+              </Btn>
+            )}
+            {canCancel && (
+              <Btn type="button" disabled={busyStatus} onClick={() => setConfirmCancel(true)}
+                style={isMobile ? { flex: "1 1 auto" } : undefined}>
+                {t("cl.cancel_mission")}
+              </Btn>
+            )}
           </div>
         )}
 
-        {/* ── Checklist sections (collapsible) ───────────────────── */}
-        {assignedSections.map((sec) => {
-          const isReadOnly = !myOp && canSeeRollup;
-          const sectionItems = isReadOnly
-            ? items.filter((it) => it.section === sec.key)
-            : myItems.filter((it) => it.section === sec.key);
-          if (sectionItems.length === 0) return null;
-          const done = isReadOnly ? 0 : sectionItems.filter((it) => stateMap.get(it.id)).length;
-          const allDone = !isReadOnly && done === sectionItems.length;
-          return (
-            <CollapsibleSection
-              key={sec.key}
-              sectionKey={sec.key}
-              done={done}
-              total={sectionItems.length}
-              allDone={allDone}
-              readOnly={isReadOnly}
-              defaultOpen
-              isMobile={isMobile}
-            >
-              {sectionItems.map((it, idx) => isReadOnly ? (
-                <ReadOnlyRow key={it.id} index={idx + 1} label={it.label} isMobile={isMobile} />
-              ) : (
-                <ChecklistRow
-                  key={it.id}
-                  index={idx + 1}
-                  label={it.label}
-                  checked={!!stateMap.get(it.id)}
-                  onToggle={(next) => onToggle(it.id, next)}
-                  isMobile={isMobile}
-                />
-              ))}
-            </CollapsibleSection>
-          );
-        })}
+        <ErrLine>{err}</ErrLine>
+        <OkLine>{ok}</OkLine>
+      </Panel>
 
-        {/* ── Team readiness rollup ──────────────────────────────── */}
-        {canSeeRollup && readiness.length > 0 && (
-          <CollapsibleSection
-            sectionKey="__readiness__"
-            customTitle={t("cl.team_ready")}
-            done={readiness.filter((r) => r.ready_to_move).length}
-            total={readiness.length}
-            allDone={readiness.every((r) => r.ready_to_move)}
-            defaultOpen
-            isMobile={isMobile}
-          >
-            {readiness.map((r) => (
-              <ReadinessRow key={r.user_id} row={r} isMobile={isMobile} />
-            ))}
-          </CollapsibleSection>
-        )}
-      </div>
+      {/* ── Not assigned (and not a leader): nothing to check ────────── */}
+      {!myOp && !canSeeRollup && (
+        <Notice style={{ marginTop: isMobile ? 12 : 16 }}>{t("cl.not_assigned_msg")}</Notice>
+      )}
 
-      <Btn onClick={onBack} fullWidth={isMobile}>{t("cl.back")}</Btn>
+      {/* A leader who is only observing gets the team first; an assigned
+          operator gets their own checklist first. */}
+      {isReadOnly ? readinessPanel : checklistPanel}
+      {isReadOnly ? checklistPanel : readinessPanel}
+
+      <ConfirmDialog
+        open={confirmCancel}
+        title={t("cl.cancel_title")}
+        message={t("cl.cancel_body")}
+        confirmLabel={t("cl.cancel_mission")}
+        cancelLabel={t("cl.keep_mission")}
+        busy={busyStatus}
+        onConfirm={async () => { await setStatus("cancelled"); setConfirmCancel(false); }}
+        onCancel={() => setConfirmCancel(false)}
+      />
+      {deleteDialog}
     </>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// INFO LABEL/VALUE STYLES
-// ═══════════════════════════════════════════════════════════════════
-
-// Built per-render so the colors track C after a theme toggle — a
-// module-level object would freeze the palette active at import time.
-const infoLabelStyle = () => ({
-  color: C.dim,
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: "0.8px",
-  textTransform: "uppercase",
-  paddingTop: 2,
-});
-const infoValueStyle = () => ({
-  color: C.text,
-  fontSize: 14,
-  lineHeight: 1.5,
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// COLLAPSIBLE SECTION
-// ═══════════════════════════════════════════════════════════════════
-
-function CollapsibleSection({
-  sectionKey, customTitle, done, total, allDone,
-  readOnly, defaultOpen = true, isMobile, children,
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const icon = SECTION_ICONS[sectionKey] || null;
-  const label = customTitle || SECTION_LABELS[sectionKey] || sectionKey;
-
-  return (
-    <div style={{ borderTop: `1px solid ${C.border}` }}>
-      {/* Clickable header */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          all: "unset",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          width: "100%",
-          boxSizing: "border-box",
-          padding: isMobile ? "14px 16px" : "14px 24px",
-          cursor: "pointer",
-          transition: "background 100ms",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = C.hoverBg; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-      >
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}>
-          <Chevron open={open} />
-          {icon && <span style={{
-            color: allDone ? C.ok : C.dim,
-            display: "inline-flex",
-            transition: "color 300ms",
-          }}>{icon}</span>}
-          <span style={{
-            color: allDone ? C.ok : C.bright,
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: "1.2px",
-            textTransform: "uppercase",
-            transition: "color 300ms",
-          }}>{label}</span>
-        </div>
-        <Badge tone={allDone ? "ok" : readOnly ? "default" : (done > 0 ? "warn" : "default")}>
-          {readOnly ? `${total}` : `${done}/${total}`}
-        </Badge>
-      </button>
-
-      {/* Collapsible body */}
-      {open && (
-        <div style={{ padding: isMobile ? "0 16px 8px" : "0 24px 8px" }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// PROGRESS BAR
-// ═══════════════════════════════════════════════════════════════════
-
-function ProgressBar({ checked, total }) {
+// Header context line: what kind of thing this is and how many people
+// are on it.
+function KindLine({ kind, count }) {
   const { t } = useI18n();
-  const pct = total ? Math.round((checked / total) * 100) : 0;
-  const barColor = pct === 100 ? C.ok : pct >= 50 ? C.warn : C.bright;
-
   return (
-    <div>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        marginBottom: 8,
-      }}>
-        <div>
-          <span style={{
-            fontFamily: FONT_MONO,
-            fontSize: 26,
-            fontWeight: 700,
-            color: pct === 100 ? C.ok : C.bright,
-            transition: "color 300ms",
-          }}>{checked}</span>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 15, color: C.dim }}>/{total}</span>
-          <span style={{
-            fontSize: 11, color: C.dim, marginInlineStart: 8,
-            letterSpacing: "0.8px", textTransform: "uppercase",
-          }}>{t("cl.complete")}</span>
-        </div>
-        <span style={{
-          fontFamily: FONT_MONO, fontSize: 20, fontWeight: 700,
-          color: pct === 100 ? C.ok : C.dim, transition: "color 300ms",
-        }}>{pct}%</span>
-      </div>
-      <div style={{
-        width: "100%", height: 10,
-        background: C.progressTrack,
-        border: `1px solid ${C.border}`,
-        borderRadius: 3, overflow: "hidden",
-      }}>
-        <div style={{
-          width: `${pct}%`, height: "100%",
-          background: barColor, borderRadius: 2,
-          transition: "width 400ms ease, background 300ms",
-          boxShadow: pct > 0 ? `0 0 6px ${barColor}40` : "none",
-        }} />
-      </div>
-    </div>
+    <>
+      {kind}
+      {count > 0 && (
+        <>
+          <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+          <Num>{count}</Num> {count === 1 ? t("mc.member") : t("mc.members")}
+        </>
+      )}
+    </>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// CHECKLIST ROW — interactive
-// ═══════════════════════════════════════════════════════════════════
-
-function ChecklistRow({ index, label, checked, onToggle, isMobile }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onToggle(!checked)}
-      style={{
-        all: "unset",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        width: "100%",
-        boxSizing: "border-box",
-        padding: isMobile ? "12px 2px" : "10px 2px",
-        minHeight: isMobile ? 48 : 42,
-        borderBottom: `1px solid ${C.border}`,
-        cursor: "pointer",
-        transition: "background 100ms",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = C.hoverBg; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-    >
-      <span style={{
-        fontFamily: FONT_MONO, fontSize: 11,
-        color: checked ? C.ok : C.dimmer,
-        width: 20, textAlign: "center", flexShrink: 0,
-      }}>{index}</span>
-      <span style={{
-        display: "inline-flex", alignItems: "center", justifyContent: "center",
-        width: 20, height: 20, flexShrink: 0,
-        border: `1.5px solid ${checked ? C.ok : C.borderBright}`,
-        background: checked ? C.selectedBg : "transparent",
-        color: checked ? C.ok : "transparent",
-        fontSize: 13, fontWeight: 700, borderRadius: 3,
-        transition: "all 200ms",
-      }}>✓</span>
-      <span style={{
-        flex: 1,
-        color: checked ? C.dim : C.text,
-        textDecoration: checked ? "line-through" : "none",
-        fontSize: isMobile ? 15 : 14,
-        transition: "color 200ms",
-      }}>{label}</span>
-    </button>
-  );
+function statusText(status, t) {
+  return t(`status.${status}`) || MISSION_STATUS_LABELS[status] || status;
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// READ-ONLY ROW — admin view when not assigned
+// FACTS — label over value in borderless tiles
 // ═══════════════════════════════════════════════════════════════════
 
-function ReadOnlyRow({ index, label, isMobile }) {
+function FactGrid({ columns = 1, children }) {
   return (
     <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: isMobile ? "12px 2px" : "10px 2px",
-      borderBottom: `1px solid ${C.border}`,
+      display: "grid",
+      gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+      gap: 8,
     }}>
-      <span style={{
-        fontFamily: FONT_MONO, fontSize: 11, color: C.dimmer,
-        width: 20, textAlign: "center", flexShrink: 0,
-      }}>{index}</span>
-      <span style={{
-        display: "inline-flex", alignItems: "center", justifyContent: "center",
-        width: 20, height: 20, flexShrink: 0,
-        border: `1px solid ${C.border}`, borderRadius: 3, opacity: 0.3,
-      }} />
-      <span style={{ flex: 1, color: C.dim, fontSize: isMobile ? 15 : 14 }}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+//   wide — spans the whole grid; text — long free text (keeps line breaks).
+function Fact({ label, children, wide, text }) {
+  return (
+    <Tile padding="10px 12px" style={{ minWidth: 0, ...(wide ? { gridColumn: "1 / -1" } : null) }}>
+      <div style={{ ...S.label, marginBottom: 2 }}>{label}</div>
+      <div style={{
+        ...T.body,
+        color: text ? C.text : C.bright,
+        fontWeight: text ? 400 : 500,
+        overflowWrap: "anywhere",
+        ...(text ? { whiteSpace: "pre-wrap" } : null),
+      }}>
+        {children}
+      </div>
+    </Tile>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROGRESS — the number that matters, its percentage and a bar
+// ═══════════════════════════════════════════════════════════════════
+
+function ProgressSummary({ label, checked, total, style }) {
+  const pct = total ? Math.round((checked / total) * 100) : 0;
+  const complete = pct === 100;
+  return (
+    <div style={style}>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...S.label, marginBottom: 2 }}>{label}</div>
+          <div style={{
+            ...T.title1,
+            lineHeight: 1.1,
+            color: complete ? C.ok : C.bright,
+            transition: `color ${MOTION.fade}`,
+          }}>
+            <Num>{`${checked} / ${total}`}</Num>
+          </div>
+        </div>
+        <div style={{
+          ...T.title3,
+          color: complete ? C.ok : C.dim,
+          transition: `color ${MOTION.fade}`,
+        }}>
+          <Num>{`${pct}%`}</Num>
+        </div>
+      </div>
+      <Progress value={pct} tone="auto" height={8} label={label} style={{ marginTop: 10 }} />
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// READINESS ROW
+// CHECKLIST ROW — the whole row is the tap target. Without onToggle it
+// is the same row, read-only (a leader viewing a mission they are not
+// assigned to).
+// ═══════════════════════════════════════════════════════════════════
+
+function ChecklistRow({ label, checked, onToggle }) {
+  const readOnly = !onToggle;
+  return (
+    <Row
+      onClick={readOnly ? undefined : () => onToggle(!checked)}
+      {...(readOnly ? null : { role: "checkbox", "aria-checked": checked })}
+      leading={(
+        <span style={{ display: "flex", opacity: readOnly ? 0.45 : 1 }}>
+          <Checkbox checked={checked} tone="ok" />
+        </span>
+      )}
+    >
+      <span style={{
+        display: "block",
+        ...T.body,
+        color: checked ? C.dim : C.text,
+        transition: `color ${MOTION.fade}`,
+        overflowWrap: "anywhere",
+      }}>
+        {/* Labels may be in either language: <bdi> keeps their own
+            reading order ("5× Magazines") inside the RTL row. */}
+        <bdi>{label}</bdi>
+      </span>
+    </Row>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// READINESS ROW — one operator
 // ═══════════════════════════════════════════════════════════════════
 
 function ReadinessRow({ row, isMobile }) {
   const { t } = useI18n();
   const pct = Number(row.pct || 0);
   const ready = !!row.ready_to_move;
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "10px 2px", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap",
-    }}>
-      <div style={{ flex: 1, minWidth: 120 }}>
-        <div style={{
-          fontFamily: FONT_MONO, color: C.bright,
-          fontWeight: 600, fontSize: 13, letterSpacing: "0.3px",
-        }}>{row.callsign || "—"}</div>
-        <div style={{ color: C.dim, fontSize: 11 }}>
-          {row.full_name || "—"}
-          {row.op_role && <> · {OPERATOR_ROLE_LABELS[row.op_role] || row.op_role}</>}
-        </div>
-      </div>
-      <div style={{ width: isMobile ? 60 : 100, flexShrink: 0 }}>
-        <div style={{
-          height: 4, background: C.progressTrack,
-          borderRadius: 2, overflow: "hidden",
-        }}>
-          <div style={{
-            width: `${pct}%`, height: "100%",
-            background: ready ? C.ok : pct > 0 ? C.warn : C.dimmer,
-            transition: "width 300ms",
-          }} />
-        </div>
-      </div>
-      <span style={{
-        fontFamily: FONT_MONO, fontSize: 11, color: C.dim, minWidth: 50, textAlign: "end",
-      }}>{row.checked_items}/{row.total_items}</span>
-      <Badge tone={ready ? "ok" : pct > 0 ? "warn" : "default"}>
+  // Fixed-width slots so bars, counts and badges line up down the list.
+  const badge = (
+    <span style={{ display: "flex", justifyContent: "flex-end", minWidth: 72 }}>
+      <Badge tone={ready ? "ok" : "default"}>
         {ready ? t("cl.ready_label") : t("cl.notready_label")}
       </Badge>
-    </div>
+    </span>
   );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// FORMAT HELPERS
-// ═══════════════════════════════════════════════════════════════════
-
-function formatWhen(ts, t) {
-  return fmtWhen(ts, t);
+  const bar = (
+    <Progress
+      value={pct}
+      tone={ready ? "ok" : "ink"}
+      height={5}
+      style={isMobile ? { flex: 1 } : { width: 160 }}
+    />
+  );
+  const count = (
+    <span style={{ ...T.caption, fontWeight: 600, color: ready ? C.ok : C.dim, minWidth: 40, textAlign: "end" }}>
+      <Num>{`${row.checked_items}/${row.total_items}`}</Num>
+    </span>
+  );
+  return (
+    <Row trailing={isMobile ? badge : <>{bar}{count}{badge}</>}>
+      <div style={{ ...T.body, fontWeight: 600, color: C.bright, ...ELLIPSIS }}>
+        <Mono>{row.callsign || "—"}</Mono>
+      </div>
+      <div style={{ ...T.footnote, color: C.dim, marginTop: 1, ...ELLIPSIS }}>
+        {row.full_name || "—"}
+        {row.op_role && (
+          <>
+            <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+            {OPERATOR_ROLE_LABELS[row.op_role] || row.op_role}
+          </>
+        )}
+      </div>
+      {isMobile && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 7 }}>
+          {bar}
+          {count}
+        </div>
+      )}
+    </Row>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -725,8 +660,8 @@ function formatWhen(ts, t) {
 // ═══════════════════════════════════════════════════════════════════
 
 function AdminTaskView({
-  mission, operators, profile, isMobile, canSeeRollup, onBack, reload,
-  canDelete, onDelete, confirmDelete, setConfirmDelete, busyDelete, deleteErr,
+  mission, operators, profile, isMobile, canSeeRollup, back, reload,
+  headerAction, deleteDialog, deleteErr,
 }) {
   const { t } = useI18n();
   const myOp = operators.find((o) => o.user_id === profile?.id) || null;
@@ -735,102 +670,132 @@ function AdminTaskView({
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // What I just tapped, shown at once while the server call and the
+  // reload are in flight; cleared as soon as real data is back.
+  const [pendingDone, setPendingDone] = useState(null);
+  const shownDone = pendingDone === null ? iAmDone : pendingDone;
 
   const doneCount  = operators.filter((o) => o.done).length;
   const totalCount = operators.length;
 
   async function toggleMine() {
+    // Stay busy until the reload lands: the button must not be tappable
+    // while what it shows (the pending value) is ahead of loaded state.
+    const next = !iAmDone;
     setBusy(true); setErr("");
-    const { error } = await setAdminTaskDone({ missionId: mission.id, done: !iAmDone });
+    setPendingDone(next);
+    const { error } = await setAdminTaskDone({ missionId: mission.id, done: next });
+    if (error) { setPendingDone(null); setBusy(false); setErr(String(error.message || error)); return; }
+    if (reload) await reload();
+    setPendingDone(null);
     setBusy(false);
-    if (error) { setErr(String(error.message || error)); return; }
-    reload && reload();
   }
-
-  const statusLabel = t(`status.${mission.status}`) || MISSION_STATUS_LABELS[mission.status] || mission.status;
-  const statusTone  = MISSION_STATUS_TONES[mission.status] || "default";
 
   return (
     <>
       <PageHeader
+        back={back}
         title={mission.name}
-        subtitle={`${t("cl.admin_due")} ${formatWhen(mission.due_at, t)}${mission.location ? ` · ${mission.location}` : ""}`}
+        subtitle={<KindLine kind={t("cl.admin_task")} count={totalCount} />}
+        action={headerAction}
       />
 
       <Panel>
-        <div style={{
-          display: "flex", flexWrap: "wrap", gap: 10,
-          alignItems: "center", marginBottom: 14,
-        }}>
-          <Badge tone={statusTone}>{statusLabel}</Badge>
-          <Badge tone="bright">{t("cl.admin_task")}</Badge>
-          <Badge tone={doneCount === totalCount ? "ok" : "default"}>
-            {doneCount}/{totalCount} {t("cl.done")}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 14 }}>
+          <Badge tone={MISSION_STATUS_TONES[mission.status] || "default"}>
+            {statusText(mission.status, t)}
           </Badge>
+          {!isAssignee && !canSeeRollup && <Badge tone="warn">{t("cl.notassigned")}</Badge>}
         </div>
 
-        {mission.notes && (
-          <div style={{
-            color: C.text, fontSize: 14, lineHeight: 1.5,
-            whiteSpace: "pre-wrap", padding: "10px 12px",
-            background: C.hoverBg,
-            border: `1px solid ${C.border}`, borderRadius: 3, marginBottom: 14,
-          }}>{mission.notes}</div>
+        <FactGrid columns={isMobile || !mission.location ? 1 : 2}>
+          <Fact label={t("common.due")}>
+            <Num>{mission.due_at ? fmtWhen(mission.due_at, t, LONG_WHEN) : t("common.tbd")}</Num>
+          </Fact>
+          {mission.location && (
+            <Fact label={t("cl.f_location")}><bdi>{mission.location}</bdi></Fact>
+          )}
+          {mission.notes && (
+            <Fact label={t("cl.f_details")} wide text><bdi>{mission.notes}</bdi></Fact>
+          )}
+        </FactGrid>
+
+        {totalCount > 0 && (
+          <ProgressSummary
+            label={t("cl.task_progress")}
+            checked={doneCount}
+            total={totalCount}
+            style={{ marginTop: 20 }}
+          />
         )}
 
-        {isAssignee ? (
-          <Btn primary={!iAmDone} disabled={busy} fullWidth={isMobile} onClick={toggleMine}>
-            {iAmDone ? t("cl.mark_notdone") : t("cl.mark_done")}
-          </Btn>
-        ) : (
-          <div style={{ color: C.dim, fontSize: 13 }}>{t("cl.not_assigned_task")}</div>
-        )}
-
-        {canDelete && (
-          <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "center" }}>
-            <Btn small disabled={busyDelete} onClick={onDelete}
-              style={{ color: C.error, borderColor: confirmDelete ? C.error : C.errBorderFaint }}>
-              {busyDelete ? t("cl.deleting") : confirmDelete ? t("cl.confirm_delete") : t("cl.delete_task")}
+        {/* My status — one clear action, answered in place. */}
+        <div style={{ marginTop: 16 }}>
+          {!isAssignee ? (
+            <Notice>{t("cl.not_assigned_task")}</Notice>
+          ) : shownDone ? (
+            <Notice
+              key="done"
+              tone="ok"
+              title={t("cl.you_done")}
+              style={{ alignItems: "center", ...rise() }}
+              action={(
+                <Btn small type="button" icon="undo" disabled={busy} onClick={toggleMine}>
+                  {t("cl.mark_notdone")}
+                </Btn>
+              )}
+            />
+          ) : (
+            <Btn key="todo" primary type="button" icon="check" disabled={busy}
+              fullWidth={isMobile} onClick={toggleMine}>
+              {t("cl.mark_done")}
             </Btn>
-            {confirmDelete && !busyDelete && (
-              <Btn small onClick={() => setConfirmDelete(false)}>{t("cl.cancel")}</Btn>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         <ErrLine>{err || deleteErr}</ErrLine>
       </Panel>
 
       {canSeeRollup && (
-        <Panel title={t("cl.assignees")}>
-          {operators.length === 0 && (
-            <div style={{ color: C.dim, fontSize: 13 }}>{t("cl.no_assignees")}</div>
+        <Panel
+          title={t("cl.assignees")}
+          action={totalCount > 0 && (
+            <Badge tone={doneCount === totalCount ? "ok" : "default"}>
+              <Num>{`${doneCount}/${totalCount}`}</Num> {t("cl.done")}
+            </Badge>
           )}
-          {operators.map((o) => (
-            <div key={o.user_id} style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "10px 0", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap",
-            }}>
-              <div style={{ flex: 1, minWidth: 140 }}>
-                <div style={{ fontFamily: FONT_MONO, color: C.bright, fontWeight: 600, fontSize: 14 }}>
-                  {o.callsign || "—"}
-                </div>
-                <div style={{ color: C.dim, fontSize: 12 }}>
-                  {o.full_name || "—"}
-                  {o.profile_role && <> · {roleLabelT(o.profile_role, t)}</>}
-                </div>
-              </div>
-              <Badge tone={o.done ? "ok" : "default"}>
-                {o.done ? t("cl.done") : t("cl.pending")}
-              </Badge>
-            </div>
-          ))}
+        >
+          {operators.length === 0 && (
+            <EmptyState compact icon="people" title={t("cl.no_assignees")} />
+          )}
+          <List>
+            {operators.map((o) => (
+              <Row
+                key={o.user_id}
+                title={<Mono>{o.callsign || "—"}</Mono>}
+                subtitle={(
+                  <>
+                    {o.full_name || "—"}
+                    {o.profile_role && (
+                      <>
+                        <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+                        {roleLabelT(o.profile_role, t)}
+                      </>
+                    )}
+                  </>
+                )}
+                trailing={(
+                  <Badge tone={o.done ? "ok" : "default"}>
+                    {o.done ? t("cl.done") : t("cl.pending")}
+                  </Badge>
+                )}
+              />
+            ))}
+          </List>
         </Panel>
       )}
 
-      <div style={{ marginTop: 8 }}>
-        <Btn onClick={onBack} fullWidth={isMobile}>{t("cl.back")}</Btn>
-      </div>
+      {deleteDialog}
     </>
   );
 }

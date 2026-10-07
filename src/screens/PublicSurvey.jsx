@@ -1,12 +1,18 @@
 // Z5 :: Public Survey — anonymous Hebrew RTL form for soldier candidates.
 // Reached at #/recruitment/<token>/survey via App.jsx hash routing.
-// One page per section (identity → self_assessment → background → physical),
+// One page per section (identity, self_assessment, background, physical),
 // answers saved on page advance, submission marks candidate as survey_done.
 
 import { useEffect, useState } from "react";
-import { Page } from "../ui";
-import { C, FONT, FONT_MONO } from "../theme";
+import {
+  Page, Panel, Tile, List, Row, Divider, Btn, Input, Textarea, Select,
+  Progress, Notice, Num, Icon, Skeleton, ViewTransition,
+} from "../ui";
+// `T` is the local Hebrew string table below, so the type scale is `TY`.
+import { C, S, FONT, NUM, R, T as TY } from "../theme";
+import { DURATION, MOTION } from "../motion";
 import { useIsMobile } from "../useIsMobile";
+import { useTheme } from "../ThemeContext";
 import {
   getSurveyForToken, startCandidate, saveAnswer, submitSurvey,
 } from "../data/publicSurvey";
@@ -14,6 +20,8 @@ import {
 // Hebrew strings for the public survey. We don't go through i18n here —
 // candidate-facing screens are Hebrew-only per the project decision.
 const T = {
+  brand: "Z5",
+  footer: "Z5 · שימוש פנימי בלבד · אין העברה מחוץ לרשת מבצעית",
   loading: "טוען…",
   invalid: "הקישור אינו תקף או שמחזור הגיוס נסגר.",
   not_open: "מחזור הגיוס אינו פתוח כרגע. נסה שוב מאוחר יותר.",
@@ -21,6 +29,8 @@ const T = {
   intro_title: "שאלון למועמד לקורס צליפה",
   intro_body: "תפקיד הצלף משלב חדות קוגניטיבית, חתירה למצוינות וקור רוח בתנאי קיצון. השאלון הוא חובה ועל כל לוחם למלא אותו במלוא הכנות והרצינות.\n\nהשאלון אישי — אין לחלוק מידע ותשובות. אי עמידה בדרישות הללו עלולה להוביל לפסילה ממועמדות לצוות צלפים.",
   intro_required_note: "כוכבית (*) מציינת שאלה חובה",
+  intro_steps: "{n} שלבים",
+  intro_steps_one: "שלב אחד",
   start: "התחל שאלון",
   next: "הלאה",
   prev: "חזרה",
@@ -34,6 +44,7 @@ const T = {
   thanks_body: "תשובותיך נשמרו. המשך לחכות לעדכון מהמפקדים.",
   page: "שלב",
   of: "מתוך",
+  progress: "התקדמות בשאלון",
   section_identity: "פרטים אישיים",
   section_self_assessment: "מוטיבציה והערכה עצמית",
   section_background: "רקע אקדמי וצבאי",
@@ -58,6 +69,37 @@ function heOnly(v) {
 }
 
 const SECTION_ORDER = ["identity", "self_assessment", "background", "physical"];
+
+// Group questions by section, in SECTION_ORDER. Only sections that
+// actually have questions become pages.
+function buildSections(questions) {
+  return SECTION_ORDER
+    .map((key) => ({
+      key,
+      title: T[`section_${key}`] || key,
+      questions: questions.filter((q) => q.section === key)
+        .sort((a, b) => a.ord - b.ord),
+    }))
+    .filter((s) => s.questions.length > 0);
+}
+
+// A required question that still has no usable answer. Single source for
+// both the page validation and the error outline on the offending field.
+function isUnanswered(q, a) {
+  if (!q.required) return false;
+  const filled = a && (
+    (a.text !== undefined && a.text !== null && String(a.text).trim() !== "") ||
+    (a.value !== undefined && a.value !== null)
+  );
+  if (!filled) return true;
+  // "אחר" requires the manual detail field to be written out.
+  if (a.text === "אחר" && !String(a.other || "").trim()) return true;
+  return false;
+}
+
+// Content column shared by every phase.
+const COLUMN = 640;
+const RISE = `z5-rise ${DURATION.move}ms var(--z5-spring) backwards`;
 
 // ── Root ───────────────────────────────────────────────────────────
 
@@ -88,27 +130,41 @@ export default function PublicSurvey({ token }) {
   return (
     <Page>
       <SurveyShell>
-        {phase === "loading" && <Centered>{T.loading}</Centered>}
-        {phase === "error" && <ErrorBlock message={error} />}
-        {phase === "intro" && survey && (
-          <Intro survey={survey} onStart={() => setPhase("form")} />
-        )}
-        {phase === "form" && survey && (
-          <SurveyForm
-            token={token}
-            survey={survey}
-            onSubmitted={() => setPhase("submitted")}
-          />
-        )}
-        {phase === "submitted" && <Thanks />}
+        <ViewTransition viewKey={phase} kind={phase === "form" ? "push" : "tab"}>
+          {phase === "loading" && <Loading />}
+          {phase === "error" && <ErrorBlock message={error} />}
+          {phase === "intro" && survey && (
+            <Intro survey={survey} onStart={() => setPhase("form")} />
+          )}
+          {phase === "form" && survey && (
+            <SurveyForm
+              token={token}
+              survey={survey}
+              onSubmitted={() => setPhase("submitted")}
+            />
+          )}
+          {phase === "submitted" && <Thanks />}
+        </ViewTransition>
       </SurveyShell>
     </Page>
   );
 }
 
-// ── Shell wrapper ──────────────────────────────────────────────────
+// ── Shell kit (kept in step with PublicExam.jsx) ───────────────────
 
-function SurveyShell({ children }) {
+// Width + gutters of the content column.
+function columnStyle(isMobile) {
+  const gutter = isMobile ? 16 : 24;
+  return {
+    width: "100%",
+    maxWidth: COLUMN + gutter * 2,
+    marginInline: "auto",
+    boxSizing: "border-box",
+    paddingInline: `max(${gutter}px, var(--safe-left), var(--safe-right))`,
+  };
+}
+
+function SurveyShell({ bar, children }) {
   const isMobile = useIsMobile();
   return (
     <div
@@ -117,25 +173,27 @@ function SurveyShell({ children }) {
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        boxSizing: "border-box",
-        padding: isMobile
-          ? "calc(20px + var(--safe-top)) 16px calc(20px + var(--safe-bottom))"
-          : "40px 24px",
         fontFamily: FONT,
         color: C.text,
+        // Page transitions slide a few px sideways; never let that
+        // make the document scroll horizontally.
+        overflowX: "clip",
       }}
     >
+      {bar}
       <div style={{
-        width: "100%",
-        maxWidth: 720,
-        margin: "0 auto",
+        ...columnStyle(isMobile),
+        flex: 1,
         display: "flex",
         flexDirection: "column",
-        flex: 1,
+        paddingTop: bar
+          ? (isMobile ? 4 : 12)
+          : (isMobile ? "calc(14px + var(--safe-top))" : 36),
+        paddingBottom: isMobile ? "calc(18px + var(--safe-bottom))" : 32,
       }}>
-        <Brand />
-        <div style={{ flex: 1 }}>{children}</div>
-        <Footer />
+        {!bar && <Brand />}
+        <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+        <FooterLine />
       </div>
     </div>
   );
@@ -143,78 +201,130 @@ function SurveyShell({ children }) {
 
 function Brand() {
   const isMobile = useIsMobile();
+  // z5-logo.png is black line art — invert it on the night theme.
+  const { mode } = useTheme();
   return (
-    <div style={{
+    <header style={{
       display: "flex",
-      flexDirection: "column",
       alignItems: "center",
+      justifyContent: "center",
       gap: 10,
-      paddingBottom: isMobile ? 16 : 22,
-      marginBottom: isMobile ? 18 : 28,
-      borderBottom: `1px solid ${C.border}`,
+      paddingBottom: isMobile ? 4 : 8,
     }}>
       <img
         src={`${import.meta.env.BASE_URL}z5-logo.png`}
-        alt="Z5"
+        alt=""
         style={{
-          width: "100%",
-          maxWidth: isMobile ? 120 : 180,
-          maxHeight: isMobile ? 80 : 120,
-          objectFit: "contain",
+          height: isMobile ? 30 : 36,
+          width: "auto",
+          display: "block",
+          filter: mode === "dark" ? "invert(0.9)" : "none",
         }}
       />
-      <div style={{
-        color: C.bright,
-        fontSize: isMobile ? 16 : 22,
-        fontWeight: 800,
-        letterSpacing: "4px",
-      }}>
-        Z5 TERMINAL
-      </div>
-    </div>
+      <span style={{ ...(isMobile ? TY.headline : TY.title3), color: C.bright }}>{T.brand}</span>
+    </header>
   );
 }
 
-function Footer() {
+function FooterLine() {
   return (
-    <div style={{
+    <footer style={{
       paddingTop: 20,
       textAlign: "center",
-      fontFamily: FONT_MONO,
-      fontSize: 10,
-      color: C.dim,
-      letterSpacing: "1.4px",
-      textTransform: "uppercase",
+      ...TY.caption,
+      color: C.dimmer,
     }}>
-      INTERNAL USE ONLY · NO TRANSMISSION OUTSIDE OPERATIONAL NET
-    </div>
+      {T.footer}
+    </footer>
   );
 }
 
-function Centered({ children }) {
+// Placeholder in the shape of the intro card while the link is checked.
+function Loading() {
   return (
-    <div style={{
-      padding: "40px 0",
-      textAlign: "center",
-      color: C.dim,
-      fontSize: 14,
-    }}>{children}</div>
+    <Panel>
+      <div role="status" aria-label={T.loading} aria-busy="true">
+        <Skeleton width="64%" height={26} style={{ marginBottom: 12 }} />
+        <Skeleton width="36%" height={12} style={{ marginBottom: 22 }} />
+        <Skeleton height={13} style={{ marginBottom: 10 }} />
+        <Skeleton width="94%" height={13} style={{ marginBottom: 10 }} />
+        <Skeleton width="58%" height={13} />
+        <Skeleton height={48} style={{ marginTop: 24, borderRadius: R.md }} />
+      </div>
+    </Panel>
   );
 }
 
 function ErrorBlock({ message }) {
+  const isMobile = useIsMobile();
+  return (
+    <Notice
+      tone="error"
+      style={{ marginTop: isMobile ? 12 : 16, padding: "14px 16px", ...TY.callout }}
+    >
+      {message}
+    </Notice>
+  );
+}
+
+// Primary / secondary action — the shared button at thumb height.
+function BigButton({ style, ...props }) {
+  const isMobile = useIsMobile();
+  return (
+    <Btn
+      type="button"
+      {...props}
+      style={{ minHeight: isMobile ? 50 : 46, ...style }}
+    />
+  );
+}
+
+// "{n} …" template with the number set in tabular figures.
+function withNum(template, n) {
+  const [before, after = ""] = String(template).split("{n}");
+  return <>{before}<Num>{n}</Num>{after}</>;
+}
+
+// Quiet icon + text row for the intro card.
+function Fact({ icon, children }) {
   return (
     <div style={{
-      padding: "20px 18px",
-      background: C.errBg,
-      border: `1px solid ${C.errBorder}`,
-      borderRadius: 12,
-      color: C.error,
-      fontSize: 14,
-      lineHeight: 1.6,
-      textAlign: "center",
-      marginTop: 40,
-    }}>{message}</div>
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 44,
+      padding: "8px 0",
+      boxSizing: "border-box",
+      ...TY.callout,
+      color: C.text,
+    }}>
+      <Icon name={icon} size={18} style={{ color: C.dim }} />
+      <span style={{ flex: 1, minWidth: 0 }}>{children}</span>
+    </div>
+  );
+}
+
+// Finished state: the check materialises together with the message.
+function Done({ title, extra, children }) {
+  const isMobile = useIsMobile();
+  return (
+    <Panel>
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        padding: isMobile ? "28px 4px 22px" : "40px 16px 32px",
+        animation: `z5-materialize ${DURATION.move}ms var(--z5-spring) both`,
+      }}>
+        <Icon name="checkCircle" size={64} strokeWidth={1.5} style={{ color: C.ok, marginBottom: 14 }} />
+        <h2 style={{ margin: 0, ...TY.title2, color: C.bright }}>{title}</h2>
+        {extra}
+        <div style={{ ...TY.callout, lineHeight: 1.6, color: C.dim, maxWidth: 420, marginTop: 10 }}>
+          {children}
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -222,55 +332,46 @@ function ErrorBlock({ message }) {
 
 function Intro({ survey, onStart }) {
   const isMobile = useIsMobile();
+  const steps = buildSections(survey.questions || []).length;
   return (
-    <div style={{ padding: isMobile ? "8px 4px" : "20px 4px" }}>
-      <h1 style={{
-        margin: 0,
-        marginBottom: 18,
-        color: C.bright,
-        fontSize: isMobile ? 20 : 26,
-        fontWeight: 700,
-        letterSpacing: "1px",
-      }}>{T.intro_title}</h1>
-      <div style={{ color: C.dim, fontSize: 13, marginBottom: 20 }}>
+    <Panel>
+      <h1 style={{ margin: 0, ...TY.title1, color: C.bright }}>{T.intro_title}</h1>
+      <div style={{ ...TY.footnote, color: C.dim, marginTop: 6 }}>
         {survey.cycle_name}
       </div>
       <div style={{
         whiteSpace: "pre-line",
-        fontSize: 15,
-        lineHeight: 1.8,
+        ...TY.body,
+        fontSize: isMobile ? 16 : 15,
+        lineHeight: 1.6,
         color: C.text,
-        marginBottom: 30,
+        marginTop: isMobile ? 16 : 18,
       }}>
         {T.intro_body}
       </div>
-      <div style={{
-        fontSize: 12,
-        color: C.dim,
-        marginBottom: 30,
-        fontStyle: "italic",
-      }}>
-        {T.intro_required_note}
-      </div>
-      <BigButton onClick={onStart}>{T.start}</BigButton>
-    </div>
+      <Tile padding="2px 14px" style={{ marginTop: isMobile ? 18 : 20 }}>
+        <List>
+          {steps > 0 && (
+            <Fact icon="list">
+              {steps === 1 ? T.intro_steps_one : withNum(T.intro_steps, steps)}
+            </Fact>
+          )}
+          <Fact icon="info">{T.intro_required_note}</Fact>
+        </List>
+      </Tile>
+      <BigButton primary fullWidth onClick={onStart} style={{ marginTop: isMobile ? 18 : 20 }}>
+        {T.start}
+      </BigButton>
+    </Panel>
   );
 }
 
 // ── Form (the multi-page survey itself) ────────────────────────────
 
 function SurveyForm({ token, survey, onSubmitted }) {
+  const isMobile = useIsMobile();
   const questions = survey.questions || [];
-  // Group questions by section, in SECTION_ORDER. Only sections that
-  // actually have questions become pages.
-  const sections = SECTION_ORDER
-    .map((key) => ({
-      key,
-      title: T[`section_${key}`] || key,
-      questions: questions.filter((q) => q.section === key)
-        .sort((a, b) => a.ord - b.ord),
-    }))
-    .filter((s) => s.questions.length > 0);
+  const sections = buildSections(questions);
   const totalPages = sections.length;
 
   const [pageIdx, setPageIdx] = useState(0);
@@ -278,6 +379,10 @@ function SurveyForm({ token, survey, onSubmitted }) {
   const [candidateId, setCandidateId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // Presentation only: outline unanswered required fields after a failed
+  // "next", and remember which way the page is travelling.
+  const [showMissing, setShowMissing] = useState(false);
+  const [travel, setTravel] = useState("push");
 
   function setAnswer(qid, patch) {
     setAnswers((prev) => ({ ...prev, [qid]: { ...prev[qid], ...patch } }));
@@ -286,15 +391,7 @@ function SurveyForm({ token, survey, onSubmitted }) {
   // Validate every required question on the given section. Returns true if OK.
   function validateSection(section) {
     for (const q of section.questions) {
-      if (!q.required) continue;
-      const a = answers[q.id];
-      const filled = a && (
-        (a.text !== undefined && a.text !== null && String(a.text).trim() !== "") ||
-        (a.value !== undefined && a.value !== null)
-      );
-      if (!filled) return false;
-      // "אחר" requires the manual detail field to be written out.
-      if (a.text === "אחר" && !String(a.other || "").trim()) return false;
+      if (isUnanswered(q, answers[q.id])) return false;
     }
     return true;
   }
@@ -375,6 +472,7 @@ function SurveyForm({ token, survey, onSubmitted }) {
     const section = sections[pageIdx];
     if (!validateSection(section)) {
       setErr(T.required_missing);
+      setShowMissing(true);
       return;
     }
     setBusy(true);
@@ -387,6 +485,8 @@ function SurveyForm({ token, survey, onSubmitted }) {
       const ok = await saveSection(section, cid);
       if (!ok) { setBusy(false); return; }
       if (pageIdx + 1 < totalPages) {
+        setShowMissing(false);
+        setTravel("push");
         setPageIdx(pageIdx + 1);
         // scroll to top so the next page starts cleanly
         if (typeof window !== "undefined") window.scrollTo({ top: 0 });
@@ -402,6 +502,8 @@ function SurveyForm({ token, survey, onSubmitted }) {
   function handlePrev() {
     setErr("");
     if (pageIdx > 0) {
+      setShowMissing(false);
+      setTravel("pop");
       setPageIdx(pageIdx - 1);
       if (typeof window !== "undefined") window.scrollTo({ top: 0 });
     }
@@ -410,54 +512,55 @@ function SurveyForm({ token, survey, onSubmitted }) {
   const section = sections[pageIdx];
   if (!section) return null;
   const isLast = pageIdx + 1 === totalPages;
+  // The "required missing" notice steps aside once nothing is missing
+  // any more (the outlines it points at are already gone by then).
+  const notice = err === T.required_missing && validateSection(section) ? "" : err;
 
   return (
-    <div style={{ padding: "8px 4px" }}>
-      <ProgressBar pageIdx={pageIdx} totalPages={totalPages} sections={sections} />
-      <h2 style={{
-        margin: "12px 0 24px",
-        color: C.bright,
-        fontSize: 19,
-        fontWeight: 700,
-        letterSpacing: "0.5px",
-      }}>{section.title}</h2>
+    <div>
+      <StepProgress pageIdx={pageIdx} totalPages={totalPages} />
 
-      {buildBlocks(section.questions).map((block, bi) => (
-        <QuestionBlock
-          key={bi}
-          block={block}
-          answers={answers}
-          setAnswer={setAnswer}
-        />
-      ))}
+      <ViewTransition viewKey={section.key} kind={travel}>
+        <h2 style={{
+          margin: isMobile ? "10px 2px 2px" : "14px 2px 0",
+          ...(isMobile ? TY.title2 : TY.title1),
+          color: C.bright,
+        }}>{section.title}</h2>
 
-      {err && (
-        <div style={{
-          padding: "10px 14px",
-          background: C.errBg,
-          border: `1px solid ${C.errBorder}`,
-          borderRadius: 10,
-          color: C.error,
-          fontSize: 13,
-          marginTop: 16,
-          marginBottom: 8,
-        }}>{err}</div>
+        {buildBlocks(section.questions).map((block, bi) => (
+          <QuestionBlock
+            key={bi}
+            block={block}
+            answers={answers}
+            setAnswer={setAnswer}
+            showMissing={showMissing}
+          />
+        ))}
+      </ViewTransition>
+
+      {notice && (
+        <Notice tone="error" style={{ marginTop: isMobile ? 12 : 16, animation: RISE }}>
+          {notice}
+        </Notice>
       )}
 
-      <div style={{
-        display: "flex",
-        gap: 10,
-        marginTop: 26,
-        flexDirection: "row-reverse",
-      }}>
-        <BigButton onClick={handleNext} disabled={busy} primary>
-          {busy ? T.saving : isLast ? T.submit : T.next}
-        </BigButton>
+      <div style={{ display: "flex", gap: 10, marginTop: isMobile ? 12 : 16 }}>
         {pageIdx > 0 && (
-          <BigButton onClick={handlePrev} disabled={busy}>
+          <BigButton onClick={handlePrev} disabled={busy} icon="chevronBack" iconFlip>
             {T.prev}
           </BigButton>
         )}
+        <BigButton
+          primary
+          onClick={handleNext}
+          disabled={busy}
+          busy={busy}
+          iconEnd={busy || isLast ? undefined : "chevronForward"}
+          iconFlip
+          style={{ flex: 1 }}
+        >
+          {busy ? T.saving : isLast ? T.submit : T.next}
+        </BigButton>
       </div>
     </div>
   );
@@ -495,224 +598,215 @@ function buildBlocks(qs) {
   return blocks;
 }
 
-function QuestionBlock({ block, answers, setAnswer }) {
+function QuestionBlock({ block, answers, setAnswer, showMissing }) {
   const isMobile = useIsMobile();
+  const missing = (q) => showMissing && isUnanswered(q, answers[q.id]);
 
   if (block.type === "namerow") {
     return (
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-        columnGap: 14,
-      }}>
-        {block.qs.map((q) => (
-          <QuestionField
-            key={q.id}
-            question={q}
-            answer={answers[q.id]}
-            onChange={(patch) => setAnswer(q.id, patch)}
-          />
-        ))}
-      </div>
+      <Panel>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gap: isMobile ? 18 : 14,
+        }}>
+          {block.qs.map((q) => (
+            <QuestionField
+              key={q.id}
+              question={q}
+              answer={answers[q.id]}
+              onChange={(patch) => setAnswer(q.id, patch)}
+              invalid={missing(q)}
+            />
+          ))}
+        </div>
+      </Panel>
     );
   }
 
   if (block.type === "group") {
     return (
-      <div style={{
-        background: C.cardBg,
-        borderRadius: 14,
-        padding: isMobile ? "14px 14px 4px" : "18px 18px 6px",
-        marginBottom: 22,
-      }}>
-        <div style={{
-          fontSize: 14, fontWeight: 700, color: C.bright, marginBottom: 2,
-        }}>
+      <Panel>
+        <FieldLabel required={block.qs.some((q) => q.required)} style={{ marginBottom: 2 }}>
           {block.title}
-          {block.qs.some((q) => q.required) && (
-            <span style={{ color: C.error, marginInlineStart: 4 }}>*</span>
-          )}
-        </div>
-        <div style={{ fontSize: 12, color: C.dim, marginBottom: 12 }}>
+        </FieldLabel>
+        <div style={{ ...TY.footnote, color: C.dim, marginBottom: 14 }}>
           {T.group_names_note}
         </div>
-        {block.qs.map((q, i) => (
-          <div key={q.id} style={{ marginBottom: 12 }}>
-            <div style={{
-              fontFamily: FONT_MONO, fontSize: 11, color: C.dim,
-              letterSpacing: "0.5px", marginBottom: 5,
-            }}>{T.name_n} {i + 1}</div>
-            <QuestionInput
-              question={{ ...q, question_type: "text" }}
-              answer={answers[q.id] || {}}
-              onChange={(patch) => setAnswer(q.id, patch)}
-            />
-          </div>
-        ))}
-      </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {block.qs.map((q, i) => (
+            <div key={q.id}>
+              <label htmlFor={fieldId(q)} style={{ ...S.label, display: "block" }}>
+                {T.name_n} <Num>{i + 1}</Num>
+              </label>
+              <QuestionInput
+                question={{ ...q, question_type: "text" }}
+                answer={answers[q.id] || {}}
+                onChange={(patch) => setAnswer(q.id, patch)}
+                id={fieldId(q)}
+                invalid={missing(q)}
+              />
+            </div>
+          ))}
+        </div>
+      </Panel>
     );
   }
 
   const q = block.qs[0];
   return (
-    <QuestionField
-      question={q}
-      answer={answers[q.id]}
-      onChange={(patch) => setAnswer(q.id, patch)}
-    />
+    <Panel>
+      <QuestionField
+        question={q}
+        answer={answers[q.id]}
+        onChange={(patch) => setAnswer(q.id, patch)}
+        invalid={missing(q)}
+      />
+    </Panel>
   );
 }
 
-function ProgressBar({ pageIdx, totalPages, sections = [] }) {
-  const isMobile = useIsMobile();
+// "Step n of N" beside a slim bar. The bar shows the step being filled
+// in (page n of N shows n/N), so it is never empty and ends full.
+function StepProgress({ pageIdx, totalPages }) {
   return (
-    <div>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "baseline",
-        gap: 10,
-        marginBottom: 8,
-      }}>
-        <span style={{
-          fontFamily: FONT_MONO,
-          fontSize: 11,
-          color: C.dim,
-          letterSpacing: "1.2px",
-          textTransform: "uppercase",
-        }}>
-          {T.page} {pageIdx + 1} {T.of} {totalPages}
-        </span>
-        <span style={{
-          fontFamily: FONT_MONO, fontSize: 11, color: C.ok,
-          letterSpacing: "0.5px",
-        }}>
-          {Math.round(((pageIdx) / totalPages) * 100)}%
-        </span>
-      </div>
-      {/* One segment per section; done segments filled, current pulses bright */}
-      <div style={{ display: "flex", gap: 5 }}>
-        {Array.from({ length: totalPages }).map((_, i) => (
-          <div key={i} style={{
-            flex: 1,
-            height: 6,
-            borderRadius: 999,
-            background: i < pageIdx ? C.ok
-                      : i === pageIdx ? C.bright
-                      : C.progressTrack,
-            transition: "background 240ms ease-out",
-          }} />
-        ))}
-      </div>
-      {!isMobile && sections.length > 0 && (
-        <div style={{ display: "flex", gap: 5, marginTop: 6 }}>
-          {sections.map((sec, i) => (
-            <div key={sec.key} style={{
-              flex: 1,
-              fontSize: 10.5,
-              textAlign: "center",
-              color: i === pageIdx ? C.bright : C.dimmer,
-              fontWeight: i === pageIdx ? 700 : 500,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}>{sec.title}</div>
-          ))}
-        </div>
-      )}
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+      padding: "8px 2px 0",
+    }}>
+      <span style={{ ...TY.footnote, color: C.dim, flexShrink: 0 }}>
+        {T.page} <Num>{pageIdx + 1}</Num> {T.of} <Num>{totalPages}</Num>
+      </span>
+      <Progress
+        value={totalPages > 0 ? ((pageIdx + 1) / totalPages) * 100 : 0}
+        tone="ink"
+        height={4}
+        label={T.progress}
+        style={{ flex: 1 }}
+      />
     </div>
   );
 }
 
 // ── Question rendering ─────────────────────────────────────────────
 
-function QuestionField({ question, answer, onChange }) {
+const fieldId = (q) => `q-${q.id}`;
+
+// Choice controls are groups of buttons, not a single labelable field.
+function isChoiceGroup(question) {
+  if ((question.question_text || "").includes("מספר אישי")) return false;
+  const t = question.question_type;
+  return t === "radio" || t === "team_radio" || t === "likert_5";
+}
+
+function FieldLabel({ id, htmlFor, required, children, style }) {
+  const Tag = htmlFor ? "label" : "div";
+  return (
+    <Tag
+      id={id}
+      htmlFor={htmlFor}
+      style={{
+        display: "block",
+        ...TY.headline,
+        color: C.bright,
+        marginBottom: 10,
+        overflowWrap: "anywhere",
+        ...style,
+      }}
+    >
+      {children}
+      {required && <span aria-hidden style={{ color: C.error, marginInlineStart: 4 }}>*</span>}
+    </Tag>
+  );
+}
+
+function QuestionField({ question, answer, onChange, invalid }) {
   const text = (question.question_text || "").trim();
   const required = question.required;
+  const id = fieldId(question);
+  const labelId = `${id}-label`;
+  const choice = isChoiceGroup(question);
   return (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{
-        fontSize: 14,
-        fontWeight: 600,
-        color: C.text,
-        marginBottom: 10,
-        lineHeight: 1.5,
-      }}>
+    <div style={{ minWidth: 0 }}>
+      <FieldLabel
+        id={labelId}
+        htmlFor={choice ? undefined : id}
+        required={required}
+        style={question.question_type === "likert_5" || !choice ? undefined : { marginBottom: 4 }}
+      >
         {text}
-        {required && <span style={{ color: C.error, marginInlineStart: 4 }}>*</span>}
-      </div>
+      </FieldLabel>
       <QuestionInput
         question={question}
         answer={answer || {}}
         onChange={onChange}
+        id={id}
+        labelId={labelId}
+        invalid={invalid}
       />
     </div>
   );
 }
 
-function QuestionInput({ question, answer, onChange }) {
+function QuestionInput({ question, answer, onChange, id, labelId, invalid }) {
   const t = question.question_type;
+  const common = { answer, onChange, id, invalid };
   // מספר אישי is stored as a text question but is digits-only — give it
   // the numeric keyboard and digit filtering instead of Hebrew rules.
   if ((question.question_text || "").includes("מספר אישי")) {
-    return <PersonalIdInput answer={answer} onChange={onChange} />;
+    return <PersonalIdInput {...common} />;
   }
-  if (t === "textarea") return <TextareaInput answer={answer} onChange={onChange} />;
-  if (t === "number")   return <NumberInput   answer={answer} onChange={onChange} />;
-  if (t === "radio" || t === "team_radio") return <RadioInput question={question} answer={answer} onChange={onChange} />;
-  if (t === "dropdown") return <DropdownInput question={question} answer={answer} onChange={onChange} />;
-  if (t === "likert_5") return <LikertInput   answer={answer} onChange={onChange} />;
-  if (t === "recommend")      return <TextInput placeholder={T.recommend_ph}       answer={answer} onChange={onChange} />;
-  if (t === "dont_recommend") return <TextInput placeholder={T.dont_recommend_ph}  answer={answer} onChange={onChange} />;
+  if (t === "textarea") return <TextareaInput {...common} />;
+  if (t === "number")   return <NumberInput   {...common} />;
+  if (t === "radio" || t === "team_radio") return <RadioInput question={question} labelId={labelId} {...common} />;
+  if (t === "dropdown") return <DropdownInput question={question} {...common} />;
+  if (t === "likert_5") return <LikertInput   labelId={labelId} {...common} />;
+  if (t === "recommend")      return <TextInput placeholder={T.recommend_ph}       {...common} />;
+  if (t === "dont_recommend") return <TextInput placeholder={T.dont_recommend_ph}  {...common} />;
   // default 'text'
-  return <TextInput answer={answer} onChange={onChange} />;
+  return <TextInput {...common} />;
 }
 
-const inputBase = {
-  background: C.inputBg,
-  color: C.text,
-  border: `1px solid ${C.border}`,
-  padding: "12px 14px",
-  fontFamily: FONT,
-  fontSize: 16,
-  width: "100%",
-  outline: "none",
-  boxSizing: "border-box",
-  borderRadius: 12,
-  minHeight: 46,
-  WebkitAppearance: "none",
-  appearance: "none",
-  direction: "rtl",
-};
+// Error outline for a field (replaces the whole border shorthand so the
+// style never mixes shorthand and longhand between renders).
+const errorOutline = (invalid) => (invalid ? { border: `1px solid ${C.error}` } : null);
 
-function TextInput({ answer, onChange, placeholder }) {
+function TextInput({ answer, onChange, placeholder, id, invalid }) {
   return (
-    <input
+    <Input
+      id={id}
       type="text"
       value={answer.text || ""}
       onChange={(e) => onChange({ text: heOnly(e.target.value) })}
       placeholder={placeholder}
-      style={inputBase}
+      aria-invalid={invalid || undefined}
+      style={errorOutline(invalid)}
     />
   );
 }
 
-function PersonalIdInput({ answer, onChange }) {
+function PersonalIdInput({ answer, onChange, id, invalid }) {
   return (
-    <input
+    <Input
+      id={id}
+      mono
       type="text"
       inputMode="numeric"
       autoComplete="off"
       value={answer.text || ""}
       onChange={(e) => onChange({ text: e.target.value.replace(/[^0-9]/g, "") })}
-      style={{ ...inputBase, fontFamily: FONT_MONO, letterSpacing: "1px", direction: "ltr", textAlign: "end" }}
+      aria-invalid={invalid || undefined}
+      style={{ direction: "ltr", textAlign: "end", ...errorOutline(invalid) }}
     />
   );
 }
 
-function NumberInput({ answer, onChange }) {
+function NumberInput({ answer, onChange, id, invalid }) {
   return (
-    <input
+    <Input
+      id={id}
       type="number"
       inputMode="numeric"
       value={answer.text || ""}
@@ -720,114 +814,179 @@ function NumberInput({ answer, onChange }) {
         const n = e.target.value === "" ? null : parseInt(e.target.value, 10);
         onChange({ text: e.target.value, value: Number.isNaN(n) ? null : n });
       }}
-      style={inputBase}
+      aria-invalid={invalid || undefined}
+      style={errorOutline(invalid)}
     />
   );
 }
 
-function TextareaInput({ answer, onChange }) {
+function TextareaInput({ answer, onChange, id, invalid }) {
   return (
-    <textarea
+    <Textarea
+      id={id}
       value={answer.text || ""}
       onChange={(e) => onChange({ text: heOnly(e.target.value) })}
-      style={{ ...inputBase, height: 120, resize: "vertical" }}
+      aria-invalid={invalid || undefined}
+      style={{ display: "block", ...errorOutline(invalid) }}
     />
   );
 }
 
-function DropdownInput({ question, answer, onChange }) {
+function DropdownInput({ question, answer, onChange, id, invalid }) {
   const opts = Array.isArray(question.options) ? question.options : [];
+  const other = answer.text === "אחר";
   return (
     <div>
-      <select
+      <Select
+        id={id}
         value={answer.text || ""}
         onChange={(e) => onChange({ text: e.target.value })}
-        style={{ ...inputBase, fontSize: 16 }}
+        aria-invalid={(invalid && !other) || undefined}
+        style={errorOutline(invalid && !other)}
       >
         <option value="">{T.choose}</option>
         {opts.map((o, i) => (
           <option key={i} value={String(o)}>{String(o)}</option>
         ))}
-      </select>
-      {answer.text === "אחר" && <OtherDetail answer={answer} onChange={onChange} />}
+      </Select>
+      {other && <OtherDetail answer={answer} onChange={onChange} invalid={invalid} />}
     </div>
   );
 }
 
-// Manual free-text detail that slides open when "אחר" is picked.
-function OtherDetail({ answer, onChange }) {
+// Manual free-text detail that rises in when "אחר" is picked.
+function OtherDetail({ answer, onChange, invalid }) {
   return (
-    <input
-      type="text"
-      autoFocus
-      value={answer.other || ""}
-      onChange={(e) => onChange({ other: heOnly(e.target.value) })}
-      placeholder={T.other_detail_ph}
-      style={{
-        ...inputBase,
-        marginTop: 8,
-        borderColor: C.borderBright,
-        background: C.cardBg,
-      }}
-    />
+    <div style={{ marginTop: 10, animation: RISE }}>
+      <Input
+        type="text"
+        autoFocus
+        value={answer.other || ""}
+        onChange={(e) => onChange({ other: heOnly(e.target.value) })}
+        placeholder={T.other_detail_ph}
+        aria-label={T.other_detail_ph}
+        aria-invalid={invalid || undefined}
+        style={errorOutline(invalid)}
+      />
+    </div>
   );
 }
 
-function RadioInput({ question, answer, onChange }) {
+// Keyboard focus ring for the shared tappables whose inline `all: unset`
+// cancels the global :focus-visible outline (Row, Tile).
+function useFocusRing() {
+  const [on, setOn] = useState(false);
+  return {
+    onFocus: (e) => {
+      try { setOn(e.currentTarget.matches(":focus-visible")); } catch { setOn(false); }
+    },
+    onBlur: () => setOn(false),
+    ring: on ? { outline: `2px solid ${C.focusRing}`, outlineOffset: 2 } : null,
+  };
+}
+
+// Radio mark: a ring that fills with ink and gains a dot when chosen.
+function RadioMark({ checked, invalid }) {
+  return (
+    <span aria-hidden style={{
+      width: 22,
+      height: 22,
+      flexShrink: 0,
+      boxSizing: "border-box",
+      borderRadius: R.pill,
+      border: `1.5px solid ${checked ? C.tint : invalid ? C.error : C.borderBright}`,
+      background: checked ? C.tint : "transparent",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}>
+      {checked && (
+        <span style={{
+          width: 8,
+          height: 8,
+          borderRadius: R.pill,
+          background: C.onTint,
+          animation: `z5-pop ${DURATION.bounce}ms var(--z5-spring-bounce) both`,
+        }} />
+      )}
+    </span>
+  );
+}
+
+// One full-width option of a single-choice question.
+function ChoiceRow({ label, active, invalid, onPick }) {
+  const isMobile = useIsMobile();
+  const focus = useFocusRing();
+  return (
+    <Row
+      onClick={onPick}
+      selected={active}
+      aria-pressed={active}
+      onFocus={focus.onFocus}
+      onBlur={focus.onBlur}
+      leading={<RadioMark checked={active} invalid={invalid} />}
+      style={{ minHeight: isMobile ? 50 : 48, ...focus.ring }}
+    >
+      <span style={{
+        display: "block",
+        ...TY.body,
+        fontSize: 16,
+        lineHeight: 1.35,
+        color: active ? C.bright : C.text,
+        overflowWrap: "anywhere",
+      }}>{label}</span>
+    </Row>
+  );
+}
+
+function RadioInput({ question, answer, onChange, labelId, invalid }) {
   const opts = Array.isArray(question.options) ? question.options : [];
   const selected = answer.text || "";
+  const other = selected === "אחר";
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {opts.map((o, i) => {
-        const val = String(o);
-        const active = val === selected;
-        return (
-          <button
-            key={i}
-            type="button"
-            onClick={() => onChange({ text: val })}
-            style={{
-              ...inputBase,
-              padding: "12px 14px",
-              minHeight: 46,
-              textAlign: "start",
-              background: active ? C.selectedBg : C.inputBg,
-              borderColor: active ? C.bright : C.border,
-              color: C.text,
-              cursor: "pointer",
-              fontWeight: active ? 700 : 400,
-              fontSize: 15,
-            }}
-          >
-            <span style={{
-              display: "inline-block",
-              width: 14,
-              height: 14,
-              borderRadius: "50%",
-              border: `2px solid ${active ? C.bright : C.borderBright}`,
-              background: active ? C.bright : "transparent",
-              marginInlineEnd: 10,
-              verticalAlign: "middle",
-            }} />
-            {val}
-          </button>
-        );
-      })}
-      {selected === "אחר" && <OtherDetail answer={answer} onChange={onChange} />}
+    <div role="group" aria-labelledby={labelId}>
+      {/* Rows carry their own padding: pull the list in so the card's
+          bottom inset matches its sides. Hairlines step aside around
+          the selected row so its fill reads as one clean shape. */}
+      <div style={{ marginBottom: other ? 0 : -8 }}>
+        {opts.map((o, i) => {
+          const val = String(o);
+          const active = val === selected;
+          const afterActive = i > 0 && String(opts[i - 1]) === selected;
+          return (
+            <div key={i}>
+              {i > 0 && (
+                <Divider style={{
+                  opacity: active || afterActive ? 0 : 1,
+                  transition: `opacity ${MOTION.fade}`,
+                }} />
+              )}
+              <ChoiceRow
+                label={val}
+                active={active}
+                invalid={invalid && !other}
+                onPick={() => onChange({ text: val })}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {other && <OtherDetail answer={answer} onChange={onChange} invalid={invalid} />}
     </div>
   );
 }
 
-function LikertInput({ answer, onChange }) {
+function LikertInput({ answer, onChange, labelId, invalid }) {
   const isMobile = useIsMobile();
   const selected = answer.value || null;
+  const size = isMobile ? 52 : 48;
   return (
-    <div>
+    <div role="group" aria-labelledby={labelId} style={{ maxWidth: 400 }}>
       <div style={{
         display: "flex",
+        alignItems: "center",
         justifyContent: "space-between",
         gap: 6,
-        marginBottom: 8,
       }}>
         {[1, 2, 3, 4, 5].map((n) => {
           const active = selected === n;
@@ -835,18 +994,32 @@ function LikertInput({ answer, onChange }) {
             <button
               key={n}
               type="button"
+              data-press="scale"
+              aria-pressed={active}
               onClick={() => onChange({ value: n })}
               style={{
-                flex: 1,
-                minHeight: isMobile ? 52 : 48,
-                background: active ? C.bright : C.inputBg,
-                color: active ? C.btnActiveColor : C.text,
-                border: `1px solid ${active ? C.bright : C.border}`,
-                borderRadius: 10,
-                fontFamily: FONT_MONO,
-                fontSize: 18,
-                fontWeight: 700,
+                appearance: "none",
+                WebkitAppearance: "none",
+                margin: 0,
+                padding: 0,
+                boxSizing: "border-box",
+                width: size,
+                minWidth: 0,
+                flexShrink: 1,
+                aspectRatio: "1 / 1",
+                borderRadius: R.pill,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
                 cursor: "pointer",
+                background: active ? C.tint : C.fill,
+                color: active ? C.onTint : C.bright,
+                border: `1.5px solid ${active ? C.tint : invalid ? C.error : "transparent"}`,
+                fontFamily: FONT,
+                ...NUM,
+                fontSize: 17,
+                lineHeight: 1,
+                fontWeight: 600,
               }}
             >{n}</button>
           );
@@ -855,75 +1028,20 @@ function LikertInput({ answer, onChange }) {
       <div style={{
         display: "flex",
         justifyContent: "space-between",
-        fontSize: 11,
+        gap: 12,
+        marginTop: 8,
+        ...TY.caption,
         color: C.dim,
-        letterSpacing: "0.3px",
       }}>
         <span>{T.likert_low}</span>
-        <span>{T.likert_high}</span>
+        <span style={{ textAlign: "end" }}>{T.likert_high}</span>
       </div>
     </div>
-  );
-}
-
-// ── Big button used for nav + submit ───────────────────────────────
-
-function BigButton({ children, onClick, disabled, primary }) {
-  const isMobile = useIsMobile();
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        flex: primary ? 1 : "0 0 auto",
-        background: primary ? C.bright : "transparent",
-        color: primary ? C.btnActiveColor : C.text,
-        border: `1px solid ${primary ? C.bright : C.border}`,
-        padding: isMobile ? "14px 20px" : "12px 22px",
-        fontFamily: FONT,
-        fontSize: 15,
-        fontWeight: 600,
-        letterSpacing: "0.4px",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        borderRadius: 12,
-        minHeight: isMobile ? 50 : 46,
-        transition: "background 160ms ease-out",
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
 // ── Submitted ──────────────────────────────────────────────────────
 
 function Thanks() {
-  return (
-    <div style={{
-      padding: "60px 20px",
-      textAlign: "center",
-    }}>
-      <div style={{
-        fontSize: 56,
-        color: C.ok,
-        marginBottom: 14,
-        lineHeight: 1,
-      }}>✓</div>
-      <h2 style={{
-        margin: "0 0 12px",
-        color: C.bright,
-        fontSize: 22,
-        fontWeight: 700,
-      }}>{T.thanks_title}</h2>
-      <div style={{
-        color: C.dim,
-        fontSize: 14,
-        lineHeight: 1.7,
-        maxWidth: 420,
-        margin: "0 auto",
-      }}>{T.thanks_body}</div>
-    </div>
-  );
+  return <Done title={T.thanks_title}>{T.thanks_body}</Done>;
 }

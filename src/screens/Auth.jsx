@@ -1,10 +1,20 @@
 import { useState } from "react";
 import { supabase } from "../supabase";
 import { useI18n } from "../i18n";
-import { Page, CenteredColumn, Field, Btn, Input, ErrLine, OkLine } from "../ui";
+import { Page, CenteredColumn, Field, Btn, Input, Segmented, ErrLine, OkLine } from "../ui";
 import { useIsMobile } from "../useIsMobile";
-import { C } from "../theme";
+import { C, R, T } from "../theme";
+import { DURATION } from "../motion";
 import { useTheme } from "../ThemeContext";
+
+// Latin-only values (e-mail, password, callsign, invite code) are typed
+// left-to-right even in the Hebrew UI, so punctuation doesn't jump to the
+// wrong side while typing. The text still hugs the same edge as the
+// field's label.
+function useLatinField() {
+  const { isRTL } = useI18n();
+  return { dir: "ltr", style: { textAlign: isRTL ? "end" : "start" } };
+}
 
 export default function Auth() {
   const [mode, setMode] = useState("login"); // 'login' | 'signup'
@@ -13,18 +23,19 @@ export default function Auth() {
   const isMobile = useIsMobile();
   return (
     <Page>
-      <CenteredColumn maxWidth={480}>
+      <CenteredColumn maxWidth={440}>
         <div style={{
           border: `1px solid ${C.border}`,
-          padding: isMobile ? "28px 20px" : "40px 44px",
-          background: C.cardBg,
-          borderRadius: 14,
+          padding: isMobile ? "28px 20px 24px" : "36px 40px 32px",
+          background: C.panel,
+          borderRadius: R.xl,
           boxShadow: C.shadow,
         }}>
           <div style={{
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
+            textAlign: "center",
             marginBottom: 24,
           }}>
             <img
@@ -32,46 +43,47 @@ export default function Auth() {
               alt="Z5"
               style={{
                 width: "100%",
-                maxWidth: isMobile ? 180 : 240,
-                maxHeight: isMobile ? 100 : 140,
+                maxWidth: isMobile ? 170 : 200,
+                maxHeight: isMobile ? 95 : 110,
                 objectFit: "contain",
-                marginBottom: isMobile ? 12 : 16,
+                marginBottom: isMobile ? 14 : 18,
                 filter: themeMode === "dark" ? "invert(0.9)" : "none",
               }}
             />
-            <h1 style={{
-              color: C.bright,
-              margin: 0,
-              fontSize: isMobile ? 24 : 28,
-              fontWeight: 700,
-              letterSpacing: "-0.3px",
-              textAlign: "center",
-            }}>
+            <h1 style={{ margin: 0, ...T.title1, color: C.bright }}>
               {t("auth.title")}
             </h1>
-            <div style={{
-              color: C.dim,
-              marginTop: 6,
-              fontSize: 14,
-              textAlign: "center",
-            }}>
+            <div style={{ marginTop: 4, ...T.callout, color: C.dim }}>
               {t("auth.subtitle")}
             </div>
           </div>
 
-          <div style={{ marginBottom: 24, display: "flex", gap: 10 }}>
-            <Btn active={mode === "login"}  onClick={() => setMode("login")}>{t("auth.signin")}</Btn>
-            <Btn active={mode === "signup"} onClick={() => setMode("signup")}>{t("auth.newop")}</Btn>
+          <div style={{ marginBottom: 22 }}>
+            <Segmented
+              fullWidth
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: "login", label: t("auth.signin") },
+                { value: "signup", label: t("auth.newop") },
+              ]}
+            />
           </div>
 
-          {mode === "login" ? <LoginForm /> : <SignupForm />}
+          {/* The form body rises in whenever the mode switches. */}
+          <div
+            key={mode}
+            style={{ animation: `z5-rise ${DURATION.move}ms var(--z5-spring) backwards` }}
+          >
+            {mode === "login" ? <LoginForm /> : <SignupForm />}
+          </div>
         </div>
         <div style={{
           textAlign: "center",
-          marginTop: 24,
+          marginTop: 20,
+          paddingInline: 12,
+          ...T.caption,
           color: C.dimmer,
-          fontSize: 12,
-          letterSpacing: "0.3px",
         }}>
           {t("auth.footer")}
         </div>
@@ -82,7 +94,7 @@ export default function Auth() {
 
 function LoginForm() {
   const { t } = useI18n();
-  const isMobile = useIsMobile();
+  const latin = useLatinField();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
@@ -102,14 +114,18 @@ function LoginForm() {
   return (
     <form onSubmit={go}>
       <Field label={t("auth.email")}>
-        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Input type="email" autoComplete="email" autoCapitalize="none" {...latin}
+               value={email} onChange={(e) => setEmail(e.target.value)} required />
       </Field>
       <Field label={t("auth.password")}>
-        <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} required />
+        <Input type="password" autoComplete="current-password" {...latin}
+               value={pw} onChange={(e) => setPw(e.target.value)} required />
       </Field>
-      <Btn primary type="submit" disabled={busy}>
-        {busy ? t("auth.authenticating") : t("auth.authenticate")}
-      </Btn>
+      <div style={{ marginTop: 20 }}>
+        <Btn primary fullWidth type="submit" disabled={busy} busy={busy}>
+          {busy ? t("auth.authenticating") : t("auth.authenticate")}
+        </Btn>
+      </div>
       <ErrLine>{err}</ErrLine>
     </form>
   );
@@ -117,7 +133,7 @@ function LoginForm() {
 
 function SignupForm() {
   const { t } = useI18n();
-  const isMobile = useIsMobile();
+  const latin = useLatinField();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [code, setCode] = useState("");
@@ -163,25 +179,34 @@ function SignupForm() {
   return (
     <form onSubmit={go}>
       <Field label={t("auth.email")}>
-        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <Input type="email" autoComplete="email" autoCapitalize="none" {...latin}
+               value={email} onChange={(e) => setEmail(e.target.value)} required />
       </Field>
       <Field label={t("auth.password_min")}>
-        <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} minLength={6} required />
+        <Input type="password" autoComplete="new-password" {...latin}
+               value={pw} onChange={(e) => setPw(e.target.value)} minLength={6} required />
       </Field>
       <Field label={t("auth.callsign")}>
-        <Input mono value={callsign} onChange={(e) => setCallsign(e.target.value)}
-               placeholder={t("auth.callsign_ph")} required />
+        {/* Callsigns and invite codes are codes: mono, shown in capitals. */}
+        <Input mono autoCapitalize="characters" autoComplete="off" dir={latin.dir}
+               value={callsign} onChange={(e) => setCallsign(e.target.value)}
+               placeholder={t("auth.callsign_ph")} required
+               style={{ ...latin.style, textTransform: "uppercase" }} />
       </Field>
       <Field label={t("auth.fullname")}>
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
+        <Input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label={t("auth.invitecode")}>
-        <Input mono value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
-               placeholder={t("auth.invitecode_ph")} required />
+        <Input mono autoCapitalize="characters" autoComplete="off" dir={latin.dir}
+               value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
+               placeholder={t("auth.invitecode_ph")} required
+               style={{ ...latin.style, textTransform: "uppercase" }} />
       </Field>
-      <Btn primary type="submit" disabled={busy}>
-        {busy ? t("auth.registering") : t("auth.register")}
-      </Btn>
+      <div style={{ marginTop: 20 }}>
+        <Btn primary fullWidth type="submit" disabled={busy} busy={busy}>
+          {busy ? t("auth.registering") : t("auth.register")}
+        </Btn>
+      </div>
       <ErrLine>{err}</ErrLine>
       <OkLine>{ok}</OkLine>
     </form>

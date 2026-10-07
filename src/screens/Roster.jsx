@@ -1,14 +1,29 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useAuth, roleLabelT, canManageSquads, canCreateInvites } from "../auth";
 import { useI18n, fmtWhen } from "../i18n";
 import { supabase } from "../supabase";
-import { Panel, PageHeader, Btn, Input, Field, ErrLine, OkLine, Badge, Mono } from "../ui";
+import { profileAvatarPublicUrl } from "../data/avatars";
+import {
+  Panel, PageHeader, SectionHeader, Btn, IconButton, Input, Select, Switch, Field,
+  Notice, Badge, Mono, Num, Avatar, Row, List, Menu, ConfirmDialog, EmptyState,
+  SkeletonRows, ELLIPSIS,
+} from "../ui";
 import { useIsMobile } from "../useIsMobile";
-import { C, S } from "../theme";
+import { C, S, T } from "../theme";
+import { DURATION } from "../motion";
 
 const SQUAD_STATUS_ORDER = { active: 0, training: 1 };
 
 const ROLE_OPTIONS = ["sniper", "squad_leader"];
+
+const RISE = `z5-rise ${DURATION.move}ms var(--z5-spring) backwards`;
+
+// Where a success / error message is shown: next to what caused it.
+const SCOPE_PAGE = "page";
+const SCOPE_CREATE = "create";
+const SCOPE_UNASSIGNED = "unassigned";
+const SCOPE_INVITES = "invites";
+const scopeOfMember = (member) => member.squad_id || SCOPE_UNASSIGNED;
 
 function shortCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -22,12 +37,18 @@ function shortCode() {
 export default function Roster() {
   const { profile } = useAuth();
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [squads, setSquads] = useState([]);
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
+  const [msgScope, setMsgScope] = useState(SCOPE_PAGE);
   const [showCreateSquad, setShowCreateSquad] = useState(false);
+  // Pending destructive action awaiting confirmation: { kind, item }.
+  const [confirm, setConfirm] = useState(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   const load = useCallback(async () => {
     setErr("");
@@ -39,6 +60,7 @@ export default function Roster() {
     setSquads(sq || []);
     setMembers(ms || []);
     setInvites(inv || []);
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -64,8 +86,15 @@ export default function Roster() {
     });
   }, [squads]);
 
-  async function updateSquad(squad, updates) {
+  // Start of every action: clear the previous message and say where the
+  // next one belongs.
+  function begin(scope) {
     setErr(""); setOk("");
+    setMsgScope(scope);
+  }
+
+  async function updateSquad(squad, updates) {
+    begin(squad.id);
     const { error } = await supabase
       .from("squads")
       .update(updates)
@@ -76,7 +105,7 @@ export default function Roster() {
   }
 
   async function deleteSquad(squad) {
-    setErr(""); setOk("");
+    begin(squad.id);
     // Unassign members first
     const { error: e1 } = await supabase.rpc("admin_clear_squad_members", {
       p_squad_id: squad.id,
@@ -87,12 +116,13 @@ export default function Roster() {
       .delete()
       .eq("id", squad.id);
     if (e2) { setErr(e2.message); return; }
+    setMsgScope(SCOPE_PAGE);
     setOk(t("ros.squad_deleted", { name: squad.name }));
     load();
   }
 
   async function updateMemberRole(member, newRole) {
-    setErr(""); setOk("");
+    begin(scopeOfMember(member));
     const { error } = await supabase.rpc("admin_set_member_role", {
       p_user_id: member.id, p_role: newRole,
     });
@@ -102,7 +132,7 @@ export default function Roster() {
   }
 
   async function assignMemberToSquad(member, squadId) {
-    setErr(""); setOk("");
+    begin(scopeOfMember(member));
     const { error } = await supabase.rpc("admin_set_member_squad", {
       p_user_id: member.id, p_squad_id: squadId,
     });
@@ -113,18 +143,18 @@ export default function Roster() {
   }
 
   async function toggleInstructor(member) {
-    setErr(""); setOk("");
+    begin(scopeOfMember(member));
     const newVal = !member.is_instructor;
     const { error } = await supabase.rpc("admin_set_member_instructor", {
       p_user_id: member.id, p_is_instructor: newVal,
     });
     if (error) { setErr(error.message); return; }
-    setOk(`${member.callsign || member.email} → ${newVal ? t("ros.instructor_on") : t("ros.instructor_off")}`);
+    setOk(t(newVal ? "ros.instructor_granted" : "ros.instructor_revoked", { who: member.callsign || member.email }));
     load();
   }
 
   async function removeMemberFromSquad(member) {
-    setErr(""); setOk("");
+    begin(scopeOfMember(member));
     const { error } = await supabase.rpc("admin_set_member_squad", {
       p_user_id: member.id, p_squad_id: null,
     });
@@ -134,7 +164,7 @@ export default function Roster() {
   }
 
   async function deleteMember(member) {
-    setErr(""); setOk("");
+    begin(scopeOfMember(member));
     const { data, error } = await supabase.rpc("delete_member", {
       p_user_id: member.id,
     });
@@ -145,7 +175,7 @@ export default function Roster() {
   }
 
   async function deleteInvite(invite) {
-    setErr(""); setOk("");
+    begin(SCOPE_INVITES);
     const { error } = await supabase
       .from("invites")
       .delete()
@@ -155,80 +185,173 @@ export default function Roster() {
     load();
   }
 
+  // ── Confirmation for destructive actions ──
+  const ask = (kind) => (item) => setConfirm({ kind, item });
+  const confirmCfg = confirm ? ({
+    squad: {
+      title: t("ros.delete_squad_title", { name: confirm.item.name }),
+      message: t("ros.delete_squad_body"),
+      confirmLabel: t("ros.delete_squad"),
+      run: () => deleteSquad(confirm.item),
+    },
+    remove: {
+      title: t("ros.remove_title", { who: confirm.item.callsign || confirm.item.email }),
+      message: t("ros.remove_body"),
+      confirmLabel: t("ros.remove_member"),
+      danger: false,
+      run: () => removeMemberFromSquad(confirm.item),
+    },
+    member: {
+      title: t("ros.delete_user_title", { who: confirm.item.callsign || confirm.item.email }),
+      message: t("ros.delete_user_body"),
+      confirmLabel: t("ros.delete_user"),
+      run: () => deleteMember(confirm.item),
+    },
+    invite: {
+      title: t("ros.delete_invite_title"),
+      message: t("ros.delete_invite_body", { code: confirm.item.code }),
+      confirmLabel: t("ros.delete_invite"),
+      run: () => deleteInvite(confirm.item),
+    },
+  })[confirm.kind] : null;
+
+  async function runConfirmed() {
+    if (!confirmCfg) return;
+    setConfirmBusy(true);
+    await confirmCfg.run();
+    setConfirmBusy(false);
+    setConfirm(null);
+  }
+
+  const unassigned = members.filter((m) => !m.squad_id);
+  const showUnassigned = isManager && unassigned.length > 0;
+
+  // A message whose panel is gone (deleted squad, emptied "unassigned"
+  // block, closed form) falls back to the top of the page.
+  const scopeOnScreen = msgScope === SCOPE_PAGE
+    || (msgScope === SCOPE_CREATE && showCreateSquad)
+    || (msgScope === SCOPE_INVITES && showCreateInvite)
+    || (msgScope === SCOPE_UNASSIGNED && showUnassigned)
+    || squads.some((s) => s.id === msgScope);
+  const shownScope = scopeOnScreen ? msgScope : SCOPE_PAGE;
+  const feedback = (scope, style) => (
+    shownScope === scope ? <Feedback err={err} ok={ok} style={style} /> : null
+  );
+
+  const memberHandlers = {
+    onUpdateMemberRole: updateMemberRole,
+    onAssignSquad: assignMemberToSquad,
+    onRemoveMember: ask("remove"),
+    onDeleteMember: ask("member"),
+    onToggleInstructor: toggleInstructor,
+  };
+
   return (
     <>
       <PageHeader
         title={t("ros.title")}
         subtitle={t("ros.subtitle")}
         action={isManager && (
-          <Btn small primary onClick={() => setShowCreateSquad(!showCreateSquad)}>
-            {showCreateSquad ? t("mis.cancel") : t("ros.new_squad")}
-          </Btn>
+          showCreateSquad ? (
+            <Btn small type="button" onClick={() => setShowCreateSquad(false)}>
+              {t("common.cancel")}
+            </Btn>
+          ) : (
+            <Btn small primary type="button" icon="plus" onClick={() => setShowCreateSquad(true)}>
+              {t("ros.new_squad")}
+            </Btn>
+          )
         )}
       />
 
-      <Panel connectTop>
-        {showCreateSquad && (
-          <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${C.border}` }}>
-            <CreateSquadPanel onCreated={(msg) => { setOk(msg); setShowCreateSquad(false); load(); }} setErr={setErr} />
-          </div>
-        )}
+      {feedback(SCOPE_PAGE, { marginTop: 8, marginBottom: 0 })}
 
-        {squads.length === 0 && !showCreateSquad && (
-          <div style={{ color: C.dim, fontSize: 13 }}>{t("ros.nosquads")}</div>
-        )}
-
-        {sortedSquads.map((sq) => (
-          <SquadBlock
-            key={sq.id}
-            squad={sq}
-            allSquads={sortedSquads}
-            members={members.filter((m) => m.squad_id === sq.id)}
-            canManage={isManager}
-            onUpdateSquad={updateSquad}
-            onDeleteSquad={deleteSquad}
-            onUpdateMemberRole={updateMemberRole}
-            onAssignSquad={assignMemberToSquad}
-            onRemoveMember={removeMemberFromSquad}
-            onDeleteMember={deleteMember}
-            onToggleInstructor={toggleInstructor}
-            currentUserId={profile?.id}
+      {showCreateSquad && (
+        <Panel title={t("ros.create_title")} style={{ animation: RISE }}>
+          <CreateSquadPanel
+            onCreated={(msg) => { setMsgScope(SCOPE_PAGE); setOk(msg); setShowCreateSquad(false); load(); }}
+            setErr={(m) => { setMsgScope(SCOPE_CREATE); setOk(""); setErr(m); }}
           />
-        ))}
-
-        {isManager && members.some((m) => !m.squad_id) && (
-          <SquadBlock
-            squad={{ id: null, name: t("ros.unassigned") }}
-            allSquads={sortedSquads}
-            members={members.filter((m) => !m.squad_id)}
-            canManage={isManager}
-            onUpdateMemberRole={updateMemberRole}
-            onAssignSquad={assignMemberToSquad}
-            onRemoveMember={removeMemberFromSquad}
-            onDeleteMember={deleteMember}
-            onToggleInstructor={toggleInstructor}
-            currentUserId={profile?.id}
-            isUnassignedBlock
-          />
-        )}
-      </Panel>
-
-      {showCreateInvite && (
-        <div style={{ marginTop: 28 }}>
-          <InvitesPanel
-            squads={squads}
-            invites={invites}
-            profile={profile}
-            onChanged={(msg) => { setOk(msg); load(); }}
-            onDeleteInvite={deleteInvite}
-            setErr={setErr}
-          />
-        </div>
+          {feedback(SCOPE_CREATE, { marginTop: isMobile ? 12 : 0, marginBottom: 0 })}
+        </Panel>
       )}
 
-      <ErrLine>{err}</ErrLine>
-      <OkLine>{ok}</OkLine>
+      {loading && (
+        <Panel>
+          <SkeletonRows rows={4} />
+        </Panel>
+      )}
+
+      {!loading && squads.length === 0 && !showCreateSquad && (
+        <Panel>
+          <EmptyState icon="people" title={t("ros.nosquads")} />
+        </Panel>
+      )}
+
+      {sortedSquads.map((sq) => (
+        <SquadBlock
+          key={sq.id}
+          squad={sq}
+          allSquads={sortedSquads}
+          members={members.filter((m) => m.squad_id === sq.id)}
+          canManage={isManager}
+          onUpdateSquad={updateSquad}
+          onDeleteSquad={ask("squad")}
+          {...memberHandlers}
+          currentUserId={profile?.id}
+          feedback={feedback(sq.id)}
+        />
+      ))}
+
+      {showUnassigned && (
+        <SquadBlock
+          squad={{ id: null, name: t("ros.unassigned") }}
+          allSquads={sortedSquads}
+          members={unassigned}
+          canManage={isManager}
+          {...memberHandlers}
+          currentUserId={profile?.id}
+          isUnassignedBlock
+          feedback={feedback(SCOPE_UNASSIGNED)}
+        />
+      )}
+
+      {showCreateInvite && (
+        <InvitesPanel
+          squads={squads}
+          invites={invites}
+          profile={profile}
+          loading={loading}
+          onChanged={(msg) => { setMsgScope(SCOPE_INVITES); setOk(msg); load(); }}
+          onDeleteInvite={ask("invite")}
+          setErr={(m) => { setMsgScope(SCOPE_INVITES); setOk(""); setErr(m); }}
+          feedback={feedback(SCOPE_INVITES, { marginBottom: 0 })}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirmCfg?.title}
+        message={confirmCfg?.message}
+        confirmLabel={confirmCfg?.confirmLabel}
+        cancelLabel={t("common.cancel")}
+        danger={confirmCfg ? confirmCfg.danger !== false : true}
+        busy={confirmBusy}
+        onConfirm={runConfirmed}
+        onCancel={() => setConfirm(null)}
+      />
     </>
+  );
+}
+
+// Result of the last action, shown inside the panel it concerns.
+function Feedback({ err, ok, style }) {
+  if (!err && !ok) return null;
+  return (
+    <div style={{ display: "grid", gap: 8, marginBottom: 12, animation: RISE, ...style }}>
+      {err && <Notice tone="error">{err}</Notice>}
+      {ok && <Notice tone="ok">{ok}</Notice>}
+    </div>
   );
 }
 
@@ -238,6 +361,7 @@ export default function Roster() {
 function SquadBlock({
   squad, allSquads = [], members, canManage, onUpdateSquad, onDeleteSquad,
   onUpdateMemberRole, onAssignSquad, onRemoveMember, onDeleteMember, onToggleInstructor, currentUserId, isUnassignedBlock = false,
+  feedback,
 }) {
   const { t } = useI18n();
   const isMobile = useIsMobile();
@@ -245,7 +369,20 @@ function SquadBlock({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(squad.name || "");
   const [editBootcamp, setEditBootcamp] = useState(squad.is_bootcamp || false);
-  const [confirmDel, setConfirmDel] = useState(false);
+
+  function startEditing() {
+    // Always start from the current values (the squad may have changed
+    // since this block mounted).
+    setEditName(squad.name || "");
+    setEditBootcamp(!!squad.is_bootcamp);
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    setEditing(false);
+    setEditName(squad.name);
+    setEditBootcamp(squad.is_bootcamp);
+  }
 
   function handleSaveSquad() {
     if (!editName.trim()) return;
@@ -258,306 +395,274 @@ function SquadBlock({
 
   // Status transition actions removed per user request (no Mark training / Archive)
 
-  return (
-    <div style={{
-      border: `1px solid ${C.border}`,
-      borderRadius: 4,
-      padding: isMobile ? "12px 10px" : "16px 20px",
-      marginBottom: isMobile ? 10 : 14,
-      background: C.panel,
-      opacity: 1,
-    }}>
-      {/* ── Squad header ── */}
-      <div style={{
-        display: "flex",
-        flexDirection: isMobile ? "column" : "row",
-        alignItems: isMobile ? "flex-start" : "center",
-        gap: isMobile ? 8 : 10,
-        marginBottom: 10,
-      }}>
-        {editing ? (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flex: 1, width: isMobile ? "100%" : "auto" }}>
-            <Input value={editName} onChange={(e) => setEditName(e.target.value)}
-                   style={{ width: isMobile ? "100%" : 180 }} />
-            <label style={{ display: "flex", alignItems: "center", gap: 6, color: C.text, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={editBootcamp} onChange={(e) => setEditBootcamp(e.target.checked)}
-                     style={{ width: 16, height: 16, accentColor: C.warn }} />
-              {t("ros.bootcamp")}
-            </label>
-            <div style={{ display: "flex", gap: 6 }}>
-              <Btn small primary onClick={handleSaveSquad}>{t("mis.save")}</Btn>
-              <Btn small onClick={() => { setEditing(false); setEditName(squad.name); setEditBootcamp(squad.is_bootcamp); }}>{t("mis.cancel")}</Btn>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ color: C.bright, fontSize: isMobile ? 14 : 15, fontWeight: 600 }}>{squad.name}</span>
-            {squad.is_bootcamp
-              ? <Badge tone="warn">{t("nav.bootcamp")}</Badge>
-              : <Badge tone="ok">{t("ros.active")}</Badge>}
-            <Badge>{members.length} {members.length === 1 ? t("ros.member") : t("ros.members")}</Badge>
-          </div>
-        )}
+  const title = (
+    <span style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px 8px", minWidth: 0 }}>
+      <span style={{ overflowWrap: "anywhere" }}>{squad.name}</span>
+      {!isUnassignedBlock && (
+        squad.is_bootcamp
+          ? <Badge tone="warn">{t("nav.bootcamp")}</Badge>
+          : <Badge tone="ok">{t("ros.active")}</Badge>
+      )}
+      <Badge>{members.length} {members.length === 1 ? t("ros.member") : t("ros.members")}</Badge>
+    </span>
+  );
 
-        {canManage && !editing && !isUnassignedBlock && (
-          <div style={{
-            marginInlineStart: isMobile ? 0 : "auto",
+  const memberProps = (m) => ({
+    member: m,
+    canManage,
+    isCurrentUser: m.id === currentUserId,
+    onChangeRole: onUpdateMemberRole,
+    onAssignSquad,
+    onRemove: onRemoveMember,
+    onDelete: onDeleteMember,
+    onToggleInstructor,
+    allSquads,
+    isUnassignedBlock,
+  });
+
+  return (
+    <Panel
+      style={isMobile ? { padding: "16px 16px 8px" } : undefined}
+      title={editing ? null : title}
+      action={canManage && !editing && !isUnassignedBlock ? (
+        <Menu
+          items={[
+            { key: "edit", label: t("common.edit"), icon: "pencil", onSelect: startEditing },
+            { key: "delete", label: t("ros.delete_squad"), icon: "trash", danger: true, onSelect: () => onDeleteSquad(squad) },
+          ]}
+          trigger={(p) => <IconButton icon="ellipsis" label={t("common.more")} size={isMobile ? 34 : 30} {...p} />}
+        />
+      ) : null}
+    >
+      {editing && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSaveSquad(); }}
+          style={{
             display: "flex",
-            gap: 6,
-            flexShrink: 0,
-          }}>
-            <Btn small onClick={() => setEditing(true)}>{t("mis.edit")}</Btn>
-            {!confirmDel ? (
-              <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
-            ) : (
-              <>
-                <Btn small style={{ color: C.error, borderColor: C.error }}
-                     onClick={() => { onDeleteSquad(squad); setConfirmDel(false); }}>
-                  {t("mis.confirm_delete")}
-                </Btn>
-                <Btn small onClick={() => setConfirmDel(false)}>{t("mis.cancel")}</Btn>
-              </>
-            )}
+            flexDirection: isMobile ? "column" : "row",
+            alignItems: isMobile ? "stretch" : "center",
+            flexWrap: "wrap",
+            gap: isMobile ? 12 : 14,
+            marginBottom: 14,
+            animation: RISE,
+          }}
+        >
+          <Input value={editName} onChange={(e) => setEditName(e.target.value)}
+                 aria-label={t("ros.squad_name")} autoFocus
+                 style={{ width: isMobile ? "100%" : 220 }} />
+          <Switch checked={editBootcamp} onChange={setEditBootcamp} label={t("ros.bootcamp")} />
+          <div style={{ display: "flex", gap: 8, marginInlineStart: isMobile ? 0 : "auto" }}>
+            <Btn small primary type="submit">{t("common.save")}</Btn>
+            <Btn small type="button" onClick={cancelEditing}>{t("common.cancel")}</Btn>
           </div>
-        )}
-      </div>
+        </form>
+      )}
+
+      {feedback}
 
       {/* ── Members ── */}
-      {isMobile ? (
-        <div>
+      {members.length === 0 ? (
+        <EmptyState compact icon="people" title={t("ros.nomembers")} />
+      ) : isMobile ? (
+        <List>
           {members.map((m) => (
-            <MemberCardMobile
-              key={m.id}
-              member={m}
-              canManage={canManage}
-              isCurrentUser={m.id === currentUserId}
-              onChangeRole={onUpdateMemberRole}
-              onAssignSquad={onAssignSquad}
-              onRemove={onRemoveMember}
-              onDelete={onDeleteMember}
-              onToggleInstructor={onToggleInstructor}
-              allSquads={allSquads}
-              isUnassignedBlock={isUnassignedBlock}
-            />
+            <MemberRowMobile key={m.id} {...memberProps(m)} />
           ))}
-          {members.length === 0 && (
-            <div style={{ color: C.dim, fontSize: 14, padding: "6px 0" }}>{t("ros.nomembers")}</div>
-          )}
-        </div>
+        </List>
       ) : (
-        <table style={{ ...S.table, marginBottom: 0 }}>
+        <table style={{ ...S.table, marginBottom: 0, tableLayout: "fixed" }}>
           <thead>
             <tr>
-              <th style={{ ...S.th, width: "18%" }}>{t("ros.callsign")}</th>
+              <th style={{ ...S.th, ...CELL_FIRST, width: "19%" }}>{t("ros.callsign")}</th>
               <th style={{ ...S.th, width: "20%" }}>{t("ros.name")}</th>
-              <th style={{ ...S.th, width: "14%" }}>{t("ros.role")}</th>
-              <th style={{ ...S.th }}>{t("ros.email")}</th>
-              {canManage && <th style={{ ...S.th, width: "22%", textAlign: "end" }}></th>}
+              <th style={{ ...S.th, width: "19%" }}>{t("ros.role")}</th>
+              <th style={{ ...S.th, ...(canManage ? null : CELL_LAST) }}>{t("ros.email")}</th>
+              {canManage && <th style={{ ...S.th, ...CELL_LAST, width: 150 }}></th>}
             </tr>
           </thead>
           <tbody>
-            {members.map((m) => (
-              <MemberRowDesktop
-                key={m.id}
-                member={m}
-                canManage={canManage}
-                isCurrentUser={m.id === currentUserId}
-                onChangeRole={onUpdateMemberRole}
-                onAssignSquad={onAssignSquad}
-                onRemove={onRemoveMember}
-                onDelete={onDeleteMember}
-                onToggleInstructor={onToggleInstructor}
-                allSquads={allSquads}
-                isUnassignedBlock={isUnassignedBlock}
-              />
+            {members.map((m, i) => (
+              <MemberRowDesktop key={m.id} last={i === members.length - 1} {...memberProps(m)} />
             ))}
-            {members.length === 0 && (
-              <tr><td style={{ ...S.td, color: C.dim }} colSpan={canManage ? 5 : 4}>{t("ros.nomembers")}</td></tr>
-            )}
           </tbody>
         </table>
       )}
-    </div>
+    </Panel>
   );
 }
 
-/* ── Row action menu ──────────────────────────────────────────────────
-   All per-member actions live behind one "⋯" button — a clean dropdown
-   instead of four buttons per row. Destructive items ask for an inline
-   confirm inside the menu (first click arms, second executes). */
-function ActionMenu({ items, label = "⋯" }) {
-  const [open, setOpen] = useState(false);
-  const [confirmKey, setConfirmKey] = useState(null);
-  const list = (items || []).filter(Boolean);
-  if (list.length === 0) return null;
+// Table cells line up with the panel's own padding at both edges.
+const CELL_FIRST = { paddingInlineStart: 0 };
+const CELL_LAST = { paddingInlineEnd: 0 };
+// Same edge for a cell whose own direction is forced to LTR.
+const CELL_LAST_LTR = (isRTL) => (isRTL ? { paddingInlineStart: 0 } : { paddingInlineEnd: 0 });
 
+/* ── Per-member actions ───────────────────────────────────────────────
+   Everything lives behind one "more" button. Removing from the squad
+   and deleting the user are confirmed in a dialog by the parent.       */
+function memberMenuItems({
+  t, member, isCurrentUser, isUnassignedBlock, canAssign,
+  onStartAssign, onStartRole, onToggleInstructor, onRemove, onDelete,
+}) {
+  return [
+    canAssign && {
+      key: "assign",
+      label: isUnassignedBlock ? t("ros.assign") : t("ros.move"),
+      icon: "swap",
+      onSelect: onStartAssign,
+    },
+    !isCurrentUser && {
+      key: "role",
+      label: t("ros.change_role"),
+      icon: "personCheck",
+      onSelect: onStartRole,
+    },
+    !isCurrentUser && {
+      key: "instructor",
+      label: member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor"),
+      icon: "graduation",
+      onSelect: () => onToggleInstructor && onToggleInstructor(member),
+    },
+    !isCurrentUser && !isUnassignedBlock && member.squad_id && {
+      key: "remove",
+      label: t("ros.remove_member"),
+      icon: "xmark",
+      onSelect: () => onRemove(member),
+    },
+    !isCurrentUser && onDelete && "divider",
+    !isCurrentUser && onDelete && {
+      key: "delete",
+      label: t("ros.delete_user"),
+      icon: "trash",
+      danger: true,
+      onSelect: () => onDelete(member),
+    },
+  ].filter(Boolean);
+}
+
+function MemberMenu({ items, size }) {
+  const { t } = useI18n();
+  if (items.length === 0) return null;
   return (
-    <div style={{ position: "relative", display: "inline-block" }}>
-      <Btn small onClick={() => { setOpen((o) => !o); setConfirmKey(null); }}
-           aria-haspopup="menu" aria-expanded={open}
-           style={{ fontWeight: 700, letterSpacing: "1px", minWidth: 34 }}>
-        {label}
-      </Btn>
-      {open && (
-        <>
-          <div
-            onClick={() => { setOpen(false); setConfirmKey(null); }}
-            style={{ position: "fixed", inset: 0, zIndex: 40 }}
-          />
-          <div role="menu" style={{
-            position: "absolute",
-            zIndex: 41,
-            insetInlineEnd: 0,
-            top: "calc(100% + 6px)",
-            minWidth: 210,
-            background: C.bgElevated,
-            border: `1px solid ${C.border}`,
-            borderRadius: 12,
-            boxShadow: `0 14px 36px ${C.overlayInverse}0.4)`,
-            padding: 6,
-            display: "flex",
-            flexDirection: "column",
-            gap: 2,
-          }}>
-            {list.map((it) => {
-              const confirming = confirmKey === it.key;
-              const baseColor = it.tone === "error" ? C.error
-                              : it.tone === "warn" ? C.warn
-                              : C.text;
-              return (
-                <MenuItem
-                  key={it.key}
-                  color={confirming ? C.error : baseColor}
-                  bg={confirming ? C.errBg : "transparent"}
-                  bold={confirming}
-                  onClick={() => {
-                    if (it.confirmLabel && !confirming) { setConfirmKey(it.key); return; }
-                    setOpen(false); setConfirmKey(null);
-                    it.onSelect();
-                  }}
-                >
-                  {confirming ? it.confirmLabel : it.label}
-                </MenuItem>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
+    <Menu
+      items={items}
+      trigger={(p) => <IconButton icon="ellipsis" label={t("common.more")} size={size} {...p} />}
+    />
   );
 }
 
-function MenuItem({ color, bg, bold, onClick, children }) {
-  const [hover, setHover] = useState(false);
+function RoleBadges({ member }) {
+  const { t } = useI18n();
   return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        all: "unset",
-        boxSizing: "border-box",
-        cursor: "pointer",
-        padding: "9px 12px",
-        borderRadius: 8,
-        fontSize: 13.5,
-        textAlign: "start",
-        color,
-        fontWeight: bold ? 700 : 500,
-        background: bg !== "transparent" ? bg : (hover ? C.hoverBg : "transparent"),
-        transition: "background 120ms ease-out",
-        whiteSpace: "nowrap",
-      }}
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+      <Badge tone="bright">{roleLabelT(member.role, t)}</Badge>
+      {member.is_instructor && <Badge tone="warn">{t("prof.instructor_badge")}</Badge>}
+    </span>
+  );
+}
+
+function RolePicker({ member, small, onChangeRole, onDone, style, wrapStyle }) {
+  const { t } = useI18n();
+  return (
+    <Select
+      small={small}
+      autoFocus
+      aria-label={t("ros.change_role")}
+      value={member.role}
+      onChange={(e) => { onChangeRole(member, e.target.value); onDone(); }}
+      onBlur={onDone}
+      style={style}
+      wrapStyle={wrapStyle}
     >
-      {children}
-    </button>
+      {ROLE_OPTIONS.map((r) => (
+        <option key={r} value={r}>{roleLabelT(r, t)}</option>
+      ))}
+    </Select>
   );
+}
+
+function SquadPicker({ member, squads, small, onAssignSquad, onDone, style, wrapStyle }) {
+  const { t } = useI18n();
+  return (
+    <Select
+      small={small}
+      autoFocus
+      aria-label={t("ros.pick_squad")}
+      defaultValue=""
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v) { onAssignSquad(member, v); onDone(); }
+      }}
+      onBlur={onDone}
+      style={style}
+      wrapStyle={wrapStyle}
+    >
+      <option value="">{t("ros.pick_squad")}</option>
+      {squads.map((s) => (
+        <option key={s.id} value={s.id}>{s.name}</option>
+      ))}
+    </Select>
+  );
+}
+
+// List avatars use the plain public URL (without the per-call cache-buster
+// profileAvatarPublicUrl appends), so the browser can cache them instead
+// of re-downloading every photo each time the roster mounts.
+function useMemberAvatar(member) {
+  return useMemo(() => {
+    const url = profileAvatarPublicUrl(member.avatar_url);
+    return url ? url.split("?")[0] : null;
+  }, [member.avatar_url]);
 }
 
 /* ── Desktop member row with role change + remove ── */
-function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAssignSquad, onRemove, onDelete, onToggleInstructor, allSquads = [], isUnassignedBlock = false }) {
-  const { t } = useI18n();
+function MemberRowDesktop({ member, last, canManage, isCurrentUser, onChangeRole, onAssignSquad, onRemove, onDelete, onToggleInstructor, allSquads = [], isUnassignedBlock = false }) {
+  const { t, isRTL } = useI18n();
   const [editingRole, setEditingRole] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const assignableSquads = (allSquads || []).filter((s) => s.id && s.id !== member.squad_id);
+  const avatarSrc = useMemberAvatar(member);
+  const td = last ? { ...S.td, borderBottom: "none", paddingBottom: 4 } : S.td;
 
   return (
     <tr>
-      <td style={S.td}><Mono>{member.callsign || "—"}</Mono></td>
-      <td style={S.td}>{member.full_name || <span style={{ color: C.dim }}>—</span>}</td>
-      <td style={S.td}>
+      <td style={{ ...td, ...CELL_FIRST }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <Avatar src={avatarSrc} name={member.callsign || member.full_name} size={32} />
+          <Mono style={{ color: C.bright, fontWeight: 600, ...ELLIPSIS }}>{member.callsign || "—"}</Mono>
+        </div>
+      </td>
+      <td style={{ ...td, ...ELLIPSIS }}>
+        {member.full_name || <span style={{ color: C.dim }}>—</span>}
+      </td>
+      <td style={td}>
         {editingRole ? (
-          <select
-            value={member.role}
-            onChange={(e) => { onChangeRole(member, e.target.value); setEditingRole(false); }}
-            autoFocus
-            style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 140 }}
-          >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>{roleLabelT(r, t)}</option>
-            ))}
-          </select>
+          <RolePicker small member={member} onChangeRole={onChangeRole}
+                      onDone={() => setEditingRole(false)} />
         ) : (
-          <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-            <Badge tone="bright">{roleLabelT(member.role, t)}</Badge>
-            {member.is_instructor && <Badge tone="warn">{t("prof.instructor_badge")}</Badge>}
-          </span>
+          <RoleBadges member={member} />
         )}
       </td>
-      <td style={{ ...S.td, color: C.dim }}>{member.email}</td>
+      {/* An address always reads left-to-right and truncates at its end;
+          it still lines up with the column's leading edge. */}
+      <td dir="ltr" title={member.email}
+          style={{ ...td, color: C.dim, ...ELLIPSIS, textAlign: isRTL ? "end" : "start", ...(canManage ? null : CELL_LAST_LTR(isRTL)) }}>
+        {member.email}
+      </td>
       {canManage && (
-        <td style={{ ...S.td, textAlign: "end", whiteSpace: "nowrap" }}>
+        <td style={{ ...td, ...CELL_LAST, textAlign: "end", whiteSpace: "nowrap" }}>
           {assigning ? (
-            <select
-              autoFocus
-              defaultValue=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) { onAssignSquad(member, v); setAssigning(false); }
-              }}
-              onBlur={() => setAssigning(false)}
-              style={{ ...S.input, fontSize: 12, padding: "4px 8px", width: 160 }}
-            >
-              <option value="">{t("ros.pick_squad")}</option>
-              {assignableSquads.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
+            <SquadPicker small member={member} squads={assignableSquads}
+                         onAssignSquad={onAssignSquad} onDone={() => setAssigning(false)}
+                         style={{ width: 150 }} />
           ) : (
-            <ActionMenu items={[
-              onAssignSquad && assignableSquads.length > 0 && {
-                key: "assign",
-                label: isUnassignedBlock ? t("ros.assign") : t("ros.move"),
-                onSelect: () => setAssigning(true),
-              },
-              !isCurrentUser && {
-                key: "role",
-                label: t("ros.change_role"),
-                onSelect: () => setEditingRole(true),
-              },
-              !isCurrentUser && {
-                key: "instructor",
-                label: member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor"),
-                tone: member.is_instructor ? "warn" : undefined,
-                onSelect: () => onToggleInstructor && onToggleInstructor(member),
-              },
-              !isCurrentUser && !isUnassignedBlock && member.squad_id && {
-                key: "remove",
-                label: t("ros.remove_member"),
-                confirmLabel: t("ros.confirm_remove"),
-                tone: "warn",
-                onSelect: () => onRemove(member),
-              },
-              !isCurrentUser && onDelete && {
-                key: "delete",
-                label: t("ros.delete_user"),
-                confirmLabel: t("ros.confirm_delete_user"),
-                tone: "error",
-                onSelect: () => onDelete(member),
-              },
-            ]} />
+            <MemberMenu size={30} items={memberMenuItems({
+              t, member, isCurrentUser, isUnassignedBlock,
+              canAssign: !!onAssignSquad && assignableSquads.length > 0,
+              onStartAssign: () => setAssigning(true),
+              onStartRole: () => setEditingRole(true),
+              onToggleInstructor, onRemove, onDelete,
+            })} />
           )}
         </td>
       )}
@@ -565,115 +670,52 @@ function MemberRowDesktop({ member, canManage, isCurrentUser, onChangeRole, onAs
   );
 }
 
-/* ── Mobile member card with role change + remove ── */
-function MemberCardMobile({ member, canManage, isCurrentUser, onChangeRole, onAssignSquad, onRemove, onDelete, onToggleInstructor, allSquads = [], isUnassignedBlock = false }) {
+/* ── Mobile member row with role change + remove ── */
+function MemberRowMobile({ member, canManage, isCurrentUser, onChangeRole, onAssignSquad, onRemove, onDelete, onToggleInstructor, allSquads = [], isUnassignedBlock = false }) {
   const { t } = useI18n();
   const [editingRole, setEditingRole] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const assignableSquads = (allSquads || []).filter((s) => s.id && s.id !== member.squad_id);
+  const avatarSrc = useMemberAvatar(member);
+  const pickerWrap = { display: "flex", width: "100%", marginTop: 10 };
 
   return (
-    <div style={{
-      borderRadius: 10,
-      padding: "12px 14px",
-      marginBottom: 10,
-      background: C.cardBg,
-    }}>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 6,
-        gap: 10,
-      }}>
-        <Mono style={{ color: C.bright, fontWeight: 600, fontSize: 15 }}>
+    <Row
+      as="div"
+      align="flex-start"
+      leading={<Avatar src={avatarSrc} name={member.callsign || member.full_name} size={40} />}
+      trailing={canManage ? (
+        <MemberMenu size={36} items={memberMenuItems({
+          t, member, isCurrentUser, isUnassignedBlock,
+          canAssign: !!onAssignSquad && assignableSquads.length > 0,
+          onStartAssign: () => { setEditingRole(false); setAssigning(true); },
+          onStartRole: () => { setAssigning(false); setEditingRole(true); },
+          onToggleInstructor, onRemove, onDelete,
+        })} />
+      ) : null}
+    >
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px 8px" }}>
+        <Mono style={{ fontSize: 15, lineHeight: 1.4, color: C.bright, fontWeight: 600 }}>
           {member.callsign || "—"}
         </Mono>
-        {editingRole ? (
-          <select
-            value={member.role}
-            onChange={(e) => { onChangeRole(member, e.target.value); setEditingRole(false); }}
-            style={{ ...S.input, fontSize: 14, padding: "6px 10px", width: 150, minHeight: 36 }}
-          >
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>{roleLabelT(r, t)}</option>
-            ))}
-          </select>
-        ) : (
-          <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-            <Badge tone="bright">{roleLabelT(member.role, t)}</Badge>
-            {member.is_instructor && <Badge tone="warn">{t("prof.instructor_badge")}</Badge>}
-          </span>
-        )}
+        <RoleBadges member={member} />
       </div>
-      <div style={{ fontSize: 14, color: C.text, marginBottom: 2 }}>
+      <div style={{ ...T.callout, color: C.text, marginTop: 2, ...ELLIPSIS }}>
         {member.full_name || <span style={{ color: C.dim }}>—</span>}
       </div>
-      <div style={{
-        fontSize: 12,
-        color: C.dim,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        marginBottom: canManage && !isCurrentUser ? 8 : 0,
-      }}>
-        {member.email}
+      <div style={{ ...T.caption, color: C.dim, ...ELLIPSIS }}>
+        <span dir="ltr">{member.email}</span>
       </div>
-      {canManage && (
-        <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-          {assigning ? (
-            <select
-              autoFocus
-              defaultValue=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) { onAssignSquad(member, v); setAssigning(false); }
-              }}
-              onBlur={() => setAssigning(false)}
-              style={{ ...S.input, fontSize: 14, padding: "6px 10px", minHeight: 36, flex: 1 }}
-            >
-              <option value="">{t("ros.pick_squad")}</option>
-              {assignableSquads.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          ) : (
-            <ActionMenu items={[
-              onAssignSquad && assignableSquads.length > 0 && {
-                key: "assign",
-                label: isUnassignedBlock ? t("ros.assign") : t("ros.move"),
-                onSelect: () => setAssigning(true),
-              },
-              !isCurrentUser && {
-                key: "role",
-                label: t("ros.change_role"),
-                onSelect: () => setEditingRole(true),
-              },
-              !isCurrentUser && {
-                key: "instructor",
-                label: member.is_instructor ? t("ros.revoke_instructor") : t("ros.make_instructor"),
-                tone: member.is_instructor ? "warn" : undefined,
-                onSelect: () => onToggleInstructor && onToggleInstructor(member),
-              },
-              !isCurrentUser && !isUnassignedBlock && member.squad_id && {
-                key: "remove",
-                label: t("ros.remove_member"),
-                confirmLabel: t("ros.confirm_remove"),
-                tone: "warn",
-                onSelect: () => onRemove(member),
-              },
-              !isCurrentUser && onDelete && {
-                key: "delete",
-                label: t("ros.delete_user"),
-                confirmLabel: t("ros.confirm_delete_user"),
-                tone: "error",
-                onSelect: () => onDelete(member),
-              },
-            ]} />
-          )}
-        </div>
+      {editingRole && (
+        <RolePicker member={member} onChangeRole={onChangeRole}
+                    onDone={() => setEditingRole(false)} wrapStyle={pickerWrap} />
       )}
-    </div>
+      {assigning && (
+        <SquadPicker member={member} squads={assignableSquads}
+                     onAssignSquad={onAssignSquad} onDone={() => setAssigning(false)}
+                     wrapStyle={pickerWrap} />
+      )}
+    </Row>
   );
 }
 
@@ -708,41 +750,23 @@ function CreateSquadPanel({ onCreated, setErr }) {
   }
 
   return (
-    <form onSubmit={create}>
-      <div style={{
-        display: "flex",
-        gap: 12,
-        alignItems: isMobile ? "stretch" : "flex-end",
-        flexWrap: "wrap",
-        flexDirection: isMobile ? "column" : "row",
-      }}>
-        <Field label={t("ros.squad_name")}>
-          <Input value={name} onChange={(e) => setName(e.target.value)}
-                 placeholder={t("ros.squad_ph")}
-                 style={{ width: isMobile ? "100%" : 240 }} />
-        </Field>
-        <label style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          cursor: "pointer",
-          color: C.text,
-          fontSize: 14,
-          minHeight: isMobile ? 46 : 36,
-          alignSelf: isMobile ? "flex-start" : "center",
-          paddingBottom: isMobile ? 0 : 2,
-        }}>
-          <input
-            type="checkbox"
-            checked={isBootcamp}
-            onChange={(e) => setIsBootcamp(e.target.checked)}
-            style={{ width: 18, height: 18, accentColor: C.warn }}
-          />
-          <span>{t("ros.bootcamp")}</span>
-        </label>
+    <form onSubmit={create} style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      alignItems: isMobile ? "stretch" : "flex-end",
+      flexWrap: "wrap",
+      gap: isMobile ? 0 : 20,
+    }}>
+      <Field label={t("ros.squad_name")}>
+        <Input value={name} onChange={(e) => setName(e.target.value)}
+               placeholder={t("ros.squad_ph")}
+               style={{ width: isMobile ? "100%" : 260 }} />
+      </Field>
+      <div style={{ display: "flex", alignItems: "center", minHeight: isMobile ? 44 : 40, marginBottom: 14 }}>
+        <Switch checked={isBootcamp} onChange={setIsBootcamp} label={t("ros.bootcamp")} />
       </div>
-      <div style={{ marginTop: 12 }}>
-        <Btn primary type="submit" disabled={busy} fullWidth={isMobile}>
+      <div style={{ marginInlineStart: isMobile ? 0 : "auto", marginBottom: isMobile ? 0 : 14 }}>
+        <Btn primary type="submit" disabled={busy} busy={busy} fullWidth={isMobile}>
           {busy ? t("ros.registering") : t("ros.register")}
         </Btn>
       </div>
@@ -753,7 +777,7 @@ function CreateSquadPanel({ onCreated, setErr }) {
 /* ═══════════════════════════════════════════════
    INVITES PANEL — with delete
    ═══════════════════════════════════════════════ */
-function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, setErr }) {
+function InvitesPanel({ squads, invites, profile, loading, onChanged, onDeleteInvite, setErr, feedback }) {
   const { t } = useI18n();
   const isAdmin = profile?.role === "admin" || profile?.role === "officer";
   const isMobile = useIsMobile();
@@ -795,98 +819,91 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
 
   return (
     <>
-      <PageHeader
+      <SectionHeader
         title={t("ros.invites_title")}
         subtitle={t("ros.invites_sub")}
-        action={
-          <Btn small primary onClick={() => setShowForm(!showForm)}>
-            {showForm ? t("mis.cancel") : t("ros.generate")}
-          </Btn>
-        }
+        action={showForm ? (
+          <Btn small type="button" onClick={() => setShowForm(false)}>{t("common.cancel")}</Btn>
+        ) : (
+          <Btn small type="button" icon="plus" onClick={() => setShowForm(true)}>{t("ros.generate")}</Btn>
+        )}
       />
 
-      <Panel connectTop>
-        {showForm && (
+      {feedback}
+
+      {showForm && (
+        <Panel style={{ animation: RISE }}>
           <form onSubmit={create} style={{
-            marginBottom: 20,
-            paddingBottom: 20,
-            borderBottom: `1px solid ${C.border}`,
             display: "flex",
-            gap: 14,
+            flexDirection: isMobile ? "column" : "row",
             alignItems: isMobile ? "stretch" : "flex-end",
             flexWrap: "wrap",
-            flexDirection: isMobile ? "column" : "row",
+            gap: isMobile ? 0 : 16,
           }}>
-            <Field inline label={t("mc.squad")}>
-              <select value={squadId}
-                      onChange={(e) => setSquadId(e.target.value)}
-                      style={{
-                        ...S.input,
-                        width: isMobile ? "100%" : 260,
-                        fontSize: isMobile ? 16 : S.input.fontSize,
-                        minHeight: isMobile ? 46 : undefined,
-                      }}>
-                {squadOptional && <option value="">{t("ros.no_squad")}</option>}
-                {allowedSquads.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-                {allowedSquads.length === 0 && !squadOptional && <option value="">{t("mc.nosquads")}</option>}
-              </select>
-            </Field>
-            <Field inline label={t("ros.role")}>
-              <select value={role}
-                      onChange={(e) => {
-                        const r = e.target.value;
-                        setRole(r);
-                        if (r === "admin" || r === "officer") setSquadId("");
-                      }}
-                      style={{
-                        ...S.input,
-                        width: isMobile ? "100%" : 220,
-                        fontSize: isMobile ? 16 : S.input.fontSize,
-                        minHeight: isMobile ? 46 : undefined,
-                      }}>
-                {allowedRoles.map((r) => (
-                  <option key={r} value={r}>{roleLabelT(r, t)}</option>
-                ))}
-              </select>
-            </Field>
-            <Btn primary type="submit" disabled={busy || (!squadOptional && !squadId)}>
-              {busy ? t("ros.generating") : t("ros.generate")}
-            </Btn>
+            <div style={{ width: isMobile ? "100%" : 260 }}>
+              <Field label={t("mc.squad")}>
+                <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
+                  {squadOptional && <option value="">{t("ros.no_squad")}</option>}
+                  {allowedSquads.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                  {allowedSquads.length === 0 && !squadOptional && <option value="">{t("mc.nosquads")}</option>}
+                </Select>
+              </Field>
+            </div>
+            <div style={{ width: isMobile ? "100%" : 220 }}>
+              <Field label={t("ros.role")}>
+                <Select value={role}
+                        onChange={(e) => {
+                          const r = e.target.value;
+                          setRole(r);
+                          if (r === "admin" || r === "officer") setSquadId("");
+                        }}>
+                  {allowedRoles.map((r) => (
+                    <option key={r} value={r}>{roleLabelT(r, t)}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <div style={{ marginInlineStart: isMobile ? 0 : "auto", marginBottom: isMobile ? 0 : 14 }}>
+              <Btn primary type="submit" fullWidth={isMobile} busy={busy}
+                   disabled={busy || (!squadOptional && !squadId)}>
+                {busy ? t("ros.generating") : t("ros.generate")}
+              </Btn>
+            </div>
           </form>
-        )}
+        </Panel>
+      )}
 
-        {isMobile ? (
-          <div>
+      <Panel style={isMobile ? { padding: "8px 16px" } : undefined}>
+        {loading ? (
+          <SkeletonRows rows={3} />
+        ) : invites.length === 0 ? (
+          <EmptyState compact icon="key" title={t("ros.noinvites")} />
+        ) : isMobile ? (
+          <List>
             {invites.map((inv) => (
-              <InviteCardMobile key={inv.id} invite={inv} squads={squads}
-                                canDelete={isAdmin} onDelete={onDeleteInvite} />
+              <InviteRowMobile key={inv.id} invite={inv} squads={squads}
+                               canDelete={isAdmin} onDelete={onDeleteInvite} />
             ))}
-            {invites.length === 0 && (
-              <div style={{ color: C.dim, fontSize: 14, padding: "6px 0" }}>{t("ros.noinvites")}</div>
-            )}
-          </div>
+          </List>
         ) : (
-          <table style={S.table}>
+          <table style={{ ...S.table, marginBottom: 0 }}>
             <thead>
               <tr>
-                <th style={S.th}>{t("ros.code")}</th>
+                <th style={{ ...S.th, ...CELL_FIRST }}>{t("ros.code")}</th>
                 <th style={S.th}>{t("mc.squad")}</th>
                 <th style={S.th}>{t("ros.role")}</th>
                 <th style={S.th}>{t("ros.status")}</th>
-                <th style={S.th}>{t("ros.created")}</th>
-                {isAdmin && <th style={S.th}></th>}
+                <th style={{ ...S.th, ...(isAdmin ? null : CELL_LAST) }}>{t("ros.created")}</th>
+                {isAdmin && <th style={{ ...S.th, ...CELL_LAST, width: 40 }}></th>}
               </tr>
             </thead>
             <tbody>
-              {invites.map((inv) => (
-                <InviteRowDesktop key={inv.id} invite={inv} squads={squads}
+              {invites.map((inv, i) => (
+                <InviteRowDesktop key={inv.id} invite={inv} squads={squads} last={i === invites.length - 1}
                                   canDelete={isAdmin} onDelete={onDeleteInvite} />
               ))}
-              {invites.length === 0 && (
-                <tr><td style={{ ...S.td, color: C.dim }} colSpan={isAdmin ? 6 : 5}>{t("ros.noinvites")}</td></tr>
-              )}
             </tbody>
           </table>
         )}
@@ -895,39 +912,67 @@ function InvitesPanel({ squads, invites, profile, onChanged, onDeleteInvite, set
   );
 }
 
-function InviteRowDesktop({ invite, squads, canDelete, onDelete }) {
+// Secondary icon action: no fill, so the copy button stays the obvious one.
+// (A function: C is swapped in place when the theme changes.)
+const quietIcon = () => ({ background: "transparent", color: C.dim });
+
+// Copies an invite code; the icon confirms in place for a moment.
+function CopyCodeButton({ code, size }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const timer = useRef(0);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(String(code || ""));
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1600);
+    } catch { /* clipboard unavailable — the code stays selectable */ }
+  }
+
+  return (
+    <IconButton
+      icon={copied ? "check" : "copy"}
+      label={copied ? t("common.copied") : t("common.copy")}
+      size={size}
+      onClick={copy}
+      style={copied ? { color: C.ok } : undefined}
+    />
+  );
+}
+
+function InviteStatus({ used }) {
+  const { t } = useI18n();
+  return used ? <Badge>{t("ros.used")}</Badge> : <Badge tone="ok">{t("ros.available")}</Badge>;
+}
+
+function InviteRowDesktop({ invite, squads, last, canDelete, onDelete }) {
   const { t } = useI18n();
   const sq = squads.find((s) => s.id === invite.squad_id);
   const used = !!invite.used_by;
-  const [confirmDel, setConfirmDel] = useState(false);
+  const td = last ? { ...S.td, borderBottom: "none", paddingBottom: 4 } : S.td;
 
   return (
     <tr>
-      <td style={S.td}>
-        <Mono style={{ color: used ? C.dim : C.bright, fontWeight: 600 }}>{invite.code}</Mono>
+      <td style={{ ...td, ...CELL_FIRST }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minHeight: 28 }}>
+          <Mono style={{ color: used ? C.dim : C.bright, fontWeight: 600, userSelect: "all" }}>{invite.code}</Mono>
+          {!used && <CopyCodeButton code={invite.code} size={28} />}
+        </span>
       </td>
-      <td style={S.td}>{sq?.name || "—"}</td>
-      <td style={S.td}>{roleLabelT(invite.role, t)}</td>
-      <td style={S.td}>
-        {used ? <Badge>{t("ros.used")}</Badge> : <Badge tone="ok">{t("ros.available")}</Badge>}
-      </td>
-      <td style={{ ...S.td, color: C.dim }}>
-        {fmtWhen(invite.created_at, t)}
+      <td style={td}>{sq?.name || "—"}</td>
+      <td style={td}>{roleLabelT(invite.role, t)}</td>
+      <td style={td}><InviteStatus used={used} /></td>
+      <td style={{ ...td, color: C.dim, ...(canDelete ? null : CELL_LAST) }}>
+        <Num>{fmtWhen(invite.created_at, t)}</Num>
       </td>
       {canDelete && (
-        <td style={S.td}>
+        <td style={{ ...td, ...CELL_LAST, textAlign: "end" }}>
           {!used && (
-            !confirmDel ? (
-              <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
-            ) : (
-              <div style={{ display: "flex", gap: 4 }}>
-                <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
-                     onClick={() => { onDelete(invite); setConfirmDel(false); }}>
-                  {t("mis.confirm_delete")}
-                </Btn>
-                <Btn small onClick={() => setConfirmDel(false)}>{t("mis.cancel")}</Btn>
-              </div>
-            )
+            <IconButton icon="trash" label={t("ros.delete_invite")} size={28}
+                        style={quietIcon()} onClick={() => onDelete(invite)} />
           )}
         </td>
       )}
@@ -935,52 +980,38 @@ function InviteRowDesktop({ invite, squads, canDelete, onDelete }) {
   );
 }
 
-function InviteCardMobile({ invite, squads, canDelete, onDelete }) {
+function InviteRowMobile({ invite, squads, canDelete, onDelete }) {
   const { t } = useI18n();
   const sq = squads.find((s) => s.id === invite.squad_id);
   const used = !!invite.used_by;
-  const [confirmDel, setConfirmDel] = useState(false);
 
   return (
-    <div style={{
-      borderRadius: 10,
-      padding: "12px 14px",
-      marginBottom: 10,
-      background: C.cardBg,
-    }}>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 10,
-        marginBottom: 8,
-      }}>
-        <Mono style={{ color: used ? C.dim : C.bright, fontWeight: 700, fontSize: 15 }}>
-          {invite.code}
-        </Mono>
-        {used ? <Badge>{t("ros.used")}</Badge> : <Badge tone="ok">{t("ros.available")}</Badge>}
-      </div>
-      <div style={{ fontSize: 13, color: C.text, marginBottom: 2 }}>
-        {sq?.name || "—"} · {roleLabelT(invite.role, t)}
-      </div>
-      <div style={{ fontSize: 11, color: C.dim }}>
-        {fmtWhen(invite.created_at, t)}
-      </div>
-      {canDelete && !used && (
-        <div style={{ marginTop: 8 }}>
-          {!confirmDel ? (
-            <Btn small onClick={() => setConfirmDel(true)}>{t("mis.delete")}</Btn>
-          ) : (
-            <div style={{ display: "flex", gap: 6 }}>
-              <Btn small style={{ color: C.error, borderColor: C.errBorderFaint }}
-                   onClick={() => { onDelete(invite); setConfirmDel(false); }}>
-                {t("mis.confirm_delete")}
-              </Btn>
-              <Btn small onClick={() => setConfirmDel(false)}>{t("mis.cancel")}</Btn>
-            </div>
+    <Row
+      as="div"
+      trailing={!used ? (
+        <>
+          <CopyCodeButton code={invite.code} size={36} />
+          {canDelete && (
+            <IconButton icon="trash" label={t("ros.delete_invite")} size={36}
+                        style={quietIcon()} onClick={() => onDelete(invite)} />
           )}
-        </div>
-      )}
-    </div>
+        </>
+      ) : null}
+    >
+      <Mono style={{ display: "block", fontSize: 15, lineHeight: 1.4, color: used ? C.dim : C.bright, fontWeight: 600, userSelect: "all" }}>
+        {invite.code}
+      </Mono>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, minWidth: 0 }}>
+        <span style={{ flexShrink: 0, display: "flex" }}><InviteStatus used={used} /></span>
+        <span style={{ flex: 1, minWidth: 0, ...T.footnote, color: C.text, ...ELLIPSIS }}>
+          {sq?.name || "—"}
+          <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+          {roleLabelT(invite.role, t)}
+        </span>
+      </div>
+      <div style={{ ...T.caption, color: C.dim, marginTop: 3 }}>
+        <Num>{fmtWhen(invite.created_at, t)}</Num>
+      </div>
+    </Row>
   );
 }
