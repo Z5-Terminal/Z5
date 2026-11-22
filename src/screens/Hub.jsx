@@ -303,7 +303,8 @@ export default function Hub() {
             <div style={{
               display: "grid",
               gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
-              gap: isMobile ? 14 : 20,
+              // Frameless posters need air between them to read as three.
+              gap: isMobile ? 36 : 64,
             }}>
               {banners.map((b, i) => (
                 <PosterCard
