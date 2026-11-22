@@ -217,6 +217,13 @@ export const T = {
 
 // ── Shape ───────────────────────────────────────────────────────────
 // Bigger surfaces get bigger radii (concentric with their content).
+// Artwork colours: pixels of the Hub dot-art heroes, the same in both
+// themes (they sit on the always-dark poster, like a photograph would).
+export const ART = {
+  dot: [236, 234, 228],        // sphere base colour (warm white)
+  dotShadow: [10, 10, 9],      // sphere terminator / rim
+};
+
 export const R = {
   xs: 6,       // tiny marks: checkboxes, thumbnails
   sm: 10,      // inner tiles, menu items, nav rows

@@ -16,6 +16,7 @@ import { useIsMobile } from "../useIsMobile";
 import { Page, Btn, Mono, Icon } from "../ui";
 import { C, FONT, MATERIAL, R, T } from "../theme";
 import { MOTION, DURATION } from "../motion";
+import DotHero from "../DotHero";
 
 // Full-bleed hero poster card. The operator artwork (public/hero-*.jpg)
 // fills the card; title + tagline sit over a bottom gradient. If the
@@ -25,7 +26,7 @@ import { MOTION, DURATION } from "../motion";
 // way surfaces do, so everything drawn over them uses the poster / image
 // tokens (paper + ink for the light artwork, black + white otherwise).
 function PosterCard({
-  heroSrc, iconSrc, name, tagline, enabled, comingSoon, noAccessLabel,
+  heroSrc, dotsSrc, iconSrc, name, tagline, enabled, comingSoon, noAccessLabel,
   comingSoonLabel, enterLabel, onSelect, isLight, delay = 0,
 }) {
   const isMobile = useIsMobile();
@@ -122,19 +123,15 @@ function PosterCard({
       >
         {/* Artwork */}
         {activeSrc ? (
-          <img
+          // Dot-art soldier: a still image first, then an interactive dot
+          // field that scatters from the pointer (enterable posters only).
+          <DotHero
             key={activeSrc}
-            src={activeSrc}
-            alt=""
-            aria-hidden
+            fallbackSrc={activeSrc}
+            dotsSrc={dotsSrc}
+            interactive={!locked}
             onError={() => setSrcIdx((i) => i + 1)}
             style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: "center",
               // Locked artwork recedes into its own backdrop: toward
               // paper on the light poster, toward black on the dark one.
               filter: locked
@@ -367,6 +364,7 @@ export default function Hub() {
                 <PosterCard
                   key={b.mode}
                   heroSrc={`${import.meta.env.BASE_URL}hero-${b.mode}.jpg`}
+                  dotsSrc={`${import.meta.env.BASE_URL}hero-dots-${b.mode}.bin`}
                   iconSrc={b.iconSrc}
                   name={b.name}
                   tagline={b.tagline}
