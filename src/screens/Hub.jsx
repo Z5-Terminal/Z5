@@ -1,10 +1,10 @@
 // Z5 :: Hub — landing screen shown on every login.
 // Three console posters. Selecting one sets consoleMode and routes the
 // user into Shell. Posters the user cannot enter stay visible but are
-// dimmed and carry a status capsule ("Coming soon" / "No access").
+// dimmed (their status is announced to screen readers).
 //
 // Visual direction: the operator artwork is the hero. Chrome over it is
-// minimal — a title, one line of copy and a single translucent capsule —
+// minimal — just the console name over the artwork —
 // and every poster answers a press immediately.
 
 import { useEffect, useState } from "react";
@@ -13,21 +13,21 @@ import { useI18n } from "../i18n";
 import { useConsole } from "../console";
 import { useTheme } from "../ThemeContext";
 import { useIsMobile } from "../useIsMobile";
-import { Page, Btn, Mono, Icon } from "../ui";
-import { C, FONT, MATERIAL, R, T } from "../theme";
+import { Page, Btn, Mono } from "../ui";
+import { C, FONT, R, T } from "../theme";
 import { MOTION, DURATION } from "../motion";
 import DotHero from "../DotHero";
 
 // Full-bleed hero poster card. The operator artwork (public/hero-*.jpg)
-// fills the card; title + tagline sit over a bottom gradient. If the
+// fills the card; the console name sits over a bottom fade. If the
 // hero image is missing, falls back to the console icon centered on
 // black, so the Hub works before the artwork is dropped in.
 // Posters are image contexts: their pixels do not follow the theme the
 // way surfaces do, so everything drawn over them uses the poster / image
 // tokens (paper + ink for the light artwork, black + white otherwise).
 function PosterCard({
-  heroSrc, dotsSrc, iconSrc, name, tagline, enabled, comingSoon, noAccessLabel,
-  comingSoonLabel, enterLabel, onSelect, isLight, delay = 0,
+  heroSrc, dotsSrc, iconSrc, name, enabled, comingSoon, noAccessLabel,
+  comingSoonLabel, onSelect, isLight, delay = 0,
 }) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
@@ -60,21 +60,6 @@ function PosterCard({
     onSelect();
   };
 
-  const capsule = {
-    flexShrink: 0,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-    minHeight: 30,
-    boxSizing: "border-box",
-    borderRadius: R.pill,
-    ...T.footnote,
-    fontWeight: 600,
-    whiteSpace: "nowrap",
-    color: ink,
-    ...MATERIAL.bar,
-  };
-
   return (
     <div
       onPointerEnter={onPointerEnter}
@@ -92,7 +77,7 @@ function PosterCard({
         data-press-depth="soft"
         onClick={handleClick}
         disabled={locked}
-        aria-label={name}
+        aria-label={locked ? `${name} — ${comingSoon ? comingSoonLabel : noAccessLabel}` : name}
         style={{
           all: "unset",
           boxSizing: "border-box",
@@ -105,9 +90,9 @@ function PosterCard({
           // (brand + posters + footer) fits one screen; mobile keeps a
           // portrait ratio and scrolls naturally.
           aspectRatio: isMobile ? "4 / 5" : "auto",
-          height: isMobile ? "auto" : "min(52vh, 520px)",
-          minHeight: isMobile ? 0 : 300,
-          maxHeight: isMobile ? 420 : 520,
+          height: isMobile ? "auto" : "min(60vh, 600px)",
+          minHeight: isMobile ? 0 : 320,
+          maxHeight: isMobile ? 520 : 600,
           borderRadius: R.sheet,
           overflow: "hidden",
           isolation: "isolate",
@@ -169,58 +154,18 @@ function PosterCard({
         <div aria-hidden style={{
           position: "absolute",
           inset: 0,
-          background: `linear-gradient(to top, ${shade}0.96) 0%, ${shade}0.72) 24%, ${shade}0) 54%)`,
+          background: `linear-gradient(to top, ${shade}0.94) 0%, ${shade}0.6) 14%, ${shade}0) 34%)`,
         }} />
 
-        {/* Copy */}
+        {/* Name — the only text on the poster */}
         <div style={{
           position: "relative",
           padding: isMobile ? "16px 18px 18px" : "20px 22px 22px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 5,
+          ...T.title1,
+          color: locked ? `${tint}0.62)` : ink,
+          overflowWrap: "break-word",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              flex: 1,
-              minWidth: 0,
-              ...T.title2,
-              color: locked ? `${tint}0.62)` : ink,
-              overflowWrap: "break-word",
-            }}>
-              {name}
-            </div>
-            {locked ? (
-              <span data-material="" style={{
-                ...capsule,
-                paddingInline: "10px 12px",
-                gap: 5,
-                background: `${tint}0.08)`,
-              }}>
-                <Icon name={comingSoon ? "clock" : "lock"} size={13} strokeWidth={2.2} />
-                {comingSoon ? comingSoonLabel : noAccessLabel}
-              </span>
-            ) : (
-              <span data-material="" style={{
-                ...capsule,
-                paddingInline: "13px 9px",
-                background: `${tint}${lit ? "0.18)" : "0.10)"}`,
-                transition: `background-color ${MOTION.fade}`,
-              }}>
-                {enterLabel}
-                <Icon name="chevronForward" size={13} strokeWidth={2.4} flip />
-              </span>
-            )}
-          </div>
-          <div style={{
-            ...T.footnote,
-            color: locked ? `${tint}0.55)` : `${tint}0.72)`,
-            // Side by side, every poster reserves two lines so the titles
-            // and capsules line up across the row.
-            minHeight: isMobile ? 0 : "2.8em",
-          }}>
-            {tagline}
-          </div>
+          {name}
         </div>
       </button>
     </div>
@@ -246,7 +191,6 @@ export default function Hub() {
       mode: "terminal",
       iconSrc: "icon-terminal.png",
       name: t("console.terminal"),
-      tagline: t("hub.tagline.terminal"),
       enabled: availableConsoles.terminal,
       comingSoon: isLocked("terminal"),
     },
@@ -254,7 +198,6 @@ export default function Hub() {
       mode: "bootcamp",
       iconSrc: "icon-bootcamp.png",
       name: t("console.bootcamp"),
-      tagline: t("hub.tagline.bootcamp"),
       enabled: availableConsoles.bootcamp,
       comingSoon: isLocked("bootcamp"),
     },
@@ -262,7 +205,6 @@ export default function Hub() {
       mode: "recruitment",
       iconSrc: "icon-recruitment.png",
       name: t("console.recruitment"),
-      tagline: t("hub.tagline.recruitment"),
       enabled: availableConsoles.recruitment,
       comingSoon: isLocked("recruitment"),
     },
@@ -369,12 +311,10 @@ export default function Hub() {
                   dotsSrc={`${import.meta.env.BASE_URL}hero-dots-${b.mode}.bin`}
                   iconSrc={b.iconSrc}
                   name={b.name}
-                  tagline={b.tagline}
                   enabled={b.enabled}
                   comingSoon={b.comingSoon}
                   noAccessLabel={t("console.noaccess")}
                   comingSoonLabel={t("console.coming_soon")}
-                  enterLabel={t("hub.enter")}
                   onSelect={() => setConsoleMode(b.mode)}
                   isLight={isLight}
                   delay={i * 70}
