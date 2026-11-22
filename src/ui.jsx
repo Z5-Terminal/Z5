@@ -20,7 +20,6 @@ import {
 import { C, S, FONT, FONT_MONO, MATERIAL, NUM, R, T, Z } from "./theme";
 import { useIsMobile } from "./useIsMobile";
 import { useTheme } from "./ThemeContext";
-import { useConsoleMaybe } from "./console";
 import { useI18n } from "./i18n";
 import { MOTION, DURATION } from "./motion";
 import { Icon } from "./icons";
@@ -402,24 +401,10 @@ export function NavLabel({ children }) {
 // the top bar takes over the title once this scrolls out of view.
 //   back:   { onClick, label? } — renders a back control above the title.
 //   action: trailing control(s).
-export function PageHeader({ title, subtitle, action, back, hero = true }) {
+export function PageHeader({ title, subtitle, action, back }) {
   const isMobile = useIsMobile();
   const chrome = useNavChrome();
   const titleRef = useRef(null);
-  // Console hero thumbnail — the operator artwork of the active console,
-  // small scale, beside the title. Renders only inside a console and
-  // can be disabled per-header with hero={false}.
-  const consoleMode = useConsoleMaybe()?.consoleMode || null;
-  const { mode } = useTheme();
-  // One dark photograph per console, used in both themes.
-  const heroChain = hero && consoleMode
-    ? [`${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`]
-    : [];
-  const [heroIdx, setHeroIdx] = useState(0);
-  useEffect(() => { setHeroIdx(0); }, [mode, consoleMode]);
-  const heroSrc = heroIdx < heroChain.length ? heroChain[heroIdx] : null;
-  const heroSize = isMobile ? 52 : 68;
-
   // Hand the title to the nav bar and report when it scrolls under it.
   const setNavTitle = chrome ? chrome.setNavTitle : null;
   const setTitleHidden = chrome ? chrome.setTitleHidden : null;
@@ -457,26 +442,6 @@ export function PageHeader({ title, subtitle, action, back, hero = true }) {
         gap: isMobile ? 10 : 16,
         padding: isMobile ? "4px 2px 6px" : "0 2px 8px",
       }}>
-        {heroSrc && (
-          <img
-            key={heroSrc}
-            src={heroSrc}
-            alt=""
-            aria-hidden
-            onError={() => setHeroIdx((i) => i + 1)}
-            style={{
-              width: heroSize,
-              height: heroSize,
-              objectFit: "cover",
-              objectPosition: "center 14%",
-              flexShrink: 0,
-              // No border/box — a soft radial mask fades the edges so the
-              // artwork melts into whatever surface is behind it.
-              WebkitMaskImage: "radial-gradient(circle at center, black 45%, transparent 72%)",
-              maskImage: "radial-gradient(circle at center, black 45%, transparent 72%)",
-            }}
-          />
-        )}
         {/* The title never breaks mid-word; when it and the action
             can't share a line the action wraps underneath instead. */}
         <div style={{ flex: "1 1 0%", minWidth: "min-content" }}>

@@ -1561,7 +1561,6 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
     return (
       <>
         <PageHeader
-          hero={false}
           back={{ onClick: onBack }}
           title={<Skeleton width={isMobile ? 180 : 240} height={isMobile ? 28 : 34} />}
         />
@@ -1639,7 +1638,6 @@ function CandidateDetail({ candidateId, onBack, onOpenCandidate }) {
       {/* The name is the page title (and the nav-bar title once it
           scrolls away); the hero card below carries photo and state. */}
       <PageHeader
-        hero={false}
         back={{ onClick: onBack }}
         title={candidate.full_name || "—"}
         subtitle={

@@ -297,7 +297,6 @@ function DocumentViewer({ url, title, fileName, isAdmin, onBack }) {
     <>
       <div ref={headRef}>
         <PageHeader
-          hero={false}
           title={title}
           back={{ onClick: onBack, label: t("kn.back") }}
           action={isAdmin && (
