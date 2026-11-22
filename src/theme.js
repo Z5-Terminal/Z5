@@ -45,6 +45,7 @@ const DARK = {
   imageShade:       "rgba(0,0,0,",       // append "0.xx)" in usage
   posterPaper:      "#f8f6f0",           // light-artwork poster backdrop (Hub)
   posterInk:        "#141310",
+  pageFade:         "rgba(0,0,0,",       // page colour (#000) as rgba prefix — fades into the page
   headerBg:       "#0d0d0d",
   sidebarBg:      "#070707",
   // Translucent materials (pair with MATERIAL.* blur). Content scrolls
@@ -124,6 +125,7 @@ const LIGHT = {
   imageShade:       "rgba(0,0,0,",       // append "0.xx)" in usage
   posterPaper:      "#f8f6f0",
   posterInk:        "#141310",
+  pageFade:         "rgba(238,236,229,", // page colour (#eeece5) as rgba prefix — fades into the page
   headerBg:       "#f8f7f2",
   sidebarBg:      "#e8e5dc",
   material:        "rgba(238,236,229,0.74)",
@@ -217,11 +219,13 @@ export const T = {
 
 // ── Shape ───────────────────────────────────────────────────────────
 // Bigger surfaces get bigger radii (concentric with their content).
-// Artwork colours: pixels of the Hub dot-art heroes, the same in both
-// themes (they sit on the always-dark poster, like a photograph would).
+// Artwork colours: pixels of the Hub dot-art heroes. The dark art sits on
+// black, the light art is drawn straight onto the light page.
 export const ART = {
-  dot: [236, 234, 228],        // sphere base colour (warm white)
-  dotShadow: [10, 10, 9],      // sphere terminator / rim
+  dot: [236, 234, 228],        // dark theme: sphere base colour (warm white)
+  dotShadow: [10, 10, 9],      // dark theme: sphere terminator / rim
+  paper: [238, 236, 229],      // light theme: = LIGHT.bg (the art is drawn on the page)
+  ink: [20, 19, 16],           // light theme: dot ink
 };
 
 export const R = {

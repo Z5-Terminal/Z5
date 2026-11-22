@@ -7,7 +7,7 @@
 // minimal — a title, one line of copy and a single translucent capsule —
 // and every poster answers a press immediately.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth, roleLabelT } from "../auth";
 import { useI18n } from "../i18n";
 import { useConsole } from "../console";
@@ -31,23 +31,24 @@ function PosterCard({
 }) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
-  // The artwork is one dark photograph used in both themes; if it fails
-  // to load, onError falls back to the console icon.
-  const sources = [heroSrc];
+  // Source fallback chain: the light (ink-on-paper) art in the light theme,
+  // then the dark art, then the console icon. onError advances the chain.
+  const sources = isLight ? [heroSrc.replace(".jpg", "-light.jpg"), heroSrc] : [heroSrc];
   const [srcIdx, setSrcIdx] = useState(0);
+  useEffect(() => { setSrcIdx(0); }, [isLight]);
   const activeSrc = srcIdx < sources.length ? sources[srcIdx] : null;
 
   const locked = comingSoon || !enabled;
   const lit = !locked && hover;
 
-  // Paper poster (light artwork) or dark poster (dark artwork / icon).
-  // There is no paper (light) artwork any more: posters are always dark,
-  // so the overlay always uses the image tokens. (isLight kept for callers.)
-  const paper = false;
+  // Paper poster (light art) or dark poster (dark art / icon). The poster
+  // has no frame: its backdrop and the text fade are the page colour, so
+  // the soldier stands directly on the page in either theme.
+  const paper = isLight && srcIdx === 0;
   const ink = paper ? C.posterInk : C.imageOverlayText;
-  const backdrop = paper ? C.posterPaper : C.imageSurface;
+  const backdrop = paper ? C.bg : C.imageSurface;
   const tint = paper ? C.overlay : C.imageTint;          // ink direction
-  const shade = paper ? C.overlayInverse : C.imageShade; // backdrop direction
+  const shade = paper ? C.pageFade : C.imageShade;       // backdrop direction
 
   // Hover is a pointer-only nicety (artwork zoom + lift); touch gets its
   // feedback from the press state alone.
@@ -110,12 +111,12 @@ function PosterCard({
           borderRadius: R.sheet,
           overflow: "hidden",
           isolation: "isolate",
-          border: `1px solid ${C.border}`,
+          border: "none",
           background: backdrop,
           fontFamily: FONT,
           textAlign: "start",
           cursor: locked ? "default" : "pointer",
-          boxShadow: lit ? C.shadowLg : C.shadow,
+          boxShadow: "none",
           // The locked state is drawn on the artwork itself; don't let the
           // global disabled dimming fade the whole poster as well.
           opacity: 1,
@@ -128,7 +129,8 @@ function PosterCard({
           <DotHero
             key={activeSrc}
             fallbackSrc={activeSrc}
-            dotsSrc={dotsSrc}
+            dotsSrc={paper ? dotsSrc.replace(".bin", "-light.bin") : dotsSrc}
+            variant={paper ? "light" : "dark"}
             interactive={!locked}
             onError={() => setSrcIdx((i) => i + 1)}
             style={{

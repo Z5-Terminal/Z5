@@ -5,6 +5,9 @@
 // darkest first so bright dots land on top). Dots near the pointer are
 // pushed away and spring back home; a tap sends a short ripple.
 //
+// Two variants: "dark" (lit white spheres on black) and "light" (ink
+// spheres drawn straight onto the light page; brightness = ink density).
+//
 // The static JPEG of the same dots paints first and stays as the
 // fallback (data failed to load, or reduced motion). The animation loop
 // only runs while something is moving, so an idle Hub costs nothing.
@@ -52,28 +55,53 @@ function loadDots(url) {
   return cache.get(url);
 }
 
-let squareSet = null;
-function squares() {
-  if (squareSet) return squareSet;
-  const [r0, g0, b0] = ART.dot;
-  squareSet = Array.from({ length: LEVELS }, (_, l) => {
+const lerp3 = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * Math.max(0, Math.min(1, k))));
+const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+const squareSets = {};
+function squares(variant) {
+  if (squareSets[variant]) return squareSets[variant];
+  squareSets[variant] = Array.from({ length: LEVELS }, (_, l) => {
     const b = (l + 0.5) / LEVELS;
     const c = document.createElement("canvas");
     c.width = c.height = SPRITE;
     const ctx = c.getContext("2d");
-    ctx.fillStyle = `rgb(${Math.round(r0 * b)},${Math.round(g0 * b)},${Math.round(b0 * b)})`;
+    ctx.fillStyle = variant === "light"
+      ? rgb(lerp3(ART.paper, ART.ink, b))
+      : rgb(ART.dot.map((v) => Math.round(v * b)));
     ctx.fillRect(1, 1, SPRITE - 2, SPRITE - 2);     // 1px gutter = the mosaic grid
     return c;
   });
-  return squareSet;
+  return squareSets[variant];
 }
 
-let spriteSet = null;
-function sprites() {
-  if (spriteSet) return spriteSet;
+// Light variant: an ink sphere on paper — pale cap where the light hits,
+// ink body, darker rim. `b` is ink density.
+function inkSprites() {
+  return Array.from({ length: LEVELS }, (_, l) => {
+    const b = (l + 0.5) / LEVELS;
+    const base = lerp3(ART.paper, ART.ink, 0.18 + 0.72 * Math.pow(b, 1.1));
+    const c = document.createElement("canvas");
+    c.width = c.height = SPRITE;
+    const ctx = c.getContext("2d");
+    const h = SPRITE / 2;
+    const g = ctx.createRadialGradient(h * 0.72, h * 0.62, h * 0.06, h, h, h);
+    g.addColorStop(0, rgb(lerp3(base, ART.paper, 0.32)));
+    g.addColorStop(0.5, rgb(base));
+    g.addColorStop(1, rgb(lerp3(base, ART.ink, 0.3)));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(h, h, h - 0.5, 0, Math.PI * 2); ctx.fill();
+    return c;
+  });
+}
+
+const spriteSets = {};
+function sprites(variant) {
+  if (spriteSets[variant]) return spriteSets[variant];
+  if (variant === "light") return (spriteSets.light = inkSprites());
   const [r0, g0, b0] = ART.dot;
   const [rs, gs, bs] = ART.dotShadow;
-  spriteSet = Array.from({ length: LEVELS }, (_, l) => {
+  spriteSets.dark = Array.from({ length: LEVELS }, (_, l) => {
     const b = (l + 0.5) / LEVELS;
     const c = document.createElement("canvas");
     c.width = c.height = SPRITE;
@@ -95,10 +123,10 @@ function sprites() {
     ctx.beginPath(); ctx.arc(h, h, h - 0.5, 0, Math.PI * 2); ctx.fill();
     return c;
   });
-  return spriteSet;
+  return spriteSets.dark;
 }
 
-export default function DotHero({ dotsSrc, fallbackSrc, interactive = true, onError, style }) {
+export default function DotHero({ dotsSrc, fallbackSrc, variant = "dark", interactive = true, onError, style }) {
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -152,7 +180,7 @@ export default function DotHero({ dotsSrc, fallbackSrc, interactive = true, onEr
     // Full redraw, or only the dots overlapping `rect` (clipped) while the
     // field is moving — usually a small patch around the pointer.
     function draw(rect) {
-      const sp = sprites(), sqs = squares();
+      const sp = sprites(variant), sqs = squares(variant);
       const { lvl, sq } = data;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       let x0 = -Infinity, y0 = -Infinity, x1 = Infinity, y1 = Infinity;
@@ -248,7 +276,7 @@ export default function DotHero({ dotsSrc, fallbackSrc, interactive = true, onEr
       host.removeEventListener("pointerleave", onLeave);
       host.removeEventListener("pointerdown", onDown);
     };
-  }, [dotsSrc, interactive]);
+  }, [dotsSrc, variant, interactive]);
 
   const layer = { position: "absolute", inset: 0, width: "100%", height: "100%" };
   return (
