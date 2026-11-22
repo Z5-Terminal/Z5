@@ -24,6 +24,7 @@ import {
   archiveCandidate, restoreCandidate, deleteCandidate,
   bulkUpdateCandidates, bulkArchiveCandidates, bulkDeleteCandidates,
 } from "../../data/recruitment";
+import { inviteErrorText } from "../../data/invites";
 import {
   listCandidateInterviews, upsertInterview,
 } from "../../data/interviews";
@@ -1881,6 +1882,7 @@ function PromotePanel({ candidate, onPromoted }) {
   const isMobile = useIsMobile();
   const [squads, setSquads] = useState([]);
   const [squadId, setSquadId] = useState("");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -1900,11 +1902,11 @@ function PromotePanel({ candidate, onPromoted }) {
   const promotedSquad = squads.find((s) => s.id === candidate.promoted_squad_id);
 
   async function handlePromote() {
-    if (!squadId || busy) return;
+    if (!squadId || !email.trim() || busy) return;
     setBusy(true); setErr("");
-    const { error } = await promoteCandidate(candidate.id, squadId);
+    const { error } = await promoteCandidate(candidate.id, squadId, email);
     setBusy(false);
-    if (error) { setErr(error.message || String(error)); return; }
+    if (error) { setErr(inviteErrorText(error, t)); return; }
     onPromoted();
   }
 
@@ -1953,6 +1955,12 @@ function PromotePanel({ candidate, onPromoted }) {
             gap: 12,
           }}>
             <label style={{ display: "block", flex: isMobile ? undefined : "0 1 300px", minWidth: 0 }}>
+              <div style={S.label}>{t("rec.candidate.promote_email")}</div>
+              <Input type="email" autoComplete="off" autoCapitalize="none" dir="ltr"
+                     value={email} onChange={(e) => setEmail(e.target.value)}
+                     placeholder="name@example.com" />
+            </label>
+            <label style={{ display: "block", flex: isMobile ? undefined : "0 1 300px", minWidth: 0 }}>
               <div style={S.label}>{t("rec.candidate.promote_squad")}</div>
               <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
                 {squads.map((s) => (
@@ -1966,7 +1974,7 @@ function PromotePanel({ candidate, onPromoted }) {
               icon="graduation"
               busy={busy}
               onClick={handlePromote}
-              disabled={busy || !squadId}
+              disabled={busy || !squadId || !email.trim()}
               style={isMobile ? undefined : { minHeight: 40, paddingBlock: 8 }}
             >
               {t("rec.candidate.promote_action")}

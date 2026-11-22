@@ -4,6 +4,7 @@
 // in Phase C2 and call SECURITY DEFINER RPCs directly.
 
 import { supabase } from "../supabase";
+import { createInvite } from "./invites";
 
 // ── Cycles ─────────────────────────────────────────────────────────
 
@@ -543,24 +544,14 @@ export async function listBootcampSquads() {
     .order("name");
 }
 
-function inviteCode() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "Z5-";
-  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-  s += "-";
-  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return s;
-}
-
 // Bridge an accepted candidate into a bootcamp squad: mints a sniper
-// invite scoped to that squad and stamps the candidate row with the
-// promotion, so the invite code can be handed to the candidate.
-export async function promoteCandidate(candidateId, squadId) {
-  const code = inviteCode();
-  const { error: invErr } = await supabase
-    .from("invites")
-    .insert({ code, squad_id: squadId, role: "sniper" });
+// invite for the candidate's email, scoped to that squad (which also puts
+// the email on the signup allowlist), and stamps the candidate row with
+// the promotion so the invite code can be handed to the candidate.
+export async function promoteCandidate(candidateId, squadId, email) {
+  const { data: inv, error: invErr } = await createInvite({ email, role: "sniper", squadId });
   if (invErr) return { error: invErr };
+  const code = inv.code;
   return supabase
     .from("candidates")
     .update({

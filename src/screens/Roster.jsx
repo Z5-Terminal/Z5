@@ -3,6 +3,7 @@ import { useAuth, roleLabelT, canManageSquads, canCreateInvites } from "../auth"
 import { useI18n, fmtWhen } from "../i18n";
 import { supabase } from "../supabase";
 import { profileAvatarPublicUrl } from "../data/avatars";
+import { createInvite, inviteErrorText } from "../data/invites";
 import {
   Panel, PageHeader, SectionHeader, Btn, IconButton, Input, Select, Switch, Field,
   Notice, Badge, Mono, Num, Avatar, Row, List, Menu, ConfirmDialog, EmptyState,
@@ -24,15 +25,6 @@ const SCOPE_CREATE = "create";
 const SCOPE_UNASSIGNED = "unassigned";
 const SCOPE_INVITES = "invites";
 const scopeOfMember = (member) => member.squad_id || SCOPE_UNASSIGNED;
-
-function shortCode() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s = "Z5-";
-  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-  s += "-";
-  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return s;
-}
 
 export default function Roster() {
   const { profile } = useAuth();
@@ -789,6 +781,7 @@ function InvitesPanel({ squads, invites, profile, loading, onChanged, onDeleteIn
 
   const [squadId, setSquadId] = useState(allowedSquads[0]?.id || "");
   const [role, setRole] = useState("sniper");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -805,12 +798,12 @@ function InvitesPanel({ squads, invites, profile, loading, onChanged, onDeleteIn
     setBusy(true); setErr("");
     try {
       if (!squadOptional && !squadId) throw new Error(t("ros.err_select_squad"));
-      const code = shortCode();
-      const { error } = await supabase.from("invites").insert({
-        code, squad_id: squadId || null, role,
-      });
-      if (error) throw error;
-      onChanged(t("ros.invite_generated", { code }));
+      // The code is minted server-side together with the email's signup
+      // allowlist entry — without that entry, registration is refused.
+      const { data, error } = await createInvite({ email, role, squadId });
+      if (error) throw new Error(inviteErrorText(error, t));
+      onChanged(t("ros.invite_generated_for", { code: data.code, email: data.email }));
+      setEmail("");
       setShowForm(false);
     } catch (e) {
       setErr(String(e.message || e));
@@ -840,6 +833,13 @@ function InvitesPanel({ squads, invites, profile, loading, onChanged, onDeleteIn
             flexWrap: "wrap",
             gap: isMobile ? 0 : 16,
           }}>
+            <div style={{ width: isMobile ? "100%" : 280 }}>
+              <Field label={t("ros.invite_email")}>
+                <Input type="email" autoComplete="off" autoCapitalize="none" dir="ltr"
+                       value={email} onChange={(e) => setEmail(e.target.value)}
+                       placeholder="name@example.com" required />
+              </Field>
+            </div>
             <div style={{ width: isMobile ? "100%" : 260 }}>
               <Field label={t("mc.squad")}>
                 <Select value={squadId} onChange={(e) => setSquadId(e.target.value)}>
@@ -867,7 +867,7 @@ function InvitesPanel({ squads, invites, profile, loading, onChanged, onDeleteIn
             </div>
             <div style={{ marginInlineStart: isMobile ? 0 : "auto", marginBottom: isMobile ? 0 : 14 }}>
               <Btn primary type="submit" fullWidth={isMobile} busy={busy}
-                   disabled={busy || (!squadOptional && !squadId)}>
+                   disabled={busy || !email.trim() || (!squadOptional && !squadId)}>
                 {busy ? t("ros.generating") : t("ros.generate")}
               </Btn>
             </div>
@@ -961,6 +961,11 @@ function InviteRowDesktop({ invite, squads, last, canDelete, onDelete }) {
           <Mono style={{ color: used ? C.dim : C.bright, fontWeight: 600, userSelect: "all" }}>{invite.code}</Mono>
           {!used && <CopyCodeButton code={invite.code} size={28} />}
         </span>
+        {invite.email && (
+          <div style={{ ...T.caption, color: C.dim, ...ELLIPSIS, maxWidth: 260 }} dir="ltr">
+            {invite.email}
+          </div>
+        )}
       </td>
       <td style={td}>{sq?.name || "—"}</td>
       <td style={td}>{roleLabelT(invite.role, t)}</td>
@@ -1009,7 +1014,13 @@ function InviteRowMobile({ invite, squads, canDelete, onDelete }) {
           {roleLabelT(invite.role, t)}
         </span>
       </div>
-      <div style={{ ...T.caption, color: C.dim, marginTop: 3 }}>
+      <div style={{ ...T.caption, color: C.dim, marginTop: 3, ...ELLIPSIS }}>
+        {invite.email && (
+          <>
+            <bdi dir="ltr">{invite.email}</bdi>
+            <span aria-hidden style={{ color: C.dimmer, margin: "0 6px" }}>·</span>
+          </>
+        )}
         <Num>{fmtWhen(invite.created_at, t)}</Num>
       </div>
     </Row>

@@ -256,6 +256,11 @@ function SignupForm() {
         email: email.trim(),
         password: pw,
       });
+      // handle_new_user() refuses emails that aren't on the signup
+      // allowlist; GoTrue reports that only as a generic database error.
+      if (error && /database error saving new user/i.test(error.message || "")) {
+        throw new Error(t("auth.err_not_allowlisted"));
+      }
       if (error) throw error;
 
       const userId = data.user?.id;
