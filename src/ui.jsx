@@ -332,7 +332,10 @@ export function NavItem({ active, onClick, icon, children }) {
         ...T.callout,
         fontWeight: active ? 600 : 500,
         color: active ? C.bright : C.text,
-        ...(active ? { background: C.navActiveBg } : null),
+        // Always set (never removed): Safari restores the UA grey button
+        // background when an inline background is dropped from an
+        // `all: unset` button, which left visited items stuck grey.
+        background: active ? C.navActiveBg : "transparent",
       }}
     >
       {icon && (
@@ -642,7 +645,9 @@ export function Row({
         fontFamily: FONT,
         color: C.text,
         textAlign: "start",
-        ...(selected ? { background: C.selectedBg } : null),
+        // Always set, never removed — see NavItem (Safari keeps the UA
+        // button grey once an inline background is dropped).
+        background: selected ? C.selectedBg : "transparent",
         ...style,
       }}
     >
