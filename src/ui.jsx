@@ -411,10 +411,9 @@ export function PageHeader({ title, subtitle, action, back, hero = true }) {
   // can be disabled per-header with hero={false}.
   const consoleMode = useConsoleMaybe()?.consoleMode || null;
   const { mode } = useTheme();
+  // One dark photograph per console, used in both themes.
   const heroChain = hero && consoleMode
-    ? (mode === "light"
-        ? [`${import.meta.env.BASE_URL}hero-${consoleMode}-light.jpg`, `${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`]
-        : [`${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`])
+    ? [`${import.meta.env.BASE_URL}hero-${consoleMode}.jpg`]
     : [];
   const [heroIdx, setHeroIdx] = useState(0);
   useEffect(() => { setHeroIdx(0); }, [mode, consoleMode]);

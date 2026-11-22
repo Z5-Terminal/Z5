@@ -30,9 +30,9 @@ function PosterCard({
 }) {
   const isMobile = useIsMobile();
   const [hover, setHover] = useState(false);
-  // Source fallback chain: light-mode variant (when in light theme), then
-  // the dark artwork, then the console icon. onError advances the chain.
-  const sources = isLight ? [heroSrc.replace(".jpg", "-light.jpg"), heroSrc] : [heroSrc];
+  // The artwork is one dark photograph used in both themes; if it fails
+  // to load, onError falls back to the console icon.
+  const sources = [heroSrc];
   const [srcIdx, setSrcIdx] = useState(0);
   const activeSrc = srcIdx < sources.length ? sources[srcIdx] : null;
 
@@ -40,7 +40,9 @@ function PosterCard({
   const lit = !locked && hover;
 
   // Paper poster (light artwork) or dark poster (dark artwork / icon).
-  const paper = isLight && srcIdx === 0;
+  // There is no paper (light) artwork any more: posters are always dark,
+  // so the overlay always uses the image tokens. (isLight kept for callers.)
+  const paper = false;
   const ink = paper ? C.posterInk : C.imageOverlayText;
   const backdrop = paper ? C.posterPaper : C.imageSurface;
   const tint = paper ? C.overlay : C.imageTint;          // ink direction
