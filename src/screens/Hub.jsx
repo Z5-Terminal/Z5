@@ -157,10 +157,11 @@ function PosterCard({
           background: `linear-gradient(to top, ${shade}0.94) 0%, ${shade}0.6) 14%, ${shade}0) 34%)`,
         }} />
 
-        {/* Name — the only text on the poster */}
+        {/* Name — the only text on the poster, centred under the figure */}
         <div style={{
           position: "relative",
           padding: isMobile ? "16px 18px 18px" : "20px 22px 22px",
+          textAlign: "center",
           ...T.title1,
           color: locked ? `${tint}0.62)` : ink,
           overflowWrap: "break-word",
