@@ -5,6 +5,7 @@ import { ThemeProvider, useTheme } from "./ThemeContext";
 import { ConsoleProvider, useConsole } from "./console";
 import { Page, CenteredColumn, Panel, Btn, Notice, Spinner } from "./ui";
 import Auth from "./screens/Auth";
+import ResetPassword from "./screens/ResetPassword";
 import Shell from "./screens/Shell";
 import Hub from "./screens/Hub";
 import PublicSurvey from "./screens/PublicSurvey";
@@ -28,6 +29,34 @@ function detectPublicRoute() {
   return null;
 }
 
+// A password-recovery link lands back here with the tokens in the URL hash
+// (implicit flow: #access_token=...&refresh_token=...&type=recovery). The
+// Supabase client has detectSessionInUrl:false, so we parse it ourselves and
+// hand the tokens to ResetPassword. This hash never matches the #/recruitment
+// public routes, so the two don't collide.
+function detectRecovery() {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash || "";
+  // An expired or already-used link comes back as
+  // #error=access_denied&error_code=otp_expired&error_description=...
+  // Surface it on the reset screen instead of silently showing the login
+  // form with junk in the URL. (Email security scanners that pre-open links
+  // are a common cause: they burn the one-time token before the user clicks.)
+  if (!hash.startsWith("#/")) {
+    const errParams = new URLSearchParams(hash.replace(/^#/, ""));
+    if (errParams.get("error_code") || errParams.get("error")) {
+      return { error: errParams.get("error_description") || errParams.get("error") };
+    }
+  }
+  if (!hash.includes("access_token") || !hash.includes("type=recovery")) return null;
+  const params = new URLSearchParams(hash.replace(/^#\/?/, ""));
+  if (params.get("type") !== "recovery") return null;
+  const access_token = params.get("access_token");
+  const refresh_token = params.get("refresh_token");
+  if (!access_token || !refresh_token) return null;
+  return { access_token, refresh_token };
+}
+
 function usePublicRoute() {
   const [route, setRoute] = useState(detectPublicRoute);
   useEffect(() => {
@@ -44,6 +73,32 @@ function Inner() {
   const { t } = useI18n();
   const { mode: themeMode } = useTheme();
   const publicRoute = usePublicRoute();
+  const [recovery, setRecovery] = useState(detectRecovery);
+  // The link may also be opened in a tab that already has Z5 loaded, where
+  // only the hash changes and the page doesn't reload.
+  useEffect(() => {
+    const onHash = () => { const r = detectRecovery(); if (r) setRecovery(r); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  // Arrived from a password-reset email: show the reset screen until a new
+  // password is set, even though setSession() will have established a live
+  // session underneath (which would otherwise route straight into the app).
+  if (recovery) {
+    return (
+      <ResetPassword
+        tokens={recovery}
+        onDone={() => setRecovery(null)}
+        onCancel={() => {
+          try {
+            window.history.replaceState({}, "", window.location.pathname + window.location.search);
+          } catch { /* history API unavailable — harmless */ }
+          setRecovery(null);
+        }}
+      />
+    );
+  }
 
   // Public routes bypass auth, console, and shell entirely.
   if (publicRoute?.kind === "survey") {

@@ -16,6 +16,32 @@ function useLatinField() {
   return { dir: "ltr", style: { textAlign: isRTL ? "end" : "start" } };
 }
 
+// A quiet text link for secondary actions (e.g. "Forgot password?"). Styled
+// to sit under a primary Btn without competing with it.
+function LinkBtn({ onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: "none",
+        border: "none",
+        // 44px tall so it's a comfortable tap target on mobile.
+        minHeight: 44,
+        padding: "10px 12px",
+        cursor: "pointer",
+        font: "inherit",
+        ...T.footnote,
+        color: C.dim,
+        textDecoration: "underline",
+        textUnderlineOffset: 3,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export default function Auth() {
   const [mode, setMode] = useState("login"); // 'login' | 'signup'
   const { t } = useI18n();
@@ -99,6 +125,13 @@ function LoginForm() {
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [forgot, setForgot] = useState(false);
+
+  // The "forgot password" request lives inside the login view (it's not a
+  // peer of the login/signup segments), so we swap the body in place.
+  if (forgot) {
+    return <ForgotForm initialEmail={email} onBack={() => setForgot(false)} />;
+  }
 
   async function go(e) {
     e.preventDefault();
@@ -127,6 +160,74 @@ function LoginForm() {
         </Btn>
       </div>
       <ErrLine>{err}</ErrLine>
+      <div style={{ marginTop: 14, textAlign: "center" }}>
+        <LinkBtn onClick={() => setForgot(true)}>{t("auth.forgot")}</LinkBtn>
+      </div>
+    </form>
+  );
+}
+
+// Step 1 of recovery: ask for the account email and send a reset link.
+// resetPasswordForEmail resolves successfully even for unknown addresses
+// (to avoid revealing who has an account), so the confirmation is worded
+// neutrally. The link lands back on the app, where App.jsx detects the
+// recovery hash and renders the ResetPassword screen.
+function ForgotForm({ initialEmail, onBack }) {
+  const { t } = useI18n();
+  const latin = useLatinField();
+  const [email, setEmail] = useState(initialEmail || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [sent, setSent] = useState(false);
+
+  async function go(e) {
+    e.preventDefault();
+    setBusy(true); setErr("");
+    try {
+      // Works in local dev and on the GitHub Pages subpath alike. This exact
+      // origin+path must be in Supabase → Authentication → URL Configuration
+      // (Redirect URLs) or the link in the email will be rejected.
+      const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (error) throw error;
+      setSent(true);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally { setBusy(false); }
+  }
+
+  if (sent) {
+    return (
+      <div>
+        <OkLine>{t("auth.reset_sent")}</OkLine>
+        <div style={{ ...T.caption, color: C.dim, marginTop: 10, textAlign: "center" }}>
+          {t("auth.reset_hint")}
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <Btn fullWidth type="button" onClick={onBack}>{t("auth.reset_back")}</Btn>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={go}>
+      <div style={{ ...T.callout, color: C.dim, marginBottom: 16, textAlign: "center" }}>
+        {t("auth.reset_lead")}
+      </div>
+      <Field label={t("auth.email")}>
+        <Input type="email" autoComplete="email" autoCapitalize="none" {...latin}
+               value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+      </Field>
+      <div style={{ marginTop: 20 }}>
+        <Btn primary fullWidth type="submit" disabled={busy} busy={busy}>
+          {busy ? t("auth.reset_sending") : t("auth.reset_send")}
+        </Btn>
+      </div>
+      <ErrLine>{err}</ErrLine>
+      <div style={{ marginTop: 14, textAlign: "center" }}>
+        <LinkBtn onClick={onBack}>{t("auth.reset_back")}</LinkBtn>
+      </div>
     </form>
   );
 }
